@@ -2,7 +2,6 @@ module KerrGeoOrbit
 
 using Elliptic
 using EllipticFunctions
-using LinearAlgebra
 using QuadGK
 include("ConstantsOfMotion.jl")
 using .ConstantsOfMotion
