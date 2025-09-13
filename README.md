@@ -39,6 +39,6 @@ It should give you a big dictionary
 
 ## Visualization Example
 
-You can find a example of how to visualize your results in [example](Test_KerrGeodesics.ipynb)
+example/Trajectory_generic.gif
 
-![Trajectory](Trajectory_generic.gif)
+You can find a example of how to visualize your results in [example](example/Test_KerrGeodesics.ipynb)
