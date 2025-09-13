@@ -12,7 +12,7 @@ Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 
 [compat]
 julia = "1.10"     
-Documenter = "0.29"   
+Documenter = "1.14.1"   
 Elliptic = "1"
 EllipticFunctions = "2"
 QuadGK = "2.6"
