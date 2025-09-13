@@ -416,7 +416,6 @@ function kerr_geo_carter_constant(a::Real, p::Real, e::Real, x::Real; En1::Union
     return zm^2 * ( a^2 * (1 - En^2) + Lz^2 / (1 - zm^2) )
 end
 
-
 function kerr_geo_constants_of_motion(a::Real, p::Real, e::Real, x::Real)
     if isapprox(a, 0.0; atol=ATOL)
         return schwarz_geo_constants(p, e, x)
