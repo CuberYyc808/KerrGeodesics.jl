@@ -3,7 +3,6 @@ module SpecialOrbits
 include("ConstantsOfMotion.jl")
 using .ConstantsOfMotion  
 using Roots              
-using LinearAlgebra
 
 export kerr_geo_photon_sphere_radius,
         kerr_geo_isco,
