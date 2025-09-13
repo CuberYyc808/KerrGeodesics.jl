@@ -35,7 +35,7 @@ assoc = Kerr_Geodesics(0.9, 10.0, 0.5, 0.8; initPhases=(0.0, 0.0, 0.0, 0.0))
 
 The output should be like:
 
-`
+``
 Dict{String, Any} with 18 entries:
   "RadialFrequency"    => 2.79272
   "e"                  => 0.5
@@ -55,7 +55,7 @@ Dict{String, Any} with 18 entries:
   "Type"               => ["Bound", "Eccentric", "Inclined"]
   "AzimuthalFrequency" => 3.73576
   "p"                  => 10.0
-`
+``
 
 ---
 
