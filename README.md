@@ -39,6 +39,6 @@ It should give you a big dictionary
 
 ## Visualization Example
 
-example/Trajectory_generic.gif
+![Particle trajectory around Kerr black hole](example/Trajectory_generic.gif)
 
 You can find a example of how to visualize your results in [example](example/Test_KerrGeodesics.ipynb)
