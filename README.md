@@ -29,7 +29,7 @@ It returns a dictionary containing all the information of the set of the paramet
 ```julia
 using KerrGeodesics
 
-# Example: generic Kerr geodesics with a=0.9, p=10.0, e=0.5, x=0.8. 
+# Example: generic Kerr geodesics with a=0.9, p=10.0, e=0.5, x=0.8 and initial phases (0.0, 0.0, 0.0, 0.0). 
 assoc = Kerr_Geodesics(0.9, 10.0, 0.5, 0.8; initPhases=(0.0, 0.0, 0.0, 0.0))
 ```
 
@@ -37,24 +37,24 @@ The output should be like:
 
 ```julia
 Dict{String, Any} with 18 entries:
-  "RadialFrequency"    => 2.79272
+  "a"                  => 0.9
+  "p"                  => 10.0
   "e"                  => 0.5
   "Cosθ_inc"           => 0.8
-  "a"                  => 0.9
-  "AngularMomentum"    => 2.83592
-  "Frequencies"        => Dict("ϒϕ"=>3.73576, "ϒt"=>171.093, "ϒr"=>2.79272, "ϒθ"=>3.55291)
-  "InitialPhases"      => (0.0, 0.0, 0.0, 0.0)
-  "RadialRoots"        => [20.0, 6.66667, 1.44177, 0.271714]
   "Energy"             => 0.96412
-  "ConstantsOfMotion"  => Dict("Q"=>4.54441, "Lz"=>2.83592, "E"=>0.96412)
-  "PolarFrequency"     => 3.55291
+  "AngularMomentum"    => 2.83592
   "CarterConstant"     => 4.54441
+  "ConstantsOfMotion"  => Dict("E"=>0.96412, "Lz"=>2.83592, "Q"=>4.54441)
+  "RadialFrequency"    => 2.79272
+  "PolarFrequency"     => 3.55291
+  "AzimuthalFrequency" => 3.73576
+  "Frequencies"        => Dict("ϒt"=>171.093, "ϒr"=>2.79272, "ϒθ"=>3.55291, "ϒϕ"=>3.73576)
+  "RadialRoots"        => [20.0, 6.66667, 1.44177, 0.271714]
   "Parametrization"    => "Mino"
   "FourVelocity"       => Function[ut_contrav, ur_contrav, uθ_contrav, uφ_contrav]
   "Trajectory"         => Function[t, r, θ, ϕ]
+  "InitialPhases"      => (0.0, 0.0, 0.0, 0.0)
   "Type"               => ["Bound", "Eccentric", "Inclined"]
-  "AzimuthalFrequency" => 3.73576
-  "p"                  => 10.0
 ```
 
 ---
