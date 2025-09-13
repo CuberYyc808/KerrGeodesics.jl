@@ -24,7 +24,7 @@ The main function is `Kerr_Geodesics(a, p, e, x)`, which computes the trajectory
 - `e`: Orbital eccentricity.
 - `x`: Inclination parameter.
 
-It returns a dictionary containing the trajectory information (`t, r, θ, φ`) as well as the Cartesian coordinates (`x, y, z`).
+It returns a dictionary containing all the information of the set of the parameters `(a, p, e, x)`.
 
 ```julia
 using KerrGeodesics
@@ -33,7 +33,27 @@ using KerrGeodesics
 assoc = KerrGeoOrbit(0.9, 10.0, 0.5, 0.8; initPhases=(0.0, 0.0, 0.0, 0.0))
 ```
 
-It should give you a big dictionary
+The output should be like:
+
+Dict{String, Any} with 18 entries:
+  "RadialFrequency"    => 2.79272
+  "e"                  => 0.5
+  "Cosθ_inc"           => 0.8
+  "a"                  => 0.9
+  "AngularMomentum"    => 2.83592
+  "Frequencies"        => Dict("ϒϕ"=>3.73576, "ϒt"=>171.093, "ϒr"=>2.79272, "ϒθ"=>3.55291)
+  "InitialPhases"      => (0.0, 0.0, 0.0, 0.0)
+  "RadialRoots"        => [20.0, 6.66667, 1.44177, 0.271714]
+  "Energy"             => 0.96412
+  "ConstantsOfMotion"  => Dict("Q"=>4.54441, "Lz"=>2.83592, "E"=>0.96412)
+  "PolarFrequency"     => 3.55291
+  "CarterConstant"     => 4.54441
+  "Parametrization"    => "Mino"
+  "FourVelocity"       => Function[ut_contrav, ur_contrav, uθ_contrav, uφ_contrav]
+  "Trajectory"         => Function[t, r, θ, ϕ]
+  "Type"               => ["Bound", "Eccentric", "Inclined"]
+  "AzimuthalFrequency" => 3.73576
+  "p"                  => 10.0
 
 ---
 
