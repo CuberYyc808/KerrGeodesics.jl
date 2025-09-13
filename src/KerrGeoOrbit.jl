@@ -306,5 +306,4 @@ function kerr_geo_orbit(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0
     end
 end
 
-
 end
