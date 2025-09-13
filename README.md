@@ -77,31 +77,3 @@ end
 The output will be an animated GIF like this:
 
 ![Trajectory](Trajectory_generic.gif)
-
----
-
-## Testing
-
-A basic smoke test is included in `test/runtests.jl`:
-
-```julia
-using Test
-using KerrGeodesics
-
-@testset "basic" begin
-    vals = KerrGeoOrbit(0.0, 10.0, 0.5, 0.8)
-    @test isa(vals, Dict) || isa(vals, NamedTuple)
-end
-```
-
-Run with:
-
-```julia
-Pkg.test("KerrGeodesics")
-```
-
----
-
-## License
-
-MIT License. See [LICENSE](LICENSE) for details.
