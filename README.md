@@ -4,18 +4,7 @@ A Julia package for computing and visualizing geodesic motion around a Kerr blac
 
 ## Installation
 
-### Option 1: Install via SSH
-
-If you have SSH configured with GitHub, you can install directly:
-
-```julia
-using Pkg
-Pkg.add(url="git@github.com:CuberYyc808/KerrGeodesics.jl.git")
-```
-
-### Option 2: Install via HTTPS
-
-If you don’t have SSH configured, you can install with HTTPS:
+You can install it directly with HTTPS:
 
 ```julia
 using Pkg
@@ -28,9 +17,9 @@ Pkg.add(url="https://github.com/CuberYyc808/KerrGeodesics.jl.git")
 
 ### Basic Example
 
-The main function is `KerrGeoOrbit(a, p, e, x)`, which computes the trajectory of a test particle around a Kerr black hole.
+The main function is `Kerr_Geodesics(a, p, e, x)`, which computes the trajectory of a test particle around a Kerr black hole.
 
-- `a`: Spin parameter of the black hole (`0 ≤ a < 1`).
+- `a`: Spin parameter of the black hole.
 - `p`: Semi-latus rectum of the orbit.
 - `e`: Orbital eccentricity.
 - `x`: Inclination parameter.
