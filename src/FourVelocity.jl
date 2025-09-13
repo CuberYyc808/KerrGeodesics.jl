@@ -6,7 +6,6 @@ using Elliptic
 
 export kerr_geo_four_velocity
 
-
 # =====================================================
 # KerrGeodesics Mino parametrization
 # =====================================================
