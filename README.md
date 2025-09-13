@@ -1,6 +1,6 @@
 # KerrGeodesics.jl
 
-A Julia package for computing and visualizing geodesic motion around a Kerr black hole.
+A Julia package for computing the timelike geodesics around a Kerr black hole.
 
 ## Installation
 
