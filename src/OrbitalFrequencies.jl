@@ -8,7 +8,7 @@ using EllipticFunctions
 export kerr_geo_frequencies, kerr_geo_radial_roots, kerr_geo_polar_roots
 
 # -------------------------------------------------------------------
-# Radial roots (Fujita & Hikida)
+# Radial roots
 # -------------------------------------------------------------------
 """
     kerr_geo_radial_roots(a, p, e, x; En=nothing, Q=nothing)
