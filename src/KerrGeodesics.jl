@@ -17,8 +17,6 @@ export Constants_Of_Motion,
         Orbit_Type,
         Kerr_Geodesics
 
-# Integration of some important functions.
-
 """
     Constants_Of_Motion(a::Real, p::Real, e::Real, x::Real)
     returns Dict("E"=>_, "Lz"=>_, "Q"=>_) the three constants of motion for a particle on the geodesics of a Kerr black hole.
