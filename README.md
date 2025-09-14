@@ -1,13 +1,19 @@
 # KerrGeodesics.jl
 
-A Julia package for computing the timelike geodesics around a Kerr black hole.
+This Julia package is a reimplementation of the Mathematica code [KerrGeodesics](https://github.com/BlackHolePerturbationToolkit/KerrGeodesics), adapted and optimized for Julia.
 
 ## Installation
 
-You can install it directly with HTTPS:
+You can first try:
 
 ```julia
 using Pkg
+Pkg.add("KerrGeodesics")
+```
+
+If it doesn't work, try to install it with HTTPS:
+
+```julia
 Pkg.add(url="https://github.com/CuberYyc808/KerrGeodesics.jl.git")
 ```
 
@@ -63,7 +69,7 @@ Dict{String, Any} with 18 entries:
 
 ![Particle trajectory around Kerr black hole](example/Trajectory_generic.gif)
 
-You can find a example of how to visualize your results in [example](example/Test_KerrGeodesics.ipynb)
+You can find an example of how to visualize your results in [example](example/Test_KerrGeodesics.ipynb)
 
 ## License
 The package is licensed under the MIT License.
