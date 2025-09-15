@@ -169,6 +169,7 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
         "AzimuthalFrequency" => ϒϕ,
         "Frequencies" => Dict("ϒt" => ϒt, "ϒr" => ϒr, "ϒθ" => ϒθ, "ϒϕ" => ϒϕ),
         "Trajectory" => [t,r,θ,ϕ],
+        "CrossFunctions" => [tr, tθ, ϕr, ϕθ],
         "FourVelocity" => velocity,
         "Type" => type,
         "InitialPhases" => initPhases
@@ -289,6 +290,7 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
         "AzimuthalFrequency" => ϒϕ,
         "Frequencies" => Dict("ϒt" => ϒt, "ϒr" => ϒr, "ϒθ" => ϒθ, "ϒϕ" => ϒϕ),
         "Trajectory" => [t, r, θ, ϕ],
+        "CrossFunctions" => [tr, tθ, ϕr, ϕθ],
         "FourVelocity" => velocity,
         "Type" => type,
         "InitialPhases" => initPhases
