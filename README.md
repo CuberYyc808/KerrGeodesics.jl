@@ -30,7 +30,7 @@ It returns a dictionary containing all the information of the set of the paramet
 using KerrGeodesics
 
 # Example: generic Kerr geodesics with a=0.9, p=10.0, e=0.5, x=0.8 and initial phases (0.0, 0.0, 0.0, 0.0). 
-assoc = Kerr_Geodesics(0.9, 10.0, 0.5, 0.8; initPhases=(0.0, 0.0, 0.0, 0.0))
+KG = Kerr_Geodesics(0.9, 10.0, 0.5, 0.8; initPhases=(0.0, 0.0, 0.0, 0.0))
 ```
 
 The output should be like:
