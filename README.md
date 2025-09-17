@@ -4,17 +4,11 @@ This Julia package is a reimplementation of the Mathematica code [KerrGeodesics]
 
 ## Installation
 
-You can first try:
+You can install the package by simply typing 
 
 ```julia
 using Pkg
 Pkg.add("KerrGeodesics")
-```
-
-If it doesn't work, try to install it with HTTPS:
-
-```julia
-Pkg.add(url="https://github.com/CuberYyc808/KerrGeodesics.jl.git")
 ```
 
 ---
