@@ -185,7 +185,7 @@ function kerr_geo_mino_frequency_θ(a::Real, p::Real, e::Real, x::Real, EnLQ, ro
     if isapprox(e, 1.0; atol=1e-12)   # e == 1
         return zp
     else
-        return π * zp / (2 * Elliptic.K(a^2*(1-En)^2*(zm/zp)^2))
+        return π * zp / (2 * Elliptic.K(a^2*(1-En^2)*(zm/zp)^2))
     end
 end
 
