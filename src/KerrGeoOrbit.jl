@@ -2,6 +2,7 @@ module KerrGeoOrbit
 
 using Elliptic
 using EllipticFunctions
+using LinearAlgebra
 using QuadGK
 include("ConstantsOfMotion.jl")
 using .ConstantsOfMotion
@@ -47,7 +48,7 @@ function kerr_geo_orbit_circular(a::Float64, p::Float64, e::Float64=0.0, x::Floa
     type = kerr_geo_orbit_type(a, p, e, x)
 
     # Associate dictionary
-    return assoc = Dict(
+    return Dict(
         "Parametrization" => "Mino",
         "Energy" => En,
         "AngularMomentum" => Lz,
@@ -153,7 +154,7 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
     # Orbit type
     type = kerr_geo_orbit_type(a, p, e, x)
 
-    return assoc = Dict(
+    return Dict(
         "a" => a,
         "p" => p,
         "e" => e,
@@ -169,7 +170,7 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
         "AzimuthalFrequency" => ϒϕ,
         "Frequencies" => Dict("ϒt" => ϒt, "ϒr" => ϒr, "ϒθ" => ϒθ, "ϒϕ" => ϒϕ),
         "Trajectory" => [t,r,θ,ϕ],
-        "CrossFunctions" => [tr, tθ, ϕr, ϕθ],
+        "CrossFunction" => [tr, tθ, ϕr, ϕθ],
         "FourVelocity" => velocity,
         "Type" => type,
         "InitialPhases" => initPhases
@@ -273,7 +274,7 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
     # Orbit type
     type = kerr_geo_orbit_type(a, p, e, x)
 
-    return assoc = Dict(
+    return Dict(
         "a" => a,
         "p" => p,
         "e" => e,
@@ -290,7 +291,6 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
         "AzimuthalFrequency" => ϒϕ,
         "Frequencies" => Dict("ϒt" => ϒt, "ϒr" => ϒr, "ϒθ" => ϒθ, "ϒϕ" => ϒϕ),
         "Trajectory" => [t, r, θ, ϕ],
-        "CrossFunctions" => [tr, tθ, ϕr, ϕθ],
         "FourVelocity" => velocity,
         "Type" => type,
         "InitialPhases" => initPhases
