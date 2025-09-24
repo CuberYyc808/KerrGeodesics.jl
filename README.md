@@ -46,13 +46,14 @@ Dict{String, Any} with 18 entries:
   "CarterConstant"     => 4.54441
   "ConstantsOfMotion"  => Dict("E"=>0.96412, "Lz"=>2.83592, "Q"=>4.54441)
   "RadialFrequency"    => 2.79272
-  "PolarFrequency"     => 3.55291
+  "PolarFrequency"     => 3.55149
   "AzimuthalFrequency" => 3.73576
-  "Frequencies"        => Dict("ϒt"=>171.093, "ϒr"=>2.79272, "ϒθ"=>3.55291, "ϒϕ"=>3.73576)
+  "Frequencies"        => Dict("ϒt"=>171.093, "ϒr"=>2.79272, "ϒθ"=>3.55149, "ϒϕ"=>3.73576)
   "RadialRoots"        => [20.0, 6.66667, 1.44177, 0.271714]
   "Parametrization"    => "Mino"
   "FourVelocity"       => Function[ut_contrav, ur_contrav, uθ_contrav, uφ_contrav]
   "Trajectory"         => Function[t, r, θ, ϕ]
+  "CrossFunction"      => Function[tr, tθ, ϕr, ϕθ]
   "InitialPhases"      => (0.0, 0.0, 0.0, 0.0)
   "Type"               => ["Bound", "Eccentric", "Inclined"]
 ```
