@@ -36,7 +36,7 @@ KG = Kerr_Geodesics(0.9, 10.0, 0.5, 0.8; initPhases=(0.0, 0.0, 0.0, 0.0))
 The output should be like:
 
 ```julia
-Dict{String, Any} with 18 entries:
+Dict{String, Any} with 19 entries:
   "a"                  => 0.9
   "p"                  => 10.0
   "e"                  => 0.5
