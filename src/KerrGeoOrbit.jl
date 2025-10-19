@@ -1,7 +1,6 @@
 module KerrGeoOrbit
 
 using Elliptic
-using EllipticFunctions
 using QuadGK
 include("ConstantsOfMotion.jl")
 using .ConstantsOfMotion
@@ -113,14 +112,46 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
 
     # t and phi increments due to radial motion
 
+    function elliptic_pi_r(h, k, qr)
+        complete = Elliptic.Pi(h, π/2, k)
+        ψ = ψr(qr)
+        period = div(ψ, 1.0pi)
+        remainder = ψ - period * 1.0pi
+        if remainder <= 0.5pi
+            incomplete = Elliptic.Pi(h, remainder, k)
+        else
+            remainder = 1.0pi - remainder
+            incomplete = 2 * complete - Elliptic.Pi(h, remainder, k)
+        end
+        if period > 0.0
+            incomplete += period * complete * 2
+        end
+        return complete * qr / π - incomplete
+    end
+
+    function elliptic_pi_θ(h, k, qθ)
+        complete = Elliptic.Pi(h, π/2, k)
+        ψ = ψθ(qθ)
+        period = div(ψ, 1.0pi)
+        remainder = ψ - period * 1.0pi
+        if remainder <= 0.5pi
+            incomplete = Elliptic.Pi(h, remainder, k)
+        else
+            remainder = 1.0pi - remainder
+            incomplete = 2 * complete - Elliptic.Pi(h, remainder, k)
+        end
+        if period > 0.0
+            incomplete += period * complete * 2
+        end
+        return complete*2*((qθ+π/2)/π) - incomplete
+    end
+
     function tr(qr)
         prefac = - En / sqrt((1 - En^2) * (r1 - r3) * (r2 - r4))
-        term1 = 4 * (r2 - r3) * (Elliptic.Pi(hr, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hr, kr)))
+        term1 = 4 * (r2 - r3) * elliptic_pi_r(hr, kr, qr)
         term2 = - 4 * (r2 - r3) / (rp - rm) * ((-1 / ((-rm + r2) * (-rm + r3))) * (-2*a^2 + rm*(4 - (a*Lz)/En)) *
-            (Elliptic.Pi(hm, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hm, kr))) +
-            (1 / ((-rp + r2) * (-rp + r3))) * (-2*a^2 + rp*(4 - (a*Lz)/En)) *
-            (Elliptic.Pi(hp, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hp, kr))))
-        term3 = (r2 - r3) * (r1 + r2 + r3 + r4) * (Elliptic.Pi(hr, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hr, kr)))
+            elliptic_pi_r(hm, kr, qr) + (1 / ((-rp + r2) * (-rp + r3))) * (-2*a^2 + rp*(4 - (a*Lz)/En)) * elliptic_pi_r(hp, kr, qr))
+        term3 = (r2 - r3) * (r1 + r2 + r3 + r4) * elliptic_pi_r(hr, kr, qr)
         term4 = (r1 - r3) * (r2 - r4) * (Elliptic.E(kr) * qr / π - Elliptic.E(ψr(qr), kr) +
             hr * (sin(ψr(qr)) * cos(ψr(qr)) * sqrt(1 - kr * sin(ψr(qr))^2)) / (1 - hr * sin(ψr(qr))^2))
         return prefac * (term1 + term2 + term3 + term4)
@@ -128,16 +159,14 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
 
     function ϕr(qr)
         prefac = 2 * a * En / ((-rm + rp) * sqrt((1 - En^2) * (r1 - r3) * (r2 - r4)))
-        term_rm = (-1 / ((-rm + r2) * (-rm + r3))) * (2*rm - (a*Lz)/En) * (r2 - r3) *
-            (Elliptic.Pi(hm, π/2, kr) * qr / π - real.(EllipticFunctions.ellipticPI(ψr(qr), hm, kr)))
-        term_rp = (1 / ((-rp + r2) * (-rp + r3))) * (2*rp - (a*Lz)/En) * (r2 - r3) *
-            (Elliptic.Pi(hp, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hp, kr)))
+        term_rm = (-1 / ((-rm + r2) * (-rm + r3))) * (2*rm - (a*Lz)/En) * (r2 - r3) * elliptic_pi_r(hm, kr, qr)
+        term_rp = (1 / ((-rp + r2) * (-rp + r3))) * (2*rp - (a*Lz)/En) * (r2 - r3) * elliptic_pi_r(hp, kr, qr)
         return prefac * (term_rm + term_rp)
     end
 
     # t and phi increments due to polar motion
     tθ(qθ) = En*zp/(1-En^2) * (Elliptic.E(kθ)*2*((qθ+π/2)/π) - Elliptic.E(ψθ(qθ), kθ))
-    ϕθ(qθ) = -Lz/zp * (Elliptic.Pi(zm^2, π/2, kθ)*2*((qθ+π/2)/π) - real(EllipticFunctions.ellipticPI(ψθ(qθ), zm^2, kθ)))
+    ϕθ(qθ) = -Lz/zp * elliptic_pi_θ(zm^2, kθ, qθ)
 
     qt0, qr0, qθ0, qϕ0 = initPhases
 
@@ -216,19 +245,50 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
     zq(qθ) = zm * Elliptic.Jacobi.sn(Elliptic.K(kθ) * 2/π * (qθ + π/2), kθ)
 
     # Radial and polar Jacobi amplitudes
-    ψr(qr) = EllipticFunctions.am(Elliptic.K(kr)/π * qr, kr)
-    ψθ(qθ) = EllipticFunctions.am(Elliptic.K(kθ)*2/π*(qθ+π/2), kθ)
+    ψr(qr) = Elliptic.Jacobi.am(Elliptic.K(kr)/π * qr, kr)
+    ψθ(qθ) = Elliptic.Jacobi.am(Elliptic.K(kθ)*2/π*(qθ+π/2), kθ)
 
     # t and phi increments due to radial motion
-    
+
+    function elliptic_pi_r(h, k, qr)
+        complete = Elliptic.Pi(h, π/2, k)
+        ψ = ψr(qr)
+        period = div(ψ, 1.0pi)
+        remainder = ψ - period * 1.0pi
+        if remainder <= 0.5pi
+            incomplete = Elliptic.Pi(h, remainder, k)
+        else
+            remainder = 1.0pi - remainder
+            incomplete = 2 * complete - Elliptic.Pi(h, remainder, k)
+        end
+        if period > 0.0
+            incomplete += period * Elliptic.Pi(h, π/2, k) * 2
+        end
+        return complete * qr / π - incomplete
+    end
+    function elliptic_pi_θ(h, k, qθ)
+        complete = Elliptic.Pi(h, π/2, k)
+        ψ = ψθ(qθ)
+        period = div(ψ, 1.0pi)
+        remainder = ψ - period * 1.0pi
+        if remainder <= 0.5pi
+            incomplete = Elliptic.Pi(h, remainder, k)
+        else
+            remainder = 1.0pi - remainder
+            incomplete = 2 * complete - Elliptic.Pi(h, remainder, k)
+        end
+        if period > 0.0
+            incomplete += period * Elliptic.Pi(h, π/2, k) * 2
+        end
+        return complete*2*((qθ+π/2)/π) - incomplete
+    end
+
     function tr(qr)
         prefac = - En / sqrt((1 - En^2) * (r1 - r3) * (r2 - r4))
-        term1 = 4 * (r2 - r3) * (Elliptic.Pi(hr, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hr, kr)))
+        term1 = 4 * (r2 - r3) * elliptic_pi_r(hr, kr, qr)
         term2 = - 4 * (r2 - r3) / (rp - rm) * ((-1 / ((-rm + r2) * (-rm + r3))) * (-2*a^2 + rm*(4 - (a*Lz)/En)) *
-            (Elliptic.Pi(hm, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hm, kr))) +
-            (1 / ((-rp + r2) * (-rp + r3))) * (-2*a^2 + rp*(4 - (a*Lz)/En)) *
-            (Elliptic.Pi(hp, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hp, kr))))
-        term3 = (r2 - r3) * (r1 + r2 + r3 + r4) * (Elliptic.Pi(hr, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hr, kr)))
+            elliptic_pi_r(hm, kr, qr) + (1 / ((-rp + r2) * (-rp + r3))) * (-2*a^2 + rp*(4 - (a*Lz)/En)) * elliptic_pi_r(hp, kr, qr))
+        term3 = (r2 - r3) * (r1 + r2 + r3 + r4) * elliptic_pi_r(hr, kr, qr)
         term4 = (r1 - r3) * (r2 - r4) * (Elliptic.E(kr) * qr / π - Elliptic.E(ψr(qr), kr) +
             hr * (sin(ψr(qr)) * cos(ψr(qr)) * sqrt(1 - kr * sin(ψr(qr))^2)) / (1 - hr * sin(ψr(qr))^2))
         return prefac * (term1 + term2 + term3 + term4)
@@ -236,16 +296,14 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
 
     function ϕr(qr)
         prefac = 2 * a * En / ((-rm + rp) * sqrt((1 - En^2) * (r1 - r3) * (r2 - r4)))
-        term_rm = (-1 / ((-rm + r2) * (-rm + r3))) * (2*rm - (a*Lz)/En) * (r2 - r3) *
-            (Elliptic.Pi(hm, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hm, kr)))
-        term_rp = (1 / ((-rp + r2) * (-rp + r3))) * (2*rp - (a*Lz)/En) * (r2 - r3) *
-            (Elliptic.Pi(hp, π/2, kr) * qr / π - real(EllipticFunctions.ellipticPI(ψr(qr), hp, kr)))
+        term_rm = (-1 / ((-rm + r2) * (-rm + r3))) * (2*rm - (a*Lz)/En) * (r2 - r3) * elliptic_pi_r(hm, kr, qr)
+        term_rp = (1 / ((-rp + r2) * (-rp + r3))) * (2*rp - (a*Lz)/En) * (r2 - r3) * elliptic_pi_r(hp, kr, qr)
         return prefac * (term_rm + term_rp)
     end
 
     # t and phi increments due to polar motion
     tθ(qθ) = En*zp/(1-En^2) * (Elliptic.E(kθ)*2*((qθ+π/2)/π) - Elliptic.E(ψθ(qθ), kθ))
-    ϕθ(qθ) = -Lz/zp * (EllipticFunctions.ellipticPI(π/2, zm^2, kθ)*2*((qθ+π/2)/π) - real(EllipticFunctions.ellipticPI(ψθ(qθ), zm^2, kθ)))
+    ϕθ(qθ) = -Lz/zp * elliptic_pi_θ(zm^2, kθ, qθ)
 
     qrS = π * InverseJacobiSN(sqrt((r3 - r1)/(r2 - r1)), kr) / Elliptic.K(kr)
     λS = qrS / ϒr
