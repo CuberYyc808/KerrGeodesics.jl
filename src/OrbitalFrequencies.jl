@@ -3,7 +3,6 @@ module OrbitalFrequencies
 include("ConstantsOfMotion.jl")
 using .ConstantsOfMotion
 using Elliptic
-using EllipticFunctions
 
 export kerr_geo_frequencies, kerr_geo_radial_roots, kerr_geo_polar_roots
 
@@ -250,7 +249,7 @@ function kerr_geo_mino_frequency_ϕ_θ(a, p, e, x, EnLQ, zpzm)
         return sqrt(2) * sqrt((ρ2*(a^2 + ρ2^2)) / (a^2 + (-2 + ρ2)*ρ2))
     else
         m = a^2*(1 - En^2)*(zm/zp)^2
-        return L * EllipticFunctions.ellipticPI(π/2, zm^2, m) / Elliptic.K(m)
+        return L * Elliptic.Pi(zm^2, π/2, m) / Elliptic.K(m)
     end
 end
 
