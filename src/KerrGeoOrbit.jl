@@ -16,6 +16,14 @@ export kerr_geo_orbit
 # ---- Kerr circular orbit (Mino time) ----
 
 function kerr_geo_orbit_circular(a::Float64, p::Float64, e::Float64=0.0, x::Float64=1.0; initPhases=(0.0, 0.0, 0.0, 0.0))
+    # Orbit type
+    type = kerr_geo_orbit_type(a, p, e, x)
+
+    if type[1] != "Bound"
+        println("Warning: The specified parameters do not correspond to a bound orbit.")
+        return type
+    end
+
     # Orbital frequencies (Mino time)
     Frequencies = kerr_geo_frequencies(a, p, e, x; Time="Mino")
     ϒt = Frequencies["ϒt"]
@@ -42,9 +50,6 @@ function kerr_geo_orbit_circular(a::Float64, p::Float64, e::Float64=0.0, x::Floa
     # Four-velocity
     velocity = kerr_geo_four_velocity(a, p, e, x; initPhases=(initPhases[2], initPhases[3]), Covariant=false, Parametrization="Mino")
 
-    # Orbit type
-    type = kerr_geo_orbit_type(a, p, e, x)
-
     # Associate dictionary
     return Dict(
         "Parametrization" => "Mino",
@@ -70,7 +75,13 @@ end
 
 
 function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0.0, 0.0, 0.0))
+    # Orbit type
+    type = kerr_geo_orbit_type(a, p, e, x)
 
+    if type[1] != "Bound"
+        println("Warning: The specified parameters do not correspond to a bound orbit.")
+        return type
+    end
     # Get constants of motion: Energy, angular momentum, Carter constant
     consts = kerr_geo_constants_of_motion(a, p, e, x)
     En, Lz, Q = consts["E"], consts["Lz"], consts["Q"]
@@ -179,9 +190,6 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
     # Four-velocity
     velocity = kerr_geo_four_velocity(a, p, e, x; initPhases=(initPhases[2], initPhases[3]), Covariant=false, Parametrization="Mino")
 
-    # Orbit type
-    type = kerr_geo_orbit_type(a, p, e, x)
-
     return Dict(
         "a" => a,
         "p" => p,
@@ -208,6 +216,13 @@ end
 InverseJacobiSN(z, m) = quadgk(t -> 1/(sqrt(1-t^2)*sqrt(1-m*t^2)), 0, z)[1]
 
 function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0.0, 0.0, 0.0))
+    # Orbit type
+    type = kerr_geo_orbit_type(a, p, e, x)
+
+    if type[1] != "Bound"
+        println("Warning: The specified parameters do not correspond to a bound orbit.")
+        return type
+    end
 
     # Get constants of motion: Energy, angular momentum, Carter constant
     consts = kerr_geo_constants_of_motion(a, p, e, x)
@@ -327,9 +342,6 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
 
     # Four-velocity
     velocity = kerr_geo_four_velocity(a, p, e, x; initPhases=(initPhases[2], initPhases[3]), Covariant=false, Parametrization="Mino")
-
-    # Orbit type
-    type = kerr_geo_orbit_type(a, p, e, x)
 
     return Dict(
         "a" => a,
