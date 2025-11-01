@@ -400,7 +400,9 @@ function kerr_geo_orbit_type(a::Real, p::Real, e::Real, x::Real)
             output = ["Bound", "Circular", "MarginallyStable"]
         elseif p > ISSO
             output = ["Bound", "Circular", "Stable"]
-        elseif p <= rph
+        elseif 0 < p <= rph
+            output = ["Plunge"]
+        else
             output = ["NotClassified"]
         end
 
@@ -411,22 +413,24 @@ function kerr_geo_orbit_type(a::Real, p::Real, e::Real, x::Real)
 
     else
         # Non-circular orbits
-        if kerr_bound_Q(a, p, e, x)
+        if kerr_bound_Q(a, p, e, x) && p > 0
             output = ["Bound", "Eccentric"]
-        elseif kerr_scatter_Q(a, p, e, x)
+        elseif kerr_scatter_Q(a, p, e, x) && p > 0
             output = ["Scatter"]
             if iszero_tol(e - 1)
                 push!(output, "Parabolic")
             elseif e > 1
                 push!(output, "Hyperbolic")
             end
+        elseif p > 0
+            output = ["Plunge", "eccentric"]
         else
             output = ["NotClassified"]
         end
     end
 
     # Equatorial / Inclined classification
-    if output[1] != "NotClassified"
+    if output[1] != "NotClassified" 
         if iszero_tol(abs(x) - 1)
             push!(output, "Equatorial")
         else
