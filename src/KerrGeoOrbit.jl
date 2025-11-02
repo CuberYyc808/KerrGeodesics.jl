@@ -120,6 +120,8 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
     # Radial and polar Jacobi amplitudes
     ψr(qr) = Elliptic.Jacobi.am(Elliptic.K(kr)/π * qr, kr)
     ψθ(qθ) = Elliptic.Jacobi.am(Elliptic.K(kθ)*2/π*(qθ+π/2), kθ)
+    dψr(qr) = Elliptic.Jacobi.dn(Elliptic.K(kr)/π * qr, kr) * Elliptic.K(kr) / π
+    dψθ(qθ) = 2 * Elliptic.Jacobi.dn(Elliptic.K(kθ)*2/π*(qθ+π/2), kθ) * Elliptic.K(kθ) / π
 
     # t and phi increments due to radial motion
 
@@ -157,7 +159,7 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
         return complete*2*((qθ+π/2)/π) - incomplete
     end
 
-    function tr(qr)
+    function Δtr(qr)
         prefac = - En / sqrt((1 - En^2) * (r1 - r3) * (r2 - r4))
         term1 = 4 * (r2 - r3) * elliptic_pi_r(hr, kr, qr)
         term2 = - 4 * (r2 - r3) / (rp - rm) * ((-1 / ((-rm + r2) * (-rm + r3))) * (-2*a^2 + rm*(4 - (a*Lz)/En)) *
@@ -168,7 +170,7 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
         return prefac * (term1 + term2 + term3 + term4)
     end
 
-    function ϕr(qr)
+    function Δϕr(qr)
         prefac = 2 * a * En / ((-rm + rp) * sqrt((1 - En^2) * (r1 - r3) * (r2 - r4)))
         term_rm = (-1 / ((-rm + r2) * (-rm + r3))) * (2*rm - (a*Lz)/En) * (r2 - r3) * elliptic_pi_r(hm, kr, qr)
         term_rp = (1 / ((-rp + r2) * (-rp + r3))) * (2*rp - (a*Lz)/En) * (r2 - r3) * elliptic_pi_r(hp, kr, qr)
@@ -176,8 +178,33 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
     end
 
     # t and phi increments due to polar motion
-    tθ(qθ) = En*zp/(1-En^2) * (Elliptic.E(kθ)*2*((qθ+π/2)/π) - Elliptic.E(ψθ(qθ), kθ))
-    ϕθ(qθ) = -Lz/zp * elliptic_pi_θ(zm^2, kθ, qθ)
+    Δtθ(qθ) = En*zp/(1-En^2) * (Elliptic.E(kθ)*2*((qθ+π/2)/π) - Elliptic.E(ψθ(qθ), kθ))
+    Δϕθ(qθ) = -Lz/zp * elliptic_pi_θ(zm^2, kθ, qθ)
+
+    function dtr(qr)
+        ellip_diff_pi_r(h, k, q) = Elliptic.Pi(h, π/2, k)/π - dψr(q)/((1 - h * sin(ψr(q))^2) * sqrt(1 - k * sin(ψr(q))^2))
+        return begin
+            -((En * (4 * (r2 - r3) * ellip_diff_pi_r(hr, kr, qr) + (r2 - r3) * (r1 + r2 + r3 + r4) * ellip_diff_pi_r(hr, kr, qr) + 
+            (r1 - r3) * (r2 - r4) * (Elliptic.E(kr)/π - (hr * kr * cos(ψr(qr))^2 * sin(ψr(qr))^2 * dψr(qr))/((1 - hr * sin(ψr(qr))^2) * sqrt(1 - kr * sin(ψr(qr))^2)) - 
+            sqrt(1 - kr * sin(ψr(qr))^2) * dψr(qr) + (2 * hr^2 * cos(ψr(qr))^2 * sin(ψr(qr))^2 * sqrt(1 - kr * sin(ψr(qr))^2) * dψr(qr))/(1 - hr * sin(ψr(qr))^2)^2 + 
+            (hr * cos(ψr(qr))^2 * sqrt(1 - kr * sin(ψr(qr))^2) * dψr(qr))/(1 - hr * sin(ψr(qr))^2) - 
+            (hr * sin(ψr(qr))^2 * sqrt(1 - kr * sin(ψr(qr))^2) * dψr(qr))/(1 - hr * sin(ψr(qr))^2)) - 
+            (1/(-rm + rp)) * 4 * (r2 - r3) * (-(((-2*a^2 + (4 - (a*Lz)/En) * rm) * ellip_diff_pi_r(hm, kr, qr))/((r2 - rm) * (r3 - rm))) + 
+            ((-2 * a^2 + (4 - (a*Lz)/En) * rp) * ellip_diff_pi_r(hp, kr, qr)/((r2 - rp) * (r3 - rp)))))) / 
+            sqrt((1 - En^2) * (r1 - r3) * (r2 - r4)))
+        end
+    end
+
+    function dϕr(qr)
+        return begin
+            (2 * a * En * (r2 - r3) * (- (((-a*Lz/En+2*rm) * (Elliptic.Pi(hm, π/2, kr)/π + dψr(qr)/((-1 + hm*sin(ψr(qr))^2) 
+            * sqrt(1 - kr*sin(ψr(qr))^2)))) / ((r2 - rm) * (r3 - rm))) + ((-a*Lz/En + 2*rp) * (Elliptic.Pi(hp, π/2, kr)/π 
+            + dψr(qr)/((-1 + hp*sin(ψr(qr))^2) * sqrt(1 - kr*sin(ψr(qr))^2)))) / ((r2 - rp) * (r3 - rp)))) / ( sqrt( -((-1 + En^2) * (r1 - r3) * (r2 - r4)) ) * (-rm + rp))
+        end
+    end
+
+    dtθ(qθ) = (En * zp * (-2 * Elliptic.E(kθ) + π * sqrt(1 - kθ * sin(ψθ(qθ))^2) * dψθ(qθ))) / ((-1 + En^2) * π)
+    dϕθ(qθ) = (-(2 * Lz * Elliptic.Pi(zm^2, π/2, kθ) / π) + (Lz * dψθ(qθ)) / (sqrt(1 - kθ * sin(ψθ(qθ))^2) * (1 - zm^2 * sin(ψθ(qθ))^2))) / zp
 
     qt0, qr0, qθ0, qϕ0 = initPhases
 
@@ -206,7 +233,8 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
         "AzimuthalFrequency" => ϒϕ,
         "Frequencies" => Dict("ϒt" => ϒt, "ϒr" => ϒr, "ϒθ" => ϒθ, "ϒϕ" => ϒϕ),
         "Trajectory" => [t,r,θ,ϕ],
-        "CrossFunction" => [tr, tθ, ϕr, ϕθ],
+        "CrossFunction" => [Δtr, Δtθ, Δϕr, Δϕθ],
+        "DerivativesCrossFunction" => [dtr, dtθ, dϕr, dϕθ],
         "FourVelocity" => velocity,
         "Type" => type,
         "InitialPhases" => initPhases
@@ -298,7 +326,7 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
         return complete*2*((qθ+π/2)/π) - incomplete
     end
 
-    function tr(qr)
+    function Δtr(qr)
         prefac = - En / sqrt((1 - En^2) * (r1 - r3) * (r2 - r4))
         term1 = 4 * (r2 - r3) * elliptic_pi_r(hr, kr, qr)
         term2 = - 4 * (r2 - r3) / (rp - rm) * ((-1 / ((-rm + r2) * (-rm + r3))) * (-2*a^2 + rm*(4 - (a*Lz)/En)) *
@@ -309,7 +337,7 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
         return prefac * (term1 + term2 + term3 + term4)
     end
 
-    function ϕr(qr)
+    function Δϕr(qr)
         prefac = 2 * a * En / ((-rm + rp) * sqrt((1 - En^2) * (r1 - r3) * (r2 - r4)))
         term_rm = (-1 / ((-rm + r2) * (-rm + r3))) * (2*rm - (a*Lz)/En) * (r2 - r3) * elliptic_pi_r(hm, kr, qr)
         term_rp = (1 / ((-rp + r2) * (-rp + r3))) * (2*rp - (a*Lz)/En) * (r2 - r3) * elliptic_pi_r(hp, kr, qr)
@@ -317,8 +345,8 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
     end
 
     # t and phi increments due to polar motion
-    tθ(qθ) = En*zp/(1-En^2) * (Elliptic.E(kθ)*2*((qθ+π/2)/π) - Elliptic.E(ψθ(qθ), kθ))
-    ϕθ(qθ) = -Lz/zp * elliptic_pi_θ(zm^2, kθ, qθ)
+    Δtθ(qθ) = En*zp/(1-En^2) * (Elliptic.E(kθ)*2*((qθ+π/2)/π) - Elliptic.E(ψθ(qθ), kθ))
+    Δϕθ(qθ) = -Lz/zp * elliptic_pi_θ(zm^2, kθ, qθ)
 
     qrS = π * InverseJacobiSN(sqrt((r3 - r1)/(r2 - r1)), kr) / Elliptic.K(kr)
     λS = qrS / ϒr
