@@ -216,23 +216,15 @@ end
 # General spherical orbits (e=0, arbitrary x)
 function _kerr_energy_spherical_general(a::Real, p::Real, x::Real)
     # To avoid an unreadably long single expression, compute subterms:
-    zm2 = 1 - x^2
-    zm = sqrt(zm2)
-
-    # Delta-like term used: p^2 + a^2(-1+x^2) etc.
-    A1 = (-3 + p) * (-2 + p)^2 * p^5
-    term_sqrt1 = sqrt(p^3 + a^2 * p * ( -1 + x^2 ))
-    term_sqrt2 = sqrt(p^2 + a^2 * ( -1 + x^2 ))
-    term_sqrt3 = sqrt(p^7 + a^2 * p^5 * ( -1 + x^2 ))
-
-    T1 = -2 * a^5 * x * zm2 * sqrt(p^3 + a^2 * p * ( -1 + x^2 ))
+    T0 = (-3 + p) * (-2 + p)^2 * p^5
+    T1 = -2 * a^5 * x * (x^2 - 1) * sqrt(p^3 + a^2 * p * ( -1 + x^2 ))
     T2 = a^4 * p^2 * ( -1 + x^2 ) * ( 4 - 5*p*( -1 + x^2 ) + 3*p^2*( -1 + x^2 ) )
     T3 = - a^6 * ( -1 + x^2 )^2 * ( x^2 + p^2*( -1 + x^2 ) - p * (1 + 2*x^2) )
     T4 = a^2 * p^3 * ( 4 - 4*x^2 + p*(12 - 7*x^2) - 3*p^3*( -1 + x^2 ) + p^2*( -13 + 10*x^2 ) )
     T5 = a * ( -2 * p^(9/2) * x * sqrt( p^2 + a^2 * ( -1 + x^2 ) ) + 4 * p^3 * x * sqrt( p^3 + a^2 * p * ( -1 + x^2 ) ) )
     T6 = 2 * a^3 * ( 2*p*x*( -1 + x^2 ) * sqrt( p^3 + a^2 * p * ( -1 + x^2 ) ) - x^3 * sqrt( p^7 + a^2 * p^5 * ( -1 + x^2 ) ) )
 
-    numerator = A1 + T1 + T2 + T3 + T4 + T5 + T6
+    numerator = T0 + T1 + T2 + T3 + T4 + T5 + T6
 
     denom1 = ( p^2 - a^2 * ( -1 + x^2 ) )
     denom2 = ( (-3 + p)^2 * p^4 - 2*a^2 * p^2 * (3 + 2*p - 3*x^2 + p^2*( -1 + x^2 )) + a^4 * ( -1 + x^2 ) * ( -1 + x^2 + p^2*( -1 + x^2 ) - 2*p*(1 + x^2) ) )
