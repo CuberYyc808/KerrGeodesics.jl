@@ -321,7 +321,7 @@ function kerr_geo_mino_frequencies(a, p, e, x)
         return schwarzschild_geo_mino_frequencies(a, p, e, x)
     end
     if a < 0
-        freqs = KerrGeoMinoFrequencies(-a, p, e, -x)
+        freqs = kerr_geo_mino_frequencies(-a, p, e, -x)
         return Dict(
             "ϒr" => real(freqs["ϒr"]),
             "ϒθ" => real(freqs["ϒθ"]),
