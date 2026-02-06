@@ -209,10 +209,10 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
     qt0, qr0, qθ0, qϕ0 = initPhases
 
     # Total trajectory functions
-    t(λ) = qt0 + ϒt * λ + tr(qr0 + ϒr * λ) + tθ(qθ0 + ϒθ * λ) - tr(qr0) - tθ(qθ0)
+    t(λ) = qt0 + ϒt * λ + Δtr(qr0 + ϒr * λ) + Δtθ(qθ0 + ϒθ * λ) - Δtr(qr0) - Δtθ(qθ0)
     r(λ) = rq(qr0 + ϒr * λ)
     θ(λ) = acos(zq(qθ0 + ϒθ * λ))
-    ϕ(λ) = qϕ0 + ϒϕ * λ + ϕr(qr0 + ϒr * λ) + ϕθ(qθ0 + ϒθ * λ) - ϕr(qr0) - ϕθ(qθ0)
+    ϕ(λ) = qϕ0 + ϒϕ * λ + Δϕr(qr0 + ϒr * λ) + Δϕθ(qθ0 + ϒθ * λ) - Δϕr(qr0) - Δϕθ(qθ0)
 
     # Four-velocity
     velocity = kerr_geo_four_velocity(a, p, e, x; initPhases=(initPhases[2], initPhases[3]), Covariant=false, Parametrization="Mino")
@@ -363,10 +363,10 @@ function kerr_geo_orbit_scatter(a::Real, p::Real, e::Real, x::Real; initPhases =
     θout = acos(zq(ϒθ * λS + qθ0))
 
     # Total trajectory functions
-    t(λ) = qt0 + ϒt * λ + tr(qr0 + ϒr * λ) + tθ(qθ0 + ϒθ * λ) - tr(qr0) - tθ(qθ0)
+    t(λ) = qt0 + ϒt * λ + Δtr(qr0 + ϒr * λ) + Δtθ(qθ0 + ϒθ * λ) - Δtr(qr0) - Δtθ(qθ0)
     r(λ) = rq(qr0 + ϒr * λ)
     θ(λ) = acos(zq(qθ0 + ϒθ * λ))
-    ϕ(λ) = qϕ0 + ϒϕ * λ + ϕr(qr0 + ϒr * λ) + ϕθ(qθ0 + ϒθ * λ) - ϕr(qr0) - ϕθ(qθ0)
+    ϕ(λ) = qϕ0 + ϒϕ * λ + Δϕr(qr0 + ϒr * λ) + Δϕθ(qθ0 + ϒθ * λ) - Δϕr(qr0) - Δϕθ(qθ0)
 
     # Four-velocity
     velocity = kerr_geo_four_velocity(a, p, e, x; initPhases=(initPhases[2], initPhases[3]), Covariant=false, Parametrization="Mino")
