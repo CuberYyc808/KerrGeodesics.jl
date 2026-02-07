@@ -17,7 +17,7 @@ Pkg.add("KerrGeodesics")
 
 ### Basic Example
 
-The main function is `Kerr_Geodesics(a, p, e, x)`, which computes the trajectory of a test particle around a Kerr black hole.
+The main function is `kerr_geo_emri(a, p, e, x)`, which computes the trajectory of a test particle around a Kerr black hole.
 
 - `a`: Spin parameter of the black hole.
 - `p`: Semi-latus rectum of the orbit.
@@ -29,7 +29,7 @@ It returns a dictionary containing all the information of the set of the paramet
 ```julia
 using KerrGeodesics
 
-# Example: generic Kerr geodesics with a=0.9, p=10.0, e=0.5, x=0.8 and initial phases (0.0, 0.0, 0.0, 0.0). 
+# Example: generic timelike bound stable orbit with a=0.9, p=10.0, e=0.5, x=0.8 and initial phases (0.0, 0.0, 0.0, 0.0). 
 EMRI_info = kerr_geo_emri(0.9, 10.0, 0.2, 0.8)
 ```
 
