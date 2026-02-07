@@ -64,6 +64,8 @@ function kerr_geo_orbit_circular(a::Float64, p::Float64, e::Float64=0.0, x::Floa
         "Frequencies" => Dict("ϒt" => ϒt, "ϒr" => ϒr, "ϒθ" => ϒθ, "ϒϕ" => ϒϕ),
         "Trajectory" => [t, r, θ, ϕ],
         "FourVelocity" => velocity,
+        "CrossFunction" => nothing,
+        "DerivativesCrossFunction" => nothing,
         "a" => a,
         "p" => p,
         "e" => e,
