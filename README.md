@@ -30,32 +30,21 @@ It returns a dictionary containing all the information of the set of the paramet
 using KerrGeodesics
 
 # Example: generic Kerr geodesics with a=0.9, p=10.0, e=0.5, x=0.8 and initial phases (0.0, 0.0, 0.0, 0.0). 
-KG = Kerr_Geodesics(0.9, 10.0, 0.5, 0.8; initPhases=(0.0, 0.0, 0.0, 0.0))
+EMRI_info = kerr_geo_emri(0.9, 10.0, 0.2, 0.8)
 ```
 
 The output should be like:
 
 ```julia
-Dict{String, Any} with 19 entries:
-  "a"                  => 0.9
-  "p"                  => 10.0
-  "e"                  => 0.5
-  "Cosθ_inc"           => 0.8
-  "Energy"             => 0.96412
-  "AngularMomentum"    => 2.83592
-  "CarterConstant"     => 4.54441
-  "ConstantsOfMotion"  => Dict("E"=>0.96412, "Lz"=>2.83592, "Q"=>4.54441)
-  "RadialFrequency"    => 2.79272
-  "PolarFrequency"     => 3.55149
-  "AzimuthalFrequency" => 3.73576
-  "Frequencies"        => Dict("ϒt"=>171.093, "ϒr"=>2.79272, "ϒθ"=>3.55149, "ϒϕ"=>3.73576)
-  "RadialRoots"        => [20.0, 6.66667, 1.44177, 0.271714]
-  "Parametrization"    => "Mino"
-  "FourVelocity"       => Function[ut_contrav, ur_contrav, uθ_contrav, uφ_contrav]
-  "Trajectory"         => Function[t, r, θ, ϕ]
-  "CrossFunction"      => Function[tr, tθ, ϕr, ϕθ]
-  "InitialPhases"      => (0.0, 0.0, 0.0, 0.0)
-  "Type"               => ["Bound", "Eccentric", "Inclined"]
+KerrGeoEMRI(
+    OrbitalParameters = (a = 0.9, p = 10.0, e = 0.2, x = 0.8),
+    ConstantsOfMotion = (E = 0.9546178536960606, Lz = 2.810660381278431, Q = 4.469510431717436),
+    OrbitalType = ["Bound", "Eccentric", "Inclined"],
+    Frequencies = (ϒt = 124.77891227683266, ϒr = 2.7729739639615034, ϒθ = 3.521699666954832, ϒϕ = 3.6986834364993015),
+    Parametrization = "Mino",
+    Trajectory = (t = t(λ), r = r(λ), θ = θ(λ), ϕ = ϕ(λ)),
+    InitialPhases = (qt0 = 0.0, qr0 = 0.0, qθ0 = 0.0, qϕ0 = 0.0),
+)
 ```
 
 ---
