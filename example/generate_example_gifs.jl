@@ -4,6 +4,7 @@ include(joinpath(package_root, "src", "KerrGeodesics.jl"))
 
 using .KerrGeodesics
 using GLMakie
+using GeometryBasics
 
 function cartesian_from_spherical(r_values, theta_values, phi_values)
     x = r_values .* sin.(theta_values) .* cos.(phi_values)
@@ -12,23 +13,19 @@ function cartesian_from_spherical(r_values, theta_values, phi_values)
     return x, y, z
 end
 
-function add_horizon!(ax, a)
+function add_black_hole!(ax, a; alpha=0.6)
     rplus = 1 + sqrt(1 - a^2)
-    angle = range(0, 2pi, length=160)
-    zero = fill(0.0, length(angle))
-    lines!(ax, rplus .* cos.(angle), rplus .* sin.(angle), zero; color=:black, linewidth=1.5)
-    lines!(ax, rplus .* cos.(angle), zero, rplus .* sin.(angle); color=:black, linewidth=1.5)
-    lines!(ax, zero, rplus .* cos.(angle), rplus .* sin.(angle); color=:black, linewidth=1.5)
+    sphere_mesh = Sphere(Point3f(0, 0, 0), Float32(rplus))
+    mesh!(ax, sphere_mesh; color=:black, transparency=true, alpha=alpha)
     return rplus
 end
 
 function set_equal_limits!(ax, x, y, z; pad=0.1)
-    lo = minimum(vcat(x, y, z))
-    hi = maximum(vcat(x, y, z))
-    span = hi - lo
-    xlims!(ax, lo - pad * span, hi + pad * span)
-    ylims!(ax, lo - pad * span, hi + pad * span)
-    zlims!(ax, lo - pad * span, hi + pad * span)
+    maxabs = maximum(abs, vcat(x, y, z))
+    lim = maxabs * (1 + pad)
+    xlims!(ax, -lim, lim)
+    ylims!(ax, -lim, lim)
+    zlims!(ax, -lim, lim)
     return nothing
 end
 
@@ -41,15 +38,15 @@ function render_stable_gif()
     x, y, z = cartesian_from_spherical(r_values, theta_values, phi_values)
 
     fig = Figure(size=(760, 620))
-    ax = Axis3(fig[1, 1], title="Stable bound Kerr geodesic")
-    add_horizon!(ax, orbit.OrbitalParameters.a)
+    ax = Axis3(fig[1, 1], title="Stable bound Kerr geodesic", aspect=:data)
+    add_black_hole!(ax, orbit.OrbitalParameters.a; alpha=0.6)
     lines!(ax, x, y, z; color=:steelblue, linewidth=2)
     particle_position = Observable(Point3f[Point3f(x[1], y[1], z[1])])
     scatter!(ax, particle_position; color=:crimson, markersize=12)
     set_equal_limits!(ax, x, y, z)
 
-    frames = range(1, length(x), length=180)
-    record(fig, joinpath(script_dir, "Trajectory_stable.gif"), eachindex(frames); framerate=30) do i
+    frames = range(1, length(x), length=30 * 45)
+    record(fig, joinpath(script_dir, "Trajectory_stable.gif"), eachindex(frames); framerate=45) do i
         idx = clamp(round(Int, frames[i]), 1, length(x))
         particle_position[] = Point3f[Point3f(x[idx], y[idx], z[idx])]
     end
@@ -66,16 +63,16 @@ function render_plunge_gif()
     x, y, z = cartesian_from_spherical(r_values, theta_values, phi_values)
 
     fig = Figure(size=(760, 620))
-    ax = Axis3(fig[1, 1], title="Bound plunge Kerr geodesic")
-    add_horizon!(ax, orbit.OrbitalParameters.a)
+    ax = Axis3(fig[1, 1], title="Bound plunge Kerr geodesic", aspect=:data)
+    add_black_hole!(ax, orbit.OrbitalParameters.a; alpha=0.6)
     lines!(ax, x, y, z; color=:darkred, linewidth=2)
     scatter!(ax, [x[1]], [y[1]], [z[1]]; color=:royalblue, markersize=10)
     particle_position = Observable(Point3f[Point3f(x[1], y[1], z[1])])
     scatter!(ax, particle_position; color=:crimson, markersize=12)
     set_equal_limits!(ax, x, y, z)
 
-    frames = range(1, length(x), length=180)
-    record(fig, joinpath(script_dir, "Trajectory_plunge.gif"), eachindex(frames); framerate=30) do i
+    frames = range(1, length(x), length=10 * 45)
+    record(fig, joinpath(script_dir, "Trajectory_plunge.gif"), eachindex(frames); framerate=45) do i
         idx = clamp(round(Int, frames[i]), 1, length(x))
         particle_position[] = Point3f[Point3f(x[idx], y[idx], z[idx])]
     end
