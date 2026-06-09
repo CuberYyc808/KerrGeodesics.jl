@@ -197,7 +197,10 @@ function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeoPlunge)
     print(io, "    ConstantsOfMotion = "); show(io, kg.ConstantsOfMotion); println(io, ",")
     print(io, "    OrbitClass = "); show(io, kg.OrbitClass); println(io, ",")
     print(io, "    Parametrization = "); show(io, kg.Parametrization); println(io, ",")
-    print(io, "    InitialPhases = "); show(io, kg.InitialPhases); println(io, ",")
+    initial_position = kg.Status.supported ?
+        (t0=kg.InitialPhases.t0, r0=kg.Trajectory.r(0.0), theta0=kg.Trajectory.theta(0.0), phi0=kg.InitialPhases.phi0) :
+        (t0=kg.InitialPhases.t0, r0=NaN, theta0=NaN, phi0=kg.InitialPhases.phi0)
+    print(io, "    InitialPosition = "); show(io, initial_position); println(io, ",")
     print(io, "    Status = "); show(io, kg.Status); println(io, ",")
     if kg.Status.supported
         println(io, "    Trajectory = (t = t(lambda), r = r(lambda), theta = theta(lambda), phi = phi(lambda), rstar = rstar(lambda), u = u(lambda), v = v(lambda), u_rstar_series = u(rstar), v_rstar_series = v(rstar)),")
