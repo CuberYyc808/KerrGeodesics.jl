@@ -1,5 +1,9 @@
 # KerrGeodesics.jl
 
+![license](https://img.shields.io/github/license/CuberYyc808/KerrGeodesics.jl)
+[![GitHub release](https://img.shields.io/github/v/release/CuberYyc808/KerrGeodesics.jl.svg)](https://github.com/CuberYyc808/KerrGeodesics.jl/releases)
+[![Documentation](https://img.shields.io/badge/Documentation-ready)](https://CuberYyc808.github.io/KerrGeodesics.jl)
+
 Julia interfaces for Kerr geodesic trajectories in units with `G = c = M = 1`.
 
 Current support:
