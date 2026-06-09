@@ -19,4 +19,5 @@ makedocs(
 deploydocs(
     repo = "github.com/CuberYyc808/KerrGeodesics.jl.git",
     devbranch = "main",
+    versions = ["v0.3.0" => "v0.3.0"],
 )
