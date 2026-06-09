@@ -2,8 +2,9 @@
 
 KerrGeodesics.jl provides Julia interfaces for Kerr geodesic trajectories in
 units with `G = c = M = 1`. The package currently supports stable bound orbits
-from APEX-like parameters and finite-start plunge orbits from constants of
-motion. Scattering-orbit support is planned for future development.
+from APEX-like parameters and bound plunge orbits from constants of motion,
+where bound plunge means `E < 1`. Scattering-orbit support is planned for
+future development.
 
 ## Documentation
 
@@ -88,7 +89,7 @@ aliases.
 metadata. `kerr_geo_orbit_type(a,p,e,x)` labels are derived from that metadata.
 Near the separatrix, inputs within the current roundoff guard are evaluated at
 the separatrix radius and labeled `Separatrix`. Plunge labels use `Plunge` with
-`FiniteStart` or `InfinityStart`; `Unstable` is not used as an orbit-type label.
+`BoundPlunge` or `InfinityStart`; `Unstable` is not used as an orbit-type label.
 
 ### Release Automation
 
@@ -131,7 +132,7 @@ For plunge orbits:
 - `t0` and `phi0` are additive offsets in `t(lambda)` and `phi(lambda)`;
 - `lambda_r0` is the radial Mino-time phase offset;
 - `lambda_theta0` is the polar Mino-time phase offset;
-- `radial_start=:turning_point` starts the finite-start plunge at the exterior
+- `radial_start=:turning_point` starts the bound plunge at the exterior
   radial turning point;
 - `initial_radius` is converted to `lambda_r0` with `lambda_of_r`;
 - `initial_theta` is converted to `lambda_theta0` through the polar root
@@ -139,7 +140,7 @@ For plunge orbits:
 - for equatorial or otherwise degenerate polar sectors, `initial_theta`
   defaults to `pi/2` and the polar phase is set to zero.
 
-Finite-start plunge outputs include duration metadata:
+Bound plunge outputs include duration metadata:
 
 ```julia
 orbit.Status.duration.mino_time_to_horizon
@@ -174,7 +175,7 @@ coordinate is defined for exterior radii `r > rplus`; it returns `NaN` for
 convention; the package does not claim an exact horizon-crossing or
 cutoff-independent retarded time.
 
-With `time_origin=:future_horizon_v_zero`, supported finite-start plunges shift
+With `time_origin=:future_horizon_v_zero`, supported bound plunges shift
 the additive coordinate-time origin so the future-horizon advanced-time anchor
 satisfies `v_H=0`. Near-horizon `u(rstar)` and `v(rstar)` series callables are
 exposed through `orbit.Trajectory.u_rstar_series` and

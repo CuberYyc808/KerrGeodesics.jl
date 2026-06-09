@@ -106,7 +106,7 @@ end
 """
     generic_plunge_velocity(a, E, L, Q; initPhase=(0.0, 0.0))
 
-Return branch-specific Mino-time four-velocity callables for a finite-start
+Return branch-specific Mino-time four-velocity callables for a bound plunge
 plunge trajectory. The low-level polar component is `dz/dlambda`; the
 high-level `kerr_geo_plunge` wrapper also exposes `utheta`.
 """

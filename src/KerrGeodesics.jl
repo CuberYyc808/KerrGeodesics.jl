@@ -153,7 +153,7 @@ export radial_roots, polar_roots, classify_orbit,
 """
     KerrGeoPlunge
 
-Structured output for a finite-start Kerr plunge trajectory constructed from
+Structured output for a bound plunge Kerr plunge trajectory constructed from
 constants of motion `(a,E,Lz,Q)`. Supported branches expose callable trajectory,
 velocity, potential, residual, and metadata fields.
 """
@@ -252,7 +252,7 @@ end
 """
     kerr_geo_plunge(a, E, Lz, Q; kwargs...)
 
-Construct a finite-start plunge trajectory from Kerr spin and constants of
+Construct a bound plunge trajectory from Kerr spin and constants of
 motion. Supported root classes currently return callable trajectory fields
 `t`, `r`, `theta`, `phi`, `rstar`, `u`, and `v`; status metadata records branch
 support, horizon cutoff conventions, and time-origin policy.
@@ -260,7 +260,7 @@ support, horizon cutoff conventions, and time-origin policy.
 Common keyword controls include `initPhases`, `radial_start`,
 `initial_radius`, `initial_theta`, `time_origin`, and
 `horizon_time_origin_offset`. Use `radial_start=:turning_point` to start at the
-finite-start plunge turning point outside the horizon.
+bound plunge turning point outside the horizon.
 """
 function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
         initPhases=nothing,
@@ -381,7 +381,7 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
         (
             supported=true,
             reason="ok_guarded_real2_trajectory_only",
-            trajectory_support_status="guarded_real2_finite_start_exterior_to_horizon_cutoff",
+            trajectory_support_status="guarded_real2_bound_plunge_exterior_to_horizon_cutoff",
             production_branch_support="guarded_trajectory_only_source_amplitude_waveform_blocked",
             time_phi_status="stable_realroot_analytic_branch_continuation_with_linear_anchor",
             mathematica_reference_status="public_wrapper_blocked_formula_subset_mathematica_benchmark_pass",
@@ -488,7 +488,7 @@ end
 Unified project-facing constructor. Use APEX-like parameters
 `kerr_geodesic(a,p,e,x)` for stable-bound orbit families, or constants of
 motion `kerr_geodesic(a,(E,Lz,Q))` / `kerr_geodesic(a; constants=(...))` for
-finite-start plunge families.
+bound plunge families.
 """
 function kerr_geodesic(a::Real, constants::NamedTuple; kwargs...)
     return kerr_geodesic(a, (constants.E, constants.Lz, constants.Q); kwargs...)

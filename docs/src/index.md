@@ -6,7 +6,7 @@ units with $G=c=M=1$.
 The package contains two project-facing layers:
 
 - stable bound geodesics from APEX-like parameters `(a,p,e,x)`;
-- finite-start plunge geodesics from constants of motion `(a,E,Lz,Q)`.
+- bound plunge geodesics from constants of motion `(a,E,Lz,Q)`.
 
 The unified constructor is [`kerr_geodesic`](@ref). Its combined return type is
 [`KerrGeodesicFamily`](@ref), which can carry stable and plunge branches where
@@ -28,7 +28,7 @@ Stable bound orbit calls use APEX-like parameters:
 geo = kerr_geodesic(0.9, 10.0, 0.5, 0.8)
 ```
 
-Finite-start plunge calls use constants of motion:
+Bound plunge calls use constants of motion:
 
 ```julia
 plunge_family = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:turning_point)
@@ -54,7 +54,7 @@ metadata still carries machine-facing stability fields.
 
 ## Time Coordinates
 
-Finite-start plunge trajectories expose callable fields:
+Bound plunge trajectories expose callable fields:
 
 ```julia
 t = plunge.Trajectory.t
@@ -68,12 +68,12 @@ v = plunge.Trajectory.v
 
 The null coordinates follow $u=t-r_*$ and $v=t+r_*$. The optional
 `time_origin=:future_horizon_v_zero` policy shifts the coordinate-time origin so
-the future-horizon advanced-time anchor is zero for supported finite-start
+the future-horizon advanced-time anchor is zero for supported bound plunge
 plunge trajectories. The retarded time $u$ diverges linearly for an ingoing
 future-horizon trajectory; finite plotting coordinates must use an explicitly
 recorded cutoff or shifted-display convention.
 
-Finite-start plunge outputs also include `plunge.Status.duration`, with the
+Bound plunge outputs also include `plunge.Status.duration`, with the
 finite Mino-time duration to the event horizon and explicit status fields
 recording that Boyer-Lindquist coordinate time and retarded time diverge at the
 future horizon.

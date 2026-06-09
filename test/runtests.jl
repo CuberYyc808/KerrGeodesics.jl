@@ -35,7 +35,7 @@ using KerrGeodesics
     @test near_sep_type.family == "Bound"
     @test near_sep_type.start_type == "NotApplicable"
     @test near_sep_type.stability in ("Stable", "MarginallyStable")
-    @test !("FiniteStart" in near_sep_type.labels)
+    @test !("BoundPlunge" in near_sep_type.labels)
     near_sep_freqs = kerr_geo_frequencies(0.9, near_sep_p, 0.5, 0.8; Time="Mino")
     @test all(isfinite, values(near_sep_freqs))
     @test near_sep_freqs["ϒr"] >= 0
@@ -53,13 +53,13 @@ using KerrGeodesics
     @test !("MarginallyStable" in sep_plus_roundoff.labels)
     @test !("Unstable" in sep_minus_roundoff.labels)
     @test sep_minus_roundoff.family == "Bound"
-    @test !("FiniteStart" in sep_minus_roundoff.labels)
+    @test !("BoundPlunge" in sep_minus_roundoff.labels)
 
-    finite_plunge_type = kerr_geo_orbit_type_metadata(0.9, near_sep_type.separatrix_p - 1e-5, 0.5, 0.8)
-    @test finite_plunge_type.family == "Plunge"
-    @test finite_plunge_type.start_type == "FiniteStart"
-    @test finite_plunge_type.support_status == "finite_start_plunge_metadata_only"
-    @test !("Unstable" in finite_plunge_type.labels)
+    bound_plunge_type = kerr_geo_orbit_type_metadata(0.9, near_sep_type.separatrix_p - 1e-5, 0.5, 0.8)
+    @test bound_plunge_type.family == "Plunge"
+    @test bound_plunge_type.start_type == "BoundPlunge"
+    @test bound_plunge_type.support_status == "bound_plunge_metadata_only"
+    @test !("Unstable" in bound_plunge_type.labels)
 
     scatter_type = kerr_geo_orbit_type_metadata(0.9, kerr_geo_separatrix(0.9, 1.2, 0.8) + 1e-5, 1.2, 0.8)
     @test scatter_type.family == "Scatter"

@@ -309,7 +309,7 @@ end
     generic_plunge_orbit(a, E, L, Q; initPhases=(0.0, 0.0, 0.0, 0.0))
 
 Return branch-specific callable Boyer-Lindquist trajectory functions
-`t(lambda)`, `r(lambda)`, `theta(lambda)`, and `phi(lambda)` for a finite-start
+`t(lambda)`, `r(lambda)`, `theta(lambda)`, and `phi(lambda)` for a bound plunge
 Kerr plunge where the classified branch is supported.
 """
 function generic_plunge_orbit(a, E, L, Q; initPhases = (0.0, 0.0, 0.0, 0.0), real2_horizon_offset=1e-4)

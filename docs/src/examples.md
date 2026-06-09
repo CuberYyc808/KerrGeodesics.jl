@@ -28,9 +28,9 @@ For eccentric stable bound orbits, the all-zero phase starts at periapsis,
 `r(0)=p/(1+e)`, and at the polar turning point for the non-equatorial polar
 motion. Circular equatorial orbits have constant `r=p` and `theta=pi/2`.
 
-## Finite-Start Plunge From Constants
+## Bound Plunge Plunge From Constants
 
-Finite-start plunge trajectories use constants of motion `(a,E,Lz,Q)`.
+Bound plunge trajectories use constants of motion `(a,E,Lz,Q)`.
 
 ```julia
 plunge = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0;
@@ -74,7 +74,7 @@ to `pi/2` and the polar phase is set to zero.
 
 ## Horizon-Aligned Advanced Time
 
-For finite-start plunge waveform diagnostics, the time origin can be shifted so
+For bound plunge waveform diagnostics, the time origin can be shifted so
 the future-horizon advanced-time anchor satisfies $v_H=0$:
 
 ```julia
@@ -103,7 +103,7 @@ replace the trajectory path from `lambda` to `r` and `rstar`.
 
 ## Plunge Duration
 
-Finite-start plunge outputs include a duration metadata block:
+Bound plunge outputs include a duration metadata block:
 
 ```julia
 plunge.Status.duration.mino_time_to_horizon

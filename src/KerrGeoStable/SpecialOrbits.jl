@@ -420,10 +420,10 @@ function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
     elseif iszero_tol(e)
         if p_effective <= photon_p
             family = "Plunge"
-            start_type = "FiniteStart"
+            start_type = "BoundPlunge"
             stability = "Unstable"
-            support_status = "finite_start_plunge_metadata_only"
-            labels = ["Plunge", "FiniteStart", "Circular"]
+            support_status = "bound_plunge_metadata_only"
+            labels = ["Plunge", "BoundPlunge", "Circular"]
         elseif p_effective <= ibso_p && !isapprox(p_effective, ibso_p; atol=tolerance)
             family = "Unbound"
             start_type = "NotApplicable"
@@ -467,10 +467,10 @@ function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
             labels = isapprox(p_effective, separatrix_p; atol=tolerance) ? ["Bound", "Eccentric"] : ["Bound", "Eccentric", "Stable"]
         else
             family = "Plunge"
-            start_type = "FiniteStart"
+            start_type = "BoundPlunge"
             stability = "Unstable"
-            support_status = "finite_start_plunge_metadata_only"
-            labels = ["Plunge", "FiniteStart", "Eccentric"]
+            support_status = "bound_plunge_metadata_only"
+            labels = ["Plunge", "BoundPlunge", "Eccentric"]
         end
     else
         if p_effective >= separatrix_p || isapprox(p_effective, separatrix_p; atol=tolerance)
