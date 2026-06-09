@@ -9,7 +9,8 @@ export kerr_geo_photon_sphere_radius,
         kerr_geo_ibso,
         kerr_geo_isso,
         kerr_geo_separatrix,
-        kerr_geo_orbit_type
+        kerr_geo_orbit_type,
+        kerr_geo_orbit_type_metadata
 
 
 # Innermost stable circular orbit (ISCO)
@@ -31,6 +32,12 @@ function kerr_equatorial_isco(a::Real, x::Real)
     return 3 + Z2 - (x * a) * sqrt(inner)
 end
 
+"""
+    kerr_geo_isco(a, x)
+
+Return the innermost stable circular orbit radius where the implemented
+special-case formula is available.
+"""
 function kerr_geo_isco(a::Real, x::Real)
     if isapprox(a, 0.0; atol=1e-12)
         return schwarzschild_geo_isco(a, x)
@@ -203,6 +210,11 @@ end
 
 # Innermost bound spherical orbits (IBSO)
 
+"""
+    kerr_geo_ibso(a, x)
+
+Return the innermost bound spherical orbit radius.
+"""
 function kerr_geo_ibso(a::Real, x::Real)
     # Schwarzschild
     if isapprox(a, 0.0; atol=1e-12)
@@ -343,6 +355,12 @@ end
 
 # Innermost stable spherical orbit (ISSO)
 
+"""
+    kerr_geo_isso(a, x)
+
+Return the innermost stable spherical orbit radius using the local separatrix
+implementation.
+"""
 function kerr_geo_isso(a::Real, x::Real)
     if isapprox(abs(x), 1.0, atol = 1e-12)
         return kerr_geo_isco(a, x)
@@ -361,7 +379,7 @@ are to judge if the orbit with the set of parameters (a, p, e, x) is bound, scat
 """
 
 function kerr_bound_Q(a::Real, p::Real, e::Real, x::Real)
-    ps = e > 0 ? kerr_geo_separatrix(a, e, x) : kerr_geo_ibso(a, x)
+    ps = e > 0 ? kerr_geo_separatrix(a, e, x) : kerr_geo_isso(a, x)
     return (p >= ps) && (0 <= e < 1)
 end
 
@@ -376,69 +394,140 @@ function kerr_plunge_Q(a::Real, p::Real, e::Real, x::Real)
 end
 
 """
-    kerr_geo_orbit_type(a, p, e, x) returns the general type of the orbit
+    kerr_geo_orbit_type_metadata(a, p, e, x)
+
+Return structured stable-orbit classification metadata for APEX-like
+parameters `(a,p,e,x)`. The returned named tuple includes user-facing labels,
+separatrix roundoff-guard fields, support status, and effective classification
+parameters.
 """
-
-function kerr_geo_orbit_type(a::Real, p::Real, e::Real, x::Real)
-    output = String[]
-
+function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
     iszero_tol(v) = isapprox(v, 0.0; atol=1e-12)
+    inclination = iszero_tol(abs(x) - 1) ? "Equatorial" : "Inclined"
+    shape = iszero_tol(e) ? "Circular" : (e < 1 ? "Eccentric" : (iszero_tol(e - 1) ? "Parabolic" : "Hyperbolic"))
+    energy_regime = e < 1 ? "BoundEnergy" : (iszero_tol(e - 1) ? "ParabolicEnergy" : "UnboundEnergy")
+    separatrix_p = iszero_tol(e) ? kerr_geo_isso(a, x) : kerr_geo_separatrix(a, e, x)
+    photon_p = iszero_tol(e) ? kerr_geo_photon_sphere_radius(a, x) : NaN
+    ibso_p = iszero_tol(e) ? kerr_geo_ibso(a, x) : NaN
+    isso_p = iszero_tol(e) ? kerr_geo_isso(a, x) : NaN
+    tolerance = 1e-12
+    separatrix_tolerance = 1e-15
+    at_separatrix = abs(p - separatrix_p) <= separatrix_tolerance
+    p_effective = at_separatrix ? separatrix_p : p
 
-    if iszero_tol(e)
-        # Circular orbits
-        rph  = kerr_geo_photon_sphere_radius(a, x)
-        IBSO = kerr_geo_ibso(a, x)
-        ISSO = kerr_geo_isso(a, x)
-
-        if (rph < p <= IBSO)
-            output = ["Unbound", "Circular", "Unstable"]
-        elseif isapprox(p, IBSO; atol=1e-12)
-            output = ["MarginallyBound", "Circular", "Unstable"]
-        elseif (IBSO < p < ISSO)
-            output = ["Bound", "Circular", "Unstable"]
-        elseif isapprox(p, ISSO; atol=1e-12)
-            output = ["Bound", "Circular", "MarginallyStable"]
-        elseif p > ISSO
-            output = ["Bound", "Circular", "Stable"]
-        elseif 0 < p <= rph
-            output = ["Plunge"]
+    if p_effective <= 0
+        family = "NotClassified"
+        start_type = "Invalid"
+        stability = "Unknown"
+        support_status = "unsupported_invalid_parameters"
+        labels = ["NotClassified"]
+    elseif iszero_tol(e)
+        if p_effective <= photon_p
+            family = "Plunge"
+            start_type = "BoundPlunge"
+            stability = "Unstable"
+            support_status = "bound_plunge_metadata_only"
+            labels = ["Plunge", "BoundPlunge", "Circular"]
+        elseif p_effective <= ibso_p && !isapprox(p_effective, ibso_p; atol=tolerance)
+            family = "Unbound"
+            start_type = "NotApplicable"
+            stability = "Unstable"
+            support_status = "unstable_circular_metadata_only"
+            labels = ["Unbound", "Circular"]
+        elseif isapprox(p_effective, ibso_p; atol=tolerance)
+            family = "MarginallyBound"
+            start_type = "NotApplicable"
+            stability = "Unstable"
+            support_status = "marginally_bound_circular_metadata_only"
+            labels = ["MarginallyBound", "Circular"]
+        elseif p_effective < isso_p
+            family = "Bound"
+            start_type = "NotApplicable"
+            stability = "Unstable"
+            support_status = "unstable_bound_circular_metadata_only"
+            labels = ["Bound", "Circular"]
+        elseif isapprox(p_effective, isso_p; atol=tolerance)
+            family = "Bound"
+            start_type = "NotApplicable"
+            stability = "MarginallyStable"
+            support_status = "marginally_stable_orbit_metadata_only"
+            labels = ["Bound", "Circular"]
         else
-            output = ["NotClassified"]
+            family = "Bound"
+            start_type = "NotApplicable"
+            stability = "Stable"
+            support_status = "stable_orbit_supported"
+            labels = ["Bound", "Circular", "Stable"]
         end
-
-        # Spherical orbit check
-        if !iszero_tol(abs(x) - 1) && p > rph && !iszero_tol(a)
-            push!(output, "Spherical")
+        if inclination == "Inclined" && p_effective > photon_p && !iszero_tol(a)
+            push!(labels, "Spherical")
         end
-
+    elseif e < 1
+        if p_effective >= separatrix_p || isapprox(p_effective, separatrix_p; atol=tolerance)
+            family = "Bound"
+            start_type = "NotApplicable"
+            stability = isapprox(p_effective, separatrix_p; atol=tolerance) ? "MarginallyStable" : "Stable"
+            support_status = isapprox(p_effective, separatrix_p; atol=tolerance) ? "near_separatrix_stable_orbit_supported_with_clamped_frequency_radicals" : "stable_orbit_supported"
+            labels = isapprox(p_effective, separatrix_p; atol=tolerance) ? ["Bound", "Eccentric"] : ["Bound", "Eccentric", "Stable"]
+        else
+            family = "Plunge"
+            start_type = "BoundPlunge"
+            stability = "Unstable"
+            support_status = "bound_plunge_metadata_only"
+            labels = ["Plunge", "BoundPlunge", "Eccentric"]
+        end
     else
-        # Non-circular orbits
-        if kerr_bound_Q(a, p, e, x) && p > 0
-            output = ["Bound", "Eccentric"]
-        elseif kerr_scatter_Q(a, p, e, x) && p > 0
-            output = ["Scatter"]
-            if iszero_tol(e - 1)
-                push!(output, "Parabolic")
-            elseif e > 1
-                push!(output, "Hyperbolic")
-            end
-        elseif p > 0
-            output = ["Plunge", "eccentric"]
+        if p_effective >= separatrix_p || isapprox(p_effective, separatrix_p; atol=tolerance)
+            family = "Scatter"
+            start_type = "InfinityStart"
+            stability = "Scattering"
+            support_status = "scattering_metadata_only_not_implemented"
+            labels = ["Scatter", "InfinityStart", shape]
         else
-            output = ["NotClassified"]
+            family = "Plunge"
+            start_type = "InfinityStart"
+            stability = "Unstable"
+            support_status = "infinity_start_plunge_metadata_only_not_implemented"
+            labels = ["Plunge", "InfinityStart", shape]
         end
     end
 
-    # Equatorial / Inclined classification
-    if output[1] != "NotClassified" 
-        if iszero_tol(abs(x) - 1)
-            push!(output, "Equatorial")
-        else
-            push!(output, "Inclined")
+    if labels[1] != "NotClassified"
+        if at_separatrix && !("Separatrix" in labels)
+            push!(labels, "Separatrix")
         end
+        push!(labels, inclination)
     end
 
-    return output
+    return (
+        labels=labels,
+        family=family,
+        shape=shape,
+        inclination=inclination,
+        start_type=start_type,
+        energy_regime=energy_regime,
+        stability=stability,
+        support_status=support_status,
+        input_p=p,
+        effective_p=p_effective,
+        separatrix_p=separatrix_p,
+        at_separatrix=at_separatrix,
+        photon_p=photon_p,
+        ibso_p=ibso_p,
+        isso_p=isso_p,
+        tolerance=tolerance,
+        separatrix_tolerance=separatrix_tolerance,
+    )
+end
+
+"""
+    kerr_geo_orbit_type(a, p, e, x)
+
+Return the user-facing orbit-type labels derived from
+`kerr_geo_orbit_type_metadata(a,p,e,x)`.
+"""
+function kerr_geo_orbit_type(a::Real, p::Real, e::Real, x::Real)
+    return kerr_geo_orbit_type_metadata(a, p, e, x).labels
 end
 
 
