@@ -1,0 +1,6 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+KerrGeodesics = "53139c06-1eed-45f1-8780-9fca08ecab11"
+
+[compat]
+Documenter = "1"

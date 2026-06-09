@@ -6,6 +6,9 @@ using Elliptic
 
 export kerr_geo_frequencies, kerr_geo_radial_roots, kerr_geo_polar_roots
 
+_nonnegative_radicand(value) = max(0.0, real(value))
+_sqrt_nonnegative(value) = sqrt(_nonnegative_radicand(value))
+
 # -------------------------------------------------------------------
 # Radial roots
 # -------------------------------------------------------------------
@@ -38,7 +41,7 @@ function kerr_geo_radial_roots(a::Real, p::Real, e::Real, x::Real; En = -10.0, Q
         AplusB = 2.0 / (1 - En^2) - (r1 + r2)  
         AB = (a^2 * Q) / ((1 - En^2) * r1 * r2) 
 
-        r3 = (AplusB + sqrt(AplusB^2 - 4.0 * AB)) / 2.0
+        r3 = (AplusB + _sqrt_nonnegative(AplusB^2 - 4.0 * AB)) / 2.0
         r4 = AB / r3
         return (r1, r2, r3, r4)
     end
@@ -50,12 +53,12 @@ function kerr_geo_radial_roots(a::Real, p::Real, e::Real, x::Real; En = -10.0, Q
 
     denom = a^2 * (-1 + x^2) - (-2 + rho2) * rho2
     inner_sqrt1 = rho2 * (a^2 + (-2 + rho2) * rho2) * (-a^2 * (-1 + x^2) + rho2^2)
-    termA = 8.0 * a^2 * (-1 + x^2) * (-2.0 * a * x * rho2 + sqrt(2.0) * sqrt(inner_sqrt1))^2 / (rho2 * denom^2)
-    big_inner = a^4 * (x^2 - x^4) + 2.0 * (-2 + rho2) * rho2^2 + a^2 * rho2 * (2.0 + x^2 * rho2) - 2.0 * sqrt(2.0) * a * x * sqrt(inner_sqrt1)
+    termA = 8.0 * a^2 * (-1 + x^2) * (-2.0 * a * x * rho2 + sqrt(2.0) * _sqrt_nonnegative(inner_sqrt1))^2 / (rho2 * denom^2)
+    big_inner = a^4 * (x^2 - x^4) + 2.0 * (-2 + rho2) * rho2^2 + a^2 * rho2 * (2.0 + x^2 * rho2) - 2.0 * sqrt(2.0) * a * x * _sqrt_nonnegative(inner_sqrt1)
     termB = 4.0 * rho2^2 * big_inner^2 / denom^4
-    sqrt_part = sqrt(termA + termB)
+    sqrt_part = _sqrt_nonnegative(termA + termB)
     numerator = -a^4 * (-1 + x^2) * (-1 + x^2 + 2.0 * rho2) -
-                4.0 * sqrt(2.0) * a * x * rho2 * sqrt(inner_sqrt1) +
+                4.0 * sqrt(2.0) * a * x * rho2 * _sqrt_nonnegative(inner_sqrt1) +
                 rho2^2 * (-4.0 + 4.0 * rho2 - 5.0 * rho2^2 + 2.0 * rho2^3) -
                 2.0 * a^2 * rho2 * (-2.0 + 3.0 * rho2 - 2.0 * rho2^2 + x^2 * (2.0 - 5.0 * rho2 + rho2^2))
     big_frac = numerator / denom^2
@@ -83,14 +86,14 @@ function kerr_geo_polar_roots(a::Real, p::Real, e::Real, x::Real)
     L = consts["Lz"]
     Q = consts["Q"]
 
-    zm = sqrt(max(0.0, 1.0 - x^2))
+    zm = _sqrt_nonnegative(1.0 - x^2)
 
     if isapprox(x, 0.0; atol=1e-12)
         # polar special-case: use Q directly
-        zp = sqrt(max(0.0, Q))
+        zp = _sqrt_nonnegative(Q)
     else
         # generic polar amplitude
-        zp = sqrt(a^2 * (1.0 - En^2) + L^2 / (1.0 - zm^2))
+        zp = _sqrt_nonnegative(a^2 * (1.0 - En^2) + L^2 / (1.0 - zm^2))
     end
 
     return (zp, zm)
@@ -101,10 +104,10 @@ function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
     # Case 1: e ≈ 0
     if isapprox(e, 0.0; atol=1e-12)
         return Dict(
-            "ϒr" => sqrt((p * (p - 6)) / (p - 3)),
-            "ϒθ" => p / sqrt(p - 3),
-            "ϒϕ" => (p * sign(x)) / sqrt(p - 3),
-            "ϒt" => sqrt(p^5 / (p - 3))
+            "ϒr" => _sqrt_nonnegative((p * (p - 6)) / (p - 3)),
+            "ϒθ" => p / _sqrt_nonnegative(p - 3),
+            "ϒϕ" => (p * sign(x)) / _sqrt_nonnegative(p - 3),
+            "ϒt" => _sqrt_nonnegative(p^5 / (p - 3))
         )
     end
 
@@ -112,9 +115,9 @@ function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
     if isapprox(e, 1.0; atol=1e-12)
         m = (4*e) / (p - 6 + 2*e)
         return Dict(
-            "ϒr" => sqrt(-(p * (-6 + 2*e + p)) / (3 + e^2 - p)) * π / (2 * Elliptic.K(m)),
-            "ϒθ" => p / sqrt(p - 3 - e^2),
-            "ϒϕ" => (p * sign(x)) / sqrt(p - 3 - e^2),
+            "ϒr" => _sqrt_nonnegative(-(p * (-6 + 2*e + p)) / (3 + e^2 - p)) * π / (2 * Elliptic.K(m)),
+            "ϒθ" => p / _sqrt_nonnegative(p - 3 - e^2),
+            "ϒϕ" => (p * sign(x)) / _sqrt_nonnegative(p - 3 - e^2),
             "ϒt" => Inf
         )
     end
@@ -123,9 +126,9 @@ function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
     m = (4*e) / (p - 6 + 2*e)
 
     return Dict(
-        "ϒr" => sqrt(-(p * (-6 + 2*e + p)) / (3 + e^2 - p)) * π / (2 * Elliptic.K(m)),
-        "ϒθ" => p / sqrt(p - 3 - e^2),
-        "ϒϕ" => (p * sign(x)) / sqrt(p - 3 - e^2),
+        "ϒr" => _sqrt_nonnegative(-(p * (-6 + 2*e + p)) / (3 + e^2 - p)) * π / (2 * Elliptic.K(m)),
+        "ϒθ" => p / _sqrt_nonnegative(p - 3 - e^2),
+        "ϒϕ" => (p * sign(x)) / _sqrt_nonnegative(p - 3 - e^2),
         "ϒt" => begin
             num = -(((-4+p) * p^2 * (-6+2*e+p) * Elliptic.E(m)) / (-1+e^2)) +
                 (p^2 * (28 + 4*e^2 - 12*p + p^2) * Elliptic.K(m)) / (-1+e^2) -
@@ -134,13 +137,13 @@ function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
                 2 * (-4+p)^2 * ((-4+p) * Elliptic.K(m) -
                 ((6+2*e-p) * p * Elliptic.Π((16*e) / (12+8*e-4*e^2-8*p+p^2), π/2, m)) / (2+2*e-p))
             denom = (p * (-3 - e^2 + p) * ( -4 + p)^2 )
-            0.5 * sqrt((-4*e^2 + (-2+p)^2) / (p * (-3 - e^2 + p))) * (8 + num / ( (-4+p)^2 * Elliptic.K(m) ))
+            0.5 * _sqrt_nonnegative((-4*e^2 + (-2+p)^2) / (p * (-3 - e^2 + p))) * (8 + num / ( (-4+p)^2 * Elliptic.K(m) ))
         end
     )
 end
 
 function schwarzschild_geo_boyerlindquist_frequencies(a::Real, p::Real, e::Real, x::Real)
-    return Dict("Ωr" => sqrt(p-6)/p^2,
+    return Dict("Ωr" => _sqrt_nonnegative(p-6)/p^2,
         "Ωθ" => 1/p^(3/2),
         "Ωϕ" => sign(x)/p^(3/2))
 end
@@ -165,15 +168,15 @@ function kerr_geo_mino_frequency_r(a::Real, p::Real, e::Real, x::Real, EnLQ, roo
     ρ1, ρ2, ρ3, ρ4 = roots
 
     if isapprox(a, 0.0; atol=1e-12) && isapprox(e, 0.0; atol=1e-12)
-        return sqrt(p*(p-6)/(p-3))
+        return _sqrt_nonnegative(p*(p-6)/(p-3))
     end
 
     if isapprox(e, 1.0; atol=1e-12)   # e == 1
         kr = (ρ3 - ρ4) / (ρ2 - ρ4)
-        return (π * sqrt(2 * (ρ2 - ρ4))) / (2 * Elliptic.K(kr))
+        return (π * _sqrt_nonnegative(2 * (ρ2 - ρ4))) / (2 * Elliptic.K(kr))
     else
         kr = ((ρ1 - ρ2) / (ρ1 - ρ3)) * ((ρ3 - ρ4) / (ρ2 - ρ4))
-        return (π * sqrt((1 - En^2) * (ρ1 - ρ3) * (ρ2 - ρ4))) / (2 * Elliptic.K(kr))
+        return (π * _sqrt_nonnegative((1 - En^2) * (ρ1 - ρ3) * (ρ2 - ρ4))) / (2 * Elliptic.K(kr))
     end
 end
 
@@ -242,11 +245,11 @@ function kerr_geo_mino_frequency_ϕ_θ(a, p, e, x, EnLQ, zpzm)
         num = (ρ1*ρ2*(a^4 + ρ1^2*ρ2^2 + a^2*((-2+ρ1)*ρ1 + (-2+ρ2)*ρ2))/2)
         den = (a^4*(2+ρ1+ρ2) + ρ1*ρ2*(ρ1^2*(-2+ρ2)+ρ1*(-2+ρ2)*ρ2-2*ρ2^2) + a^2*(ρ1^3 + ρ1^2*ρ2 + ρ1*(-4+ρ2)*ρ2 + ρ2^3))
         m = (a^2 * (a^4 + ρ1*(ρ1*(-2+ρ2)-2*ρ2)*ρ2 + a^2*(ρ1^2 + ρ2^2))) / (ρ1*ρ2*(a^4 + ρ1^2*ρ2^2 + a^2*((-2+ρ1)*ρ1 + (-2+ρ2)*ρ2)))
-        return π * sqrt(num / den) / Elliptic.K(m)
+        return π * _sqrt_nonnegative(num / den) / Elliptic.K(m)
     elseif isapprox(e, 1.0; atol=1e-12)
         roots = kerr_geo_radial_roots(a, p, e, x)
         ρ1, ρ2, ρ3, ρ4 = roots
-        return sqrt(2) * sqrt((ρ2*(a^2 + ρ2^2)) / (a^2 + (-2 + ρ2)*ρ2))
+        return sqrt(2) * _sqrt_nonnegative((ρ2*(a^2 + ρ2^2)) / (a^2 + (-2 + ρ2)*ρ2))
     else
         m = a^2*(1 - En^2)*(zm/zp)^2
         return L * Elliptic.Pi(zm^2, π/2, m) / Elliptic.K(m)
@@ -329,13 +332,13 @@ function kerr_geo_mino_frequencies(a, p, e, x)
             "ϒt" => real(freqs["ϒt"])
         )
     elseif isapprox(e, 0.0; atol=1e-12) && isapprox(x, 1.0; atol=1e-12)
-        U_r = sqrt(p * (-2*a^2 + 6*a*sqrt(p) + (-5 + p)*p +
+        U_r = _sqrt_nonnegative(p * (-2*a^2 + 6*a*sqrt(p) + (-5 + p)*p +
                 ((a - sqrt(p))^2 * (a^2 - 4*a*sqrt(p) - (-4 + p)*p)) /
                 abs(a^2 - 4*a*sqrt(p) - (-4 + p)*p)) /
                 (2*a*sqrt(p) + (-3 + p)*p))
-        U_theta = abs((p^(1/4) * sqrt(3*a^2 - 4*a*sqrt(p) + p^2)) / sqrt(2*a + (-3 + p)*sqrt(p)))
-        U_phi = p^(5/4) / sqrt(2*a + (-3 + p)*sqrt(p))
-        U_t = (p^(5/4) * (a + p^(3/2))) / sqrt(2*a + (-3 + p)*sqrt(p))
+        U_theta = abs((p^(1/4) * _sqrt_nonnegative(3*a^2 - 4*a*sqrt(p) + p^2)) / _sqrt_nonnegative(2*a + (-3 + p)*sqrt(p)))
+        U_phi = p^(5/4) / _sqrt_nonnegative(2*a + (-3 + p)*sqrt(p))
+        U_t = (p^(5/4) * (a + p^(3/2))) / _sqrt_nonnegative(2*a + (-3 + p)*sqrt(p))
 
         return Dict(
             "ϒr" => real(U_r),

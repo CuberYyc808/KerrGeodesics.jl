@@ -2,6 +2,13 @@
 
 This Julia package is a reimplementation of the Mathematica code [KerrGeodesics](https://github.com/BlackHolePerturbationToolkit/KerrGeodesics), adapted and optimized for Julia.
 
+## Documentation
+
+The package includes a Documenter.jl site under [`docs/`](docs/), with pages
+for the package overview, examples, and API reference. The GitHub Actions
+workflow `.github/workflows/documentation.yml` builds and deploys the site for
+the `main` branch and tags when the repository secrets are configured.
+
 ## Installation
 
 You can install the package by simply typing 
@@ -15,37 +22,152 @@ Pkg.add("KerrGeodesics")
 
 ## Usage
 
-### Basic Example
+### Unified Interface
 
-The main function is `kerr_geo_emri(a, p, e, x)`, which computes the trajectory of a test particle around a Kerr black hole.
+The main project-facing function is `kerr_geodesic`.
 
-- `a`: Spin parameter of the black hole.
-- `p`: Semi-latus rectum of the orbit.
-- `e`: Orbital eccentricity.
-- `x`: Inclination parameter.
-
-It returns a dictionary containing all the information of the set of the parameters `(a, p, e, x)`.
+Stable geodesic input uses the APEX-like parameters `(a, p, e, x)`:
 
 ```julia
 using KerrGeodesics
 
-# Example: generic timelike bound stable orbit with a=0.9, p=10.0, e=0.5, x=0.8 and initial phases (0.0, 0.0, 0.0, 0.0). 
-EMRI_info = kerr_geo_emri(0.9, 10.0, 0.2, 0.8)
+geo = kerr_geodesic(0.9, 10.0, 0.5, 0.8)
 ```
 
-The output should be like:
+Plunge geodesic input uses constants `(a, E, Lz, Q)` through either a constants tuple or `input=:constants`:
 
 ```julia
-KerrGeoEMRI(
-    OrbitalParameters = (a = 0.9, p = 10.0, e = 0.2, x = 0.8),
-    ConstantsOfMotion = (E = 0.9546178536960606, Lz = 2.810660381278431, Q = 4.469510431717436),
-    OrbitalType = ["Bound", "Eccentric", "Inclined"],
-    Frequencies = (ϒt = 124.77891227683266, ϒr = 2.7729739639615034, ϒθ = 3.521699666954832, ϒϕ = 3.6986834364993015),
+using KerrGeodesics
+
+plunge = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:inner_turning)
+plunge_alt = kerr_geodesic(0.9, 0.94, 0.1, 12.0; input=:constants)
+```
+
+The direct plunge constructor is also available:
+
+```julia
+orbit = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:inner_turning)
+t = orbit.Trajectory.t
+r = orbit.Trajectory.r
+theta = orbit.Trajectory.theta
+phi = orbit.Trajectory.phi
+rstar = orbit.Trajectory.rstar
+u = orbit.Trajectory.u
+v = orbit.Trajectory.v
+```
+
+`kerr_plunge` is retained as a compatibility wrapper for older project scripts.
+
+The structured output is printed as:
+
+```julia
+KerrGeoPlunge(
+    ConstantsOfMotion = (E = 0.94, Lz = 0.1, Q = 12.0),
+    OrbitClass = "Complex",
     Parametrization = "Mino",
-    Trajectory = (t = t(λ), r = r(λ), θ = θ(λ), ϕ = ϕ(λ)),
-    InitialPhases = (qt0 = 0.0, qr0 = 0.0, qθ0 = 0.0, qϕ0 = 0.0),
+    InitialPhases = (t0 = 0.0, radial = 1.6863825015685567, theta = 0.0, phi0 = 0.0),
+    Status = (supported = true, reason = "ok"),
+    Trajectory = (t = t(lambda), r = r(lambda), theta = theta(lambda), phi = phi(lambda), rstar = rstar(lambda), u = u(lambda), v = v(lambda), u_rstar_series = u(rstar), v_rstar_series = v(rstar)),
+    Velocity = (ut = ut(lambda), ur = ur(lambda), uz = dz/dlambda, utheta = dtheta/dlambda, uphi = uphi(lambda)),
 )
 ```
+
+`generic_plunge_velocity` returns `uz = dz/dlambda`. Use `orbit.Velocity.utheta` when `dtheta/dlambda` is needed.
+
+The older stable-orbit entry point is still available as `kerr_geo_stable(a, p, e, x)`.
+
+The combined return type from `kerr_geodesic` is `KerrGeodesicFamily`. The older
+names `KerrGeodesicS` and `KerrGeodesicSet` are retained as compatibility
+aliases.
+
+### Orbit Classification
+
+`kerr_geo_orbit_type_metadata(a,p,e,x)` returns structured stable-orbit
+metadata. `kerr_geo_orbit_type(a,p,e,x)` labels are derived from that metadata.
+Near the separatrix, inputs within the current roundoff guard are evaluated at
+the separatrix radius and labeled `Separatrix`. Plunge labels use `Plunge` with
+`FiniteStart` or `InfinityStart`; `Unstable` is not used as an orbit-type label.
+
+### Release Automation
+
+The repository includes GitHub Actions workflows for CI, Documenter docs,
+CompatHelper, and Julia TagBot. TagBot creates tags/releases after Julia package
+registration events; it does not register the package by itself. If tag-triggered
+documentation deployment is desired, configure the `DOCUMENTER_KEY` repository
+secret.
+
+### Initial Phases and Initial Positions
+
+Stable trajectories use `initPhases=(qt0, qr0, qtheta0, qphi0)`. These are
+phase offsets used by the stable-orbit analytic trajectory functions:
+
+- `qt0` shifts the coordinate-time phase;
+- `qr0` shifts the radial phase;
+- `qtheta0` shifts the polar phase;
+- `qphi0` shifts the azimuthal phase.
+
+The stable four-velocity helper uses only the radial and polar phase offsets:
+`kerr_geo_four_velocity(...; initPhases=(qr0, qtheta0))`.
+
+Plunge trajectories use either explicit phases or initial-position helpers:
+
+```julia
+orbit = kerr_geo_plunge(a, E, Lz, Q; initPhases=(t0, lambda_r0, lambda_theta0, phi0))
+orbit = kerr_geo_plunge(a, E, Lz, Q; radial_start=:outer_turning)
+orbit = kerr_geo_plunge(a, E, Lz, Q; radial_start=:inner_turning)
+orbit = kerr_geo_plunge(a, E, Lz, Q; initial_radius=r0, initial_theta=theta0)
+orbit = kerr_geo_plunge(a, E, Lz, Q; radial_phase=lambda_r0, theta_phase=lambda_theta0)
+```
+
+For plunge orbits:
+
+- `t0` and `phi0` are additive offsets in `t(lambda)` and `phi(lambda)`;
+- `lambda_r0` is the radial Mino-time phase offset;
+- `lambda_theta0` is the polar Mino-time phase offset;
+- `initial_radius` is converted to `lambda_r0` with `lambda_of_r`;
+- `initial_theta` is converted to `lambda_theta0` through the polar root
+  relation when the polar sector is nondegenerate;
+- for equatorial or otherwise degenerate polar sectors, `initial_theta`
+  defaults to `pi/2` and the polar phase is set to zero.
+
+### Retarded and Advanced Time
+
+Plunge trajectories expose the Kerr tortoise coordinate and null coordinates:
+
+```julia
+rstar = orbit.Trajectory.rstar(lambda)
+u = orbit.Trajectory.u(lambda)  # t(lambda) - rstar(lambda)
+v = orbit.Trajectory.v(lambda)  # t(lambda) + rstar(lambda)
+```
+
+The tortoise convention is
+
+```julia
+rstar = r + 2*rplus/(rplus-rminus)*log((r-rplus)/2) -
+        2*rminus/(rplus-rminus)*log((r-rminus)/2)
+```
+
+with `rplus = 1 + sqrt(1-a^2)` and `rminus = 1 - sqrt(1-a^2)`. This real-valued
+coordinate is defined for exterior radii `r > rplus`; it returns `NaN` for
+`r <= rplus`. Near the horizon, use these fields with an explicit finite-cutoff
+convention; the package does not claim an exact horizon-crossing or
+cutoff-independent retarded time.
+
+With `time_origin=:future_horizon_v_zero`, supported finite-start plunges shift
+the additive coordinate-time origin so the future-horizon advanced-time anchor
+satisfies `v_H=0`. Near-horizon `u(rstar)` and `v(rstar)` series callables are
+exposed through `orbit.Trajectory.u_rstar_series` and
+`orbit.Trajectory.v_rstar_series` when the branch supports the B50-compatible
+series construction. The main trajectory remains parameterized by Mino time; the
+series is a near-horizon evaluator, not a replacement for `lambda -> rstar`.
+
+### Internal Layout
+
+The public API is exported from `src/KerrGeodesics.jl`. Plunge near-horizon time
+helpers live in `src/KerrGeoPlunge/NearHorizonTime.jl`, and plunge
+initial-condition conversion helpers live in
+`src/KerrGeoPlunge/InitialConditions.jl`. These internal modules keep the main
+wrapper file focused on public constructors and structured output types.
 
 ---
 
