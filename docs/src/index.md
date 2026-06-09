@@ -90,10 +90,3 @@ Internal plunge helpers are split into `KerrGeoPlunge/NearHorizonTime.jl` for
 the tortoise coordinate, near-horizon null-time series, and horizon-anchor
 estimation, and `KerrGeoPlunge/InitialConditions.jl` for radial and polar
 initial-condition conversion.
-
-## Local Development Note
-
-Project-internal validation scripts in Generic Plunge CodeX use include-style
-local loading rather than creating new Julia environments. Package release and
-documentation workflows may use standard package-manager steps in GitHub
-Actions.
