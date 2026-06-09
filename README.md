@@ -1,6 +1,9 @@
 # KerrGeodesics.jl
 
-This Julia package is a reimplementation of the Mathematica code [KerrGeodesics](https://github.com/BlackHolePerturbationToolkit/KerrGeodesics), adapted and optimized for Julia.
+KerrGeodesics.jl provides Julia interfaces for Kerr geodesic trajectories in
+units with `G = c = M = 1`. The package currently supports stable bound orbits
+from APEX-like parameters and finite-start plunge orbits from constants of
+motion. Scattering-orbit support is planned for future development.
 
 ## Documentation
 
@@ -39,14 +42,14 @@ Plunge geodesic input uses constants `(a, E, Lz, Q)` through either a constants 
 ```julia
 using KerrGeodesics
 
-plunge = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:inner_turning)
+plunge = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:turning_point)
 plunge_alt = kerr_geodesic(0.9, 0.94, 0.1, 12.0; input=:constants)
 ```
 
 The direct plunge constructor is also available:
 
 ```julia
-orbit = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:inner_turning)
+orbit = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:turning_point)
 t = orbit.Trajectory.t
 r = orbit.Trajectory.r
 theta = orbit.Trajectory.theta
@@ -113,8 +116,7 @@ Plunge trajectories use either explicit phases or initial-position helpers:
 
 ```julia
 orbit = kerr_geo_plunge(a, E, Lz, Q; initPhases=(t0, lambda_r0, lambda_theta0, phi0))
-orbit = kerr_geo_plunge(a, E, Lz, Q; radial_start=:outer_turning)
-orbit = kerr_geo_plunge(a, E, Lz, Q; radial_start=:inner_turning)
+orbit = kerr_geo_plunge(a, E, Lz, Q; radial_start=:turning_point)
 orbit = kerr_geo_plunge(a, E, Lz, Q; initial_radius=r0, initial_theta=theta0)
 orbit = kerr_geo_plunge(a, E, Lz, Q; radial_phase=lambda_r0, theta_phase=lambda_theta0)
 ```
@@ -124,6 +126,8 @@ For plunge orbits:
 - `t0` and `phi0` are additive offsets in `t(lambda)` and `phi(lambda)`;
 - `lambda_r0` is the radial Mino-time phase offset;
 - `lambda_theta0` is the polar Mino-time phase offset;
+- `radial_start=:turning_point` starts the finite-start plunge at the exterior
+  radial turning point;
 - `initial_radius` is converted to `lambda_r0` with `lambda_of_r`;
 - `initial_theta` is converted to `lambda_theta0` through the polar root
   relation when the polar sector is nondegenerate;

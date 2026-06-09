@@ -260,7 +260,8 @@ support, horizon cutoff conventions, and time-origin policy.
 
 Common keyword controls include `initPhases`, `radial_start`,
 `initial_radius`, `initial_theta`, `time_origin`, and
-`horizon_time_origin_offset`.
+`horizon_time_origin_offset`. Use `radial_start=:turning_point` to start at the
+finite-start plunge turning point outside the horizon.
 """
 function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
         initPhases=nothing,
@@ -268,7 +269,7 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
         theta_phase=nothing,
         initial_radius=nothing,
         initial_theta=pi / 2,
-        radial_start=:outer_turning,
+        radial_start=:turning_point,
         t0=0.0,
         phi0=0.0,
         real2_horizon_offset=1e-4,

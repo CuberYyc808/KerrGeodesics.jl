@@ -31,8 +31,8 @@ geo = kerr_geodesic(0.9, 10.0, 0.5, 0.8)
 Finite-start plunge calls use constants of motion:
 
 ```julia
-plunge_family = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:inner_turning)
-plunge = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:inner_turning)
+plunge_family = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:turning_point)
+plunge = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:turning_point)
 ```
 
 Do not mix the APEX-like parameter tuple `(a,p,e,x)` with the constants tuple

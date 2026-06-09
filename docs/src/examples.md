@@ -31,7 +31,7 @@ Finite-start plunge trajectories use constants of motion `(a,E,Lz,Q)`.
 
 ```julia
 plunge = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0;
-                         radial_start=:inner_turning)
+                         radial_start=:turning_point)
 
 r0 = plunge.Trajectory.r(0.0)
 u0 = plunge.Trajectory.u(0.0)
@@ -43,7 +43,7 @@ The unified constructor returns a family object:
 
 ```julia
 family = kerr_geodesic(0.9, (0.94, 0.1, 12.0);
-                       radial_start=:inner_turning)
+                       radial_start=:turning_point)
 family.RootClass
 family.Plunge.Status
 ```

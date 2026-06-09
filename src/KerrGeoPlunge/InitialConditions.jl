@@ -24,7 +24,7 @@ function _theta_phase_from_theta(a, energy, lz, q, theta)
     return Elliptic.F(asin(amplitude), ktheta) / xi_theta
 end
 
-function _radial_phase_from_options(a, energy, lz, q; radial_phase=nothing, initial_radius=nothing, radial_start=:outer_turning)
+function _radial_phase_from_options(a, energy, lz, q; radial_phase=nothing, initial_radius=nothing, radial_start=:turning_point)
     if radial_phase !== nothing
         return radial_phase
     end
@@ -36,12 +36,12 @@ function _radial_phase_from_options(a, energy, lz, q; radial_phase=nothing, init
         end
         return phase
     end
-    if radial_start == :outer_turning
+    if radial_start in (:turning_point, :outer_turning)
         return 0.0
     elseif radial_start == :inner_turning
         return lambda_max
     else
-        error("Unknown radial_start. Use :outer_turning or :inner_turning.")
+        error("Unknown radial_start. Use :turning_point for the exterior plunge turning point.")
     end
 end
 

@@ -9,16 +9,16 @@ using KerrGeodesics
     @test abs(plunge.Residuals.radial(0.5)) < 1e-10
     @test abs(plunge.Residuals.polar_z(0.5)) < 1e-10
 
-    exterior = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:outer_turning)
+    exterior = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:turning_point)
     @test isfinite(exterior.Trajectory.rstar(0.0))
     @test isapprox(exterior.Trajectory.u(0.0), exterior.Trajectory.t(0.0) - exterior.Trajectory.rstar(0.0); atol=1e-12)
     @test isapprox(exterior.Trajectory.v(0.0), exterior.Trajectory.t(0.0) + exterior.Trajectory.rstar(0.0); atol=1e-12)
     @test isnan(plunge.Trajectory.rstar(0.0))
 
-    old_name = kerr_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:inner_turning)
+    old_name = kerr_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:turning_point)
     @test old_name.Status.supported
 
-    direct = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:inner_turning)
+    direct = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:turning_point)
     @test direct.InputType == :constants
     @test direct isa KerrGeodesicFamily
     @test direct isa KerrGeodesicS
