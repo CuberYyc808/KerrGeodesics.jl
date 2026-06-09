@@ -394,9 +394,13 @@ function kerr_plunge_Q(a::Real, p::Real, e::Real, x::Real)
 end
 
 """
-    kerr_geo_orbit_type(a, p, e, x) returns the general type of the orbit
-"""
+    kerr_geo_orbit_type_metadata(a, p, e, x)
 
+Return structured stable-orbit classification metadata for APEX-like
+parameters `(a,p,e,x)`. The returned named tuple includes user-facing labels,
+separatrix roundoff-guard fields, support status, and effective classification
+parameters.
+"""
 function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
     iszero_tol(v) = isapprox(v, 0.0; atol=1e-12)
     inclination = iszero_tol(abs(x) - 1) ? "Equatorial" : "Inclined"
@@ -516,6 +520,12 @@ function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
     )
 end
 
+"""
+    kerr_geo_orbit_type(a, p, e, x)
+
+Return the user-facing orbit-type labels derived from
+`kerr_geo_orbit_type_metadata(a,p,e,x)`.
+"""
 function kerr_geo_orbit_type(a::Real, p::Real, e::Real, x::Real)
     return kerr_geo_orbit_type_metadata(a, p, e, x).labels
 end

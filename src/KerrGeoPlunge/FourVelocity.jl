@@ -1,4 +1,4 @@
-module FourVelocity
+module PlungeFourVelocity
 
 include("OrbitClass.jl")
 using .OrbitClass

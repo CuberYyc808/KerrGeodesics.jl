@@ -23,7 +23,8 @@ export kerr_geo_constants_of_motion,
         kerr_geo_ibso,
         kerr_geo_isso,
         kerr_geo_orbit,
-        kerr_geo_stable
+        kerr_geo_stable,
+        KerrGeoStable
 
 """
     KerrGeoStable
@@ -129,7 +130,7 @@ using .OrbitClass
 include("KerrGeoPlunge/OrbitalDuration.jl")
 using .OrbitalDuration
 include("KerrGeoPlunge/FourVelocity.jl")
-using .FourVelocity
+using .PlungeFourVelocity
 include("KerrGeoPlunge/PlungeOrbit.jl")
 using .PlungeOrbit
 include("KerrGeoPlunge/NearHorizonTime.jl")
