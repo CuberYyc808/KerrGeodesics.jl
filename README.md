@@ -57,9 +57,8 @@ phi = orbit.Trajectory.phi
 rstar = orbit.Trajectory.rstar
 u = orbit.Trajectory.u
 v = orbit.Trajectory.v
+duration = orbit.Status.duration
 ```
-
-`kerr_plunge` is retained as a compatibility wrapper for older project scripts.
 
 The structured output is printed as:
 
@@ -109,6 +108,12 @@ phase offsets used by the stable-orbit analytic trajectory functions:
 - `qtheta0` shifts the polar phase;
 - `qphi0` shifts the azimuthal phase.
 
+For eccentric stable bound orbits, `initPhases=(0,0,0,0)` starts the radial
+motion at the inner radial turning point, i.e. periapsis with
+`r(0)=p/(1+e)`. The polar phase starts at the polar turning point
+`theta(0)=acos(zm)` for non-equatorial generic orbits. For circular equatorial
+orbits the radius and polar angle are constant, `r(0)=p` and `theta(0)=pi/2`.
+
 The stable four-velocity helper uses only the radial and polar phase offsets:
 `kerr_geo_four_velocity(...; initPhases=(qr0, qtheta0))`.
 
@@ -133,6 +138,18 @@ For plunge orbits:
   relation when the polar sector is nondegenerate;
 - for equatorial or otherwise degenerate polar sectors, `initial_theta`
   defaults to `pi/2` and the polar phase is set to zero.
+
+Finite-start plunge outputs include duration metadata:
+
+```julia
+orbit.Status.duration.mino_time_to_horizon
+orbit.Status.duration.horizon_lambda
+orbit.Status.duration.coordinate_time_to_horizon_status
+```
+
+The Mino-time duration to the event horizon is finite. Boyer-Lindquist
+coordinate time and retarded time diverge at the future horizon; the advanced
+time has a finite horizon anchor.
 
 ### Retarded and Advanced Time
 

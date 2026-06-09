@@ -73,6 +73,11 @@ plunge trajectories. The retarded time $u$ diverges linearly for an ingoing
 future-horizon trajectory; finite plotting coordinates must use an explicitly
 recorded cutoff or shifted-display convention.
 
+Finite-start plunge outputs also include `plunge.Status.duration`, with the
+finite Mino-time duration to the event horizon and explicit status fields
+recording that Boyer-Lindquist coordinate time and retarded time diverge at the
+future horizon.
+
 The near-horizon `u(rstar)` and `v(rstar)` series callables are exposed on the
 trajectory object when supported by the branch. The Mino-time trajectory path
 remains the owner of `lambda -> r -> rstar`; the near-horizon series is only a

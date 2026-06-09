@@ -24,6 +24,9 @@ stable = kerr_geo_stable(0.9, 10.0, 0.5, 0.8;
 ```
 
 Stable phase offsets are `(qt0, qr0, qtheta0, qphi0)`.
+For eccentric stable bound orbits, the all-zero phase starts at periapsis,
+`r(0)=p/(1+e)`, and at the polar turning point for the non-equatorial polar
+motion. Circular equatorial orbits have constant `r=p` and `theta=pi/2`.
 
 ## Finite-Start Plunge From Constants
 
@@ -37,6 +40,7 @@ r0 = plunge.Trajectory.r(0.0)
 u0 = plunge.Trajectory.u(0.0)
 v0 = plunge.Trajectory.v(0.0)
 rstar0 = plunge.Trajectory.rstar(0.0)
+lambda_horizon = plunge.Status.duration.mino_time_to_horizon
 ```
 
 The unified constructor returns a family object:
@@ -96,6 +100,19 @@ u_series = plunge.Trajectory.u_rstar_series(rstar_cutoff)
 
 The series evaluator is a near-horizon bridge at fixed `rstar`; it does not
 replace the trajectory path from `lambda` to `r` and `rstar`.
+
+## Plunge Duration
+
+Finite-start plunge outputs include a duration metadata block:
+
+```julia
+plunge.Status.duration.mino_time_to_horizon
+plunge.Status.duration.coordinate_time_to_horizon_status
+plunge.Status.duration.advanced_time_to_horizon_status
+```
+
+The Mino-time duration to the event horizon is finite. Boyer-Lindquist
+coordinate time and retarded time diverge at the future horizon.
 
 ## Root Classification
 

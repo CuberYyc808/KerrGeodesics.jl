@@ -16,10 +16,6 @@ kerr_geo_stable
 kerr_geo_plunge
 ```
 
-```@docs
-kerr_plunge
-```
-
 ## Structured Output Types
 
 ```@docs
@@ -71,8 +67,7 @@ kerr_rstar
 | `generic_plunge_orbit(a,E,L,Q; initPhases=...)` | return low-level plunge trajectory callables |
 | `generic_plunge_velocity(a,E,L,Q; initPhase=...)` | return low-level plunge velocity callables |
 
-The direct public plunge entry point is `kerr_geo_plunge`. `kerr_plunge` is a
-compatibility wrapper. Internal near-horizon time helpers are housed under
+The direct public plunge entry point is `kerr_geo_plunge`. Internal near-horizon time helpers are housed under
 `KerrGeoPlunge/NearHorizonTime.jl`, and internal plunge initial-condition
 helpers under `KerrGeoPlunge/InitialConditions.jl`; they are not separate public
 constructor layers.

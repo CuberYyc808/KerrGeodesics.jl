@@ -15,15 +15,14 @@ using KerrGeodesics
     @test isapprox(exterior.Trajectory.v(0.0), exterior.Trajectory.t(0.0) + exterior.Trajectory.rstar(0.0); atol=1e-12)
     @test isnan(plunge.Trajectory.rstar(0.0))
 
-    old_name = kerr_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:turning_point)
-    @test old_name.Status.supported
-
     direct = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:turning_point)
     @test direct.InputType == :constants
     @test direct isa KerrGeodesicFamily
     @test direct isa KerrGeodesicS
     @test direct isa KerrGeodesicSet
     @test direct.Plunge.Status.supported
+    @test direct.Plunge.Status.duration.mino_time_to_horizon > 0
+    @test direct.Plunge.Status.duration.coordinate_time_to_horizon_status == "boyer_lindquist_t_diverges_at_future_horizon"
     @test direct.Stable === nothing
 
     combined = kerr_geodesic(0.9, 10.0, 0.5, 0.8)

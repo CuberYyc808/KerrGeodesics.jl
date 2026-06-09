@@ -148,7 +148,6 @@ export radial_roots, polar_roots, classify_orbit,
         KerrGeodesicS,
         KerrGeodesicSet,
         kerr_geo_plunge,
-        kerr_plunge,
         kerr_geodesic
 
 """
@@ -307,7 +306,21 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
         initPhases=phases,
         real2_horizon_offset=real2_horizon_offset,
     )
-    _, _, lambda_of_radius = lambda_of_r(a, energy, lz, q)
+    lambda_radial_endpoint, lambda_horizon_from_turning_point, lambda_of_radius = lambda_of_r(a, energy, lz, q)
+    rplus = 1 + sqrt(1 - a^2)
+    horizon_lambda_from_start = lambda_horizon_from_turning_point - lambda_r0
+    radial_endpoint_lambda_from_start = lambda_radial_endpoint - lambda_r0
+    duration_metadata = (
+        start_lambda=0.0,
+        horizon_lambda=horizon_lambda_from_start,
+        mino_time_to_horizon=horizon_lambda_from_start,
+        radial_endpoint_lambda=radial_endpoint_lambda_from_start,
+        mino_time_to_radial_endpoint=radial_endpoint_lambda_from_start,
+        horizon_radius=rplus,
+        coordinate_time_to_horizon_status="boyer_lindquist_t_diverges_at_future_horizon",
+        retarded_time_to_horizon_status="u_diverges_linearly_at_future_horizon",
+        advanced_time_to_horizon_status="v_has_finite_horizon_anchor",
+    )
     time_origin_anchor = (
         vH=NaN,
         method="input_t0_no_horizon_alignment",
@@ -396,6 +409,11 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
             horizon_v_anchor_before_shift=time_origin_anchor.vH,
             horizon_v_anchor_method=time_origin_anchor.method,
             horizon_time_origin_offset=horizon_time_origin_offset,
+            duration=duration_metadata,
+            horizon_lambda=horizon_lambda_from_start,
+            mino_time_to_horizon=horizon_lambda_from_start,
+            radial_endpoint_lambda=radial_endpoint_lambda_from_start,
+            mino_time_to_radial_endpoint=radial_endpoint_lambda_from_start,
         )
     else
         (
@@ -429,6 +447,11 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
             horizon_v_anchor_before_shift=time_origin_anchor.vH,
             horizon_v_anchor_method=time_origin_anchor.method,
             horizon_time_origin_offset=horizon_time_origin_offset,
+            duration=duration_metadata,
+            horizon_lambda=horizon_lambda_from_start,
+            mino_time_to_horizon=horizon_lambda_from_start,
+            radial_endpoint_lambda=radial_endpoint_lambda_from_start,
+            mino_time_to_radial_endpoint=radial_endpoint_lambda_from_start,
         )
     end
 
@@ -457,15 +480,6 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
         (radial=radial_residual, polar_z=polar_residual),
         status
     )
-end
-
-"""
-    kerr_plunge(a, E, Lz, Q; kwargs...)
-
-Compatibility wrapper for `kerr_geo_plunge`.
-"""
-function kerr_plunge(a::Real, energy::Real, lz::Real, q::Real; kwargs...)
-    return kerr_geo_plunge(a, energy, lz, q; kwargs...)
 end
 
 """
