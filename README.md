@@ -104,10 +104,25 @@ Generated example images:
 
 ![Bound plunge Kerr geodesic](example/Trajectory_plunge.gif)
 
-## Documentation
+## Citation
 
-Documenter.jl sources live under [`docs/`](docs/).
+If you use this code to compute Kerr geodesics, please cite:
+
+```bibtex
+@article{Yin:2025kls,
+    author = "Yin, Yucheng and Lo, Rico K. L. and Chen, Xian",
+    title = "{Gravitational radiation from Kerr black holes using the Sasaki-Nakamura formalism: waveforms and fluxes at infinity}",
+    eprint = "2511.08673",
+    archivePrefix = "arXiv",
+    primaryClass = "gr-qc",
+    doi = "10.1103/9ngz-k1lr",
+    journal = "Phys. Rev. D",
+    volume = "113",
+    pages = "124007",
+    year = "2026"
+}
+```
 
 ## License
 
-MIT.
+The package is licensed under the MIT License.
