@@ -1,6 +1,6 @@
 # KerrGeodesics.jl
 
-![license](https://img.shields.io/github/license/CuberYyc808/KerrGeodesics.jl)
+![license](https://img.shields.io/badge/license-MIT-blue.svg)
 [![GitHub release](https://img.shields.io/github/v/release/CuberYyc808/KerrGeodesics.jl.svg)](https://github.com/CuberYyc808/KerrGeodesics.jl/releases)
 [![Documentation](https://img.shields.io/badge/Documentation-ready)](https://CuberYyc808.github.io/KerrGeodesics.jl)
 
