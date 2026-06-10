@@ -7,6 +7,9 @@ on:
 
 jobs:
   CompatHelper:
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Pkg.add("CompatHelper")
