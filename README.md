@@ -2,16 +2,17 @@
 
 ![license](https://img.shields.io/badge/license-MIT-blue.svg)
 [![GitHub release](https://img.shields.io/github/v/release/CuberYyc808/KerrGeodesics.jl.svg)](https://github.com/CuberYyc808/KerrGeodesics.jl/releases)
-[![Documentation](https://img.shields.io/badge/Documentation-ready)](https://CuberYyc808.github.io/KerrGeodesics.jl)
+[![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://CuberYyc808.github.io/KerrGeodesics.jl)
 
-Julia interfaces for Kerr geodesic trajectories in units with `G = c = M = 1`.
+Timelike geodesics outside a Kerr black hole, as functions of Mino time `λ`
+(`G = c = M = 1`, Boyer–Lindquist coordinates, `dτ/dλ = Σ = r² + a² cos²θ`).
+Give the spin `a` and the constants of motion `(E, Lz, Q)`: the package classifies the radial
+motion outside the outer horizon and returns a member for each radial range those constants
+allow.
 
-Current support:
-
-- stable bound orbits from APEX-like parameters `(a,p,e,x)`;
-- bound plunge orbits from constants `(a,E,Lz,Q)`, with `E < 1`.
-
-Scattering orbits are planned for future development.
+<p align="center">
+  <img src="example/animations/showcase_all.gif" width="100%" alt="the 56 orbit cases">
+</p>
 
 ## Installation
 
@@ -20,109 +21,75 @@ using Pkg
 Pkg.add("KerrGeodesics")
 ```
 
-## Basic Usage
+## Usage
+
+An orbit is fixed by the spin `a` and the constants of motion `(E, Lz, Q)`, the main input
+of `kerr_geodesic`. An orbit with a periapsis can also be given by its APEX parameters
+`(a, p, e, x)`. Both inputs are four numbers, so the constants go in a tuple:
+`kerr_geodesic(a, (E, Lz, Q))` reads constants, `kerr_geodesic(a, p, e, x)` reads APEX
+parameters.
 
 ```julia
 using KerrGeodesics
 
-stable = kerr_geo_stable(0.9, 10.0, 0.5, 0.8)
-plunge = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:turning_point)
-family = kerr_geodesic(0.9, 10.0, 0.5, 0.8)
+family = kerr_geodesic(0.9, (0.9641, 2.8359, 4.5444))   # a, (E, Lz, Q)
+family = kerr_geodesic(0.9, 10.0, 0.5, 0.8)             # a, p, e, x: the same orbit
+
+family.Status.case_ids       # (:A1, :B1): a stable orbit and a plunge share these constants
+m = family.Stable            # also family.Critical, .Plunge, .Capture, .Scatter, .Trapped
+kerr_geo_members(family)     # all of them
 ```
 
-Typical printed outputs are:
+**Trajectory.** Each coordinate is a function of `λ` on `m.Domain.mino`:
 
 ```julia
-KerrGeoStable(
-    OrbitalParameters = (a = 0.9, p = 10.0, e = 0.5, x = 0.8),
-    ConstantsOfMotion = (E = 0.9641204328952226, Lz = 2.8359152778998453, Q = 4.544408272395823),
-    OrbitalType = ["Bound", "Eccentric", "Stable", "Inclined"],
-    Frequencies = (ϒt = 171.0926187383033, ϒr = 2.792721794117058, ϒθ = 3.551489601048812, ϒϕ = 3.7357605214030265),
-    Parametrization = "Mino",
-    Trajectory = (t = t(λ), r = r(λ), θ = θ(λ), ϕ = ϕ(λ)),
-    InitialPhases = (qt0 = 0.0, qr0 = 0.0, qθ0 = 0.0, qϕ0 = 0.0),
-)
+λ = 1.0
+m.Trajectory.t(λ); m.Trajectory.r(λ); m.Trajectory.theta(λ); m.Trajectory.phi(λ); m.Trajectory.tau(λ)
 ```
+
+Orbits that reach a horizon also give the horizon-regular coordinates `v` and `psi`, finite on
+the horizon:
 
 ```julia
-KerrGeoPlunge(
-    ConstantsOfMotion = (E = 0.94, Lz = 0.1, Q = 12.0),
-    OrbitClass = "Complex",
-    Parametrization = "Mino",
-    InitialPosition = (t0 = 0.0, r0 = 3.203955290691315, theta0 = 1.5707963267948966, phi0 = 0.0),
-    Trajectory = (t = t(lambda), r = r(lambda), theta = theta(lambda), phi = phi(lambda), rstar = rstar(lambda), u = u(lambda), v = v(lambda), u_rstar_series = u(rstar), v_rstar_series = v(rstar)),
-    Velocity = (ut = ut(lambda), ur = ur(lambda), uz = dz/dlambda, utheta = dtheta/dlambda, uphi = uphi(lambda)),
-)
+b = family.Plunge            # from the turning point (λ = 0) into the horizon
+b.Trajectory.v(b.Domain.mino[2]), b.Trajectory.psi(b.Domain.mino[2])
 ```
+
+**Four-velocity.** `m.Velocity` holds the Mino-time rates `ut = dt/dλ`, `ur`, `utheta`,
+`uphi` and `dtau_dlambda = Σ`; divide by `dtau_dlambda` for `dx/dτ`:
 
 ```julia
-KerrGeodesicFamily(
-    InputType = :apex,
-    Parameters = (a = 0.9, p = 10.0, e = 0.5, x = 0.8),
-    ConstantsOfMotion = (E = 0.9641204328952226, Lz = 2.8359152778998453, Q = 4.544408272395823),
-    RootClass = "Real1",
-    HasStable = true,
-    HasPlunge = true,
-    Status = (supported = true, reason = "ok"),
-)
+m.Velocity.ut(λ) / m.Velocity.dtau_dlambda(λ)   # dt/dτ
 ```
 
-The family object stores the two compatible orbit objects directly:
+**Orbital parameters.**
 
 ```julia
-family.Stable
-family.Plunge
+m.CaseId                 # :A1 (the case; kerr_geo_member_class(m) gives the class, :stable)
+m.ConstantsOfMotion      # (a, E, Lz, Q)
+m.Roots                  # radial roots and the polar motion
+m.Status.apex            # (a, p, e, x), for stable orbits
 ```
 
-For example:
+**Frequencies.** Mino-time frequencies of a stable orbit, and the Boyer–Lindquist or proper-time
+ones from `(a, p, e, x)`:
 
 ```julia
-family.Stable.Trajectory.r(0.0)
-# 6.666666666666667
-
-family.Plunge.OrbitClass
-# "Real1"
-
-family.Plunge.Status.duration.mino_time_to_horizon
-# 0.05426602766253312
+m.Status.frequencies                                          # (ϒt, ϒr, ϒθ, ϒϕ)
+kerr_geo_frequencies(0.9, 10.0, 0.5, 0.8; Time="Mino")        # also "BoyerLindquist", "Proper"
 ```
 
-For a stable eccentric orbit, `initPhases=(0,0,0,0)` starts the radial motion at
-periapsis, `r(0)=p/(1+e)`. For a bound plunge, `radial_start=:turning_point`
-starts at the exterior turning point.
+**Many points at once.**
+
+```julia
+s = kerr_geo_sample(m, range(0, 20; length=10_000))   # s.t, s.r, s.theta, s.phi, s.tau, s.ut, …
+```
 
 ## Examples
 
-The example notebook builds both stable and bound-plunge trajectory animations:
-
-- [`example/Test_KerrGeodesics.ipynb`](example/Test_KerrGeodesics.ipynb)
-- [`example/generate_example_gifs.jl`](example/generate_example_gifs.jl)
-
-Generated example images:
-
-![Stable bound Kerr geodesic](example/Trajectory_stable.gif)
-
-![Bound plunge Kerr geodesic](example/Trajectory_plunge.gif)
-
-## Citation
-
-If you use this code to compute Kerr geodesics, please cite:
-
-```bibtex
-@article{Yin:2025kls,
-    author = "Yin, Yucheng and Lo, Rico K. L. and Chen, Xian",
-    title = "{Gravitational radiation from Kerr black holes using the Sasaki-Nakamura formalism: waveforms and fluxes at infinity}",
-    eprint = "2511.08673",
-    archivePrefix = "arXiv",
-    primaryClass = "gr-qc",
-    doi = "10.1103/9ngz-k1lr",
-    journal = "Phys. Rev. D",
-    volume = "113",
-    pages = "124007",
-    year = "2026"
-}
-```
-
-## License
-
-The package is licensed under the MIT License.
+[`example/KerrGeodesics_Tutorial.ipynb`](example/KerrGeodesics_Tutorial.ipynb) walks through
+the conventions, the classification, one example per class (Stable, Critical, Plunge,
+Capture, Scatter, and Trapped with `E < 0`), polar options, the horizon-regular coordinates,
+the four-velocity and self-checks (`kerr_geo_diagnose`), the APEX interface and the accuracy
+limits. The 56 cases above, with their constants, are in
+[`example/KerrGeodesics_56_Orbit_Catalog.ipynb`](example/KerrGeodesics_56_Orbit_Catalog.ipynb).

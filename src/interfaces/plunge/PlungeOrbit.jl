@@ -1,0 +1,102 @@
+# Plunge reference API: Jacobi r(λ), θ(λ) of an E < 1 plunge; t, φ from the radial engine
+# (one radial period, continued through both horizons) and the polar engine.
+
+function elliptic_pi(h, ψ, k)
+    if h > 1
+        complete = real(Elliptic.F(π/2, k) - Elliptic.Pi(k/h, π/2, k) + log(ComplexF64(-1)) / (2 * sqrt((h-k)*(h-1)/h)))
+    else
+        complete = Elliptic.Pi(h, π/2, k)
+    end
+    period = div(ψ, 1.0pi)
+    remainder = abs(ψ - period * 1.0pi)
+    if remainder <= 0.5pi
+        if h > 1
+            Π = real(Elliptic.F(remainder, k) - Elliptic.Pi(k/h, remainder, k) + log(ComplexF64((sqrt((h-k)*(h-1)/h)
+            *tan(remainder) + sqrt(1-k*sin(remainder)^2))/(sqrt(1-k*sin(remainder)^2) - sqrt((h-k)*(h-1)/h)*tan(remainder)))) / (2 * sqrt((h-k)*(h-1)/h)))
+        else
+            Π = Elliptic.Pi(h, remainder, k)
+        end
+        incomplete = sign(ψ) * Π
+    else
+        remainder = 1.0pi - remainder
+        if h > 1
+            Π = real(Elliptic.F(remainder, k) - Elliptic.Pi(k/h, remainder, k) + log(ComplexF64((sqrt((h-k)*(h-1)/h)
+            *tan(remainder) + sqrt(1-k*sin(remainder)^2))/(sqrt(1-k*sin(remainder)^2) - sqrt((h-k)*(h-1)/h)*tan(remainder)))) / (2 * sqrt((h-k)*(h-1)/h)))
+        else
+            Π = Elliptic.Pi(h, remainder, k)
+        end
+        incomplete = sign(ψ) * (2 * complete - Π)
+    end
+    if abs(period) > 0.0
+        incomplete += period * complete * 2
+    end
+    return incomplete
+end
+
+function real2_radial_position(absλ, E, roots)
+    r4, r3, r2, r1 = roots
+    ξr = sqrt((1 - E^2) * (r1 - r3) * (r2 - r4)) / 2
+    kr = (r1 - r2) / (r1 - r3) * (r3 - r4) / (r2 - r4)
+    sn2 = Elliptic.Jacobi.sn(Elliptic.K(kr) - ξr * absλ, kr)^2
+    return (r3 * (r1 - r2) * sn2 - r2 * (r1 - r3)) /
+           ((r1 - r2) * sn2 - (r1 - r3))
+end
+
+"""
+    generic_plunge_orbit(a, E, L, Q; initPhases=(0.0, 0.0, 0.0, 0.0))
+
+Return the Boyer-Lindquist `t(λ)`, `r(λ)`, `theta(λ)` and `phi(λ)` of an E < 1 Kerr plunge
+in the root class of `classify_orbit` (Real1, Real2 or Complex).
+
+r(λ) and θ(λ) are the Jacobi closed forms; t and φ come from the radial spectral engine
+(one radial period, outer turning point → inner turning point → outer turning point,
+continued through r₊ and r₋ as principal values) and the polar engine.
+"""
+function generic_plunge_orbit(a, E, L, Q; initPhases = (0.0, 0.0, 0.0, 0.0), real2_horizon_offset=1e-4)
+    roots, cf = classify_orbit(a, E, L, Q)
+    λr0 = initPhases[2]
+    if cf == "Real1" || cf == "Real2"
+        r4, r3, r2, r1 = roots
+        ξr = sqrt((1 - E^2) * (r1 - r3) * (r2 - r4)) / 2
+        kr = (r1 - r2) / (r1 - r3) * (r3 - r4) / (r2 - r4)
+        half = Elliptic.K(kr) / ξr                 # outer turning point → inner one
+        cf == "Real2" && return _generic_plunge_orbit(a, E, L, Q, initPhases, half,
+            λ -> real2_radial_position(λ + λr0, E, roots))
+        return _generic_plunge_orbit(a, E, L, Q, initPhases, half, function (λ)
+            sn2 = Elliptic.Jacobi.sn(ξr * (λ + λr0), kr)^2
+            return (r3 * (r2 - r4) - r2 * (r3 - r4) * sn2) / ((r2 - r4) - (r3 - r4) * sn2)
+        end)
+    elseif cf == "Complex"
+        r1, r2, A, B = roots
+        ξr = sqrt((1 - E^2) * A * B)
+        kr = ((r1 - r2)^2 - (A - B)^2) / (4 * A * B)
+        return _generic_plunge_orbit(a, E, L, Q, initPhases, 2 * Elliptic.K(kr) / ξr,
+            function (λ)
+                sn = Elliptic.Jacobi.sn(ξr * (λ + λr0), kr)
+                cn = Elliptic.Jacobi.cn(ξr * (λ + λr0), kr)
+                return (2 * A * B * (r1 + r2) + (A - B) * (A * r2 - B * r1) * sn^2 +
+                    2 * A * B * (r1 - r2) * cn) / (4 * A * B + (A - B)^2 * sn^2)
+            end)
+    end
+    @info("generic_plunge_orbit: root class $cf has no E < 1 plunge region.")
+    return nothing
+end
+
+function _generic_plunge_orbit(a, E, L, Q, initPhases, half, radius)
+    λt0, λr0, λθ0, λϕ0 = initPhases
+    zm, ξθ, kθ = _plunge_polar_parameters(a, E, L, Q)
+    θ(λ) = acos(sqrt(zm) * Elliptic.Jacobi.sn(ξθ * (λ + λθ0), kθ))
+    # z = √z₋ sn(ξθ(λ + λθ0)): the polar engine's phase is counted from the northern turning point
+    polar = _polar_solution(a, E, L, Q, abs(Q) <= 1.0e-13 ? :equatorial : :pendular,
+        ξθ * λθ0 - Elliptic.K(kθ))
+    # one radial period containing λ = 0, starting at an outer turning point (λ = −λr0 mod 2·half)
+    period = 2half
+    start = -λr0 - period * floor(-λr0 / period)
+    start > 0 && (start -= period)
+    coords = _engine_coordinates(a, E, L, Q, radius, _polar_primitive(polar);
+        domain=(start, start + period), ends=(:turning, :turning), turn=start + half,
+        σ=1.0, period=period, λ_bl=0.0)
+    t(λ) = coords.t(λ) + λt0
+    ϕ(λ) = coords.phi(λ) + λϕ0
+    return [t, radius, θ, ϕ]
+end
