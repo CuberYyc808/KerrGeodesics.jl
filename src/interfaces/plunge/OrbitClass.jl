@@ -3,8 +3,8 @@
 """
     radial_roots(a, E, L, Q)
 
-Return the four radial-potential roots for a Kerr geodesic with constants of
-motion `(E,L,Q)`.
+The four roots of the radial potential R(r) of the constants `(E, L, Q)` (L = Lz), as a
+vector of complex numbers.
 """
 function radial_roots(a, E, L, Q)
     # Solve the fourth-order polynomial

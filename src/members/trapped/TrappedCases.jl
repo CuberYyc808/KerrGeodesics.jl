@@ -4,7 +4,14 @@
 const _ROOT_TOL = 2.0e-10
 const _CAUSAL_SAMPLES = 257
 
-"""Classification record for a subextremal E < 0 Class N (Trapped) case N1-N6."""
+"""
+    KerrGeoTrappedClassification
+
+The result of `kerr_geo_trapped_classify` for E < 0 constants with |a| < 1: the `CaseId`
+(N1–N6) and its `DispositionId` (NFD01–NFD06), the `EnergyRegime` and `MetricLimit`, the
+radial `Roots`, the `PolarSector`, P(r₊) (`HorizonMomentum`), the `TurningRadius`, the Mino
+`Domain` between the two horizons, and the `Conditions` and `Status` of the classification.
+"""
 struct KerrGeoTrappedClassification
     CaseId::Symbol
     DispositionId::Symbol
@@ -376,9 +383,9 @@ end
 """
     kerr_geo_trapped(a, E, Lz, Q; component=:full, polar_phase=0.0, disposition_id=nothing)
 
-Class N (Trapped) member N1–N6 of subextremal E < 0 constants. The worldline leaves the past
-(white-hole) horizon at λ = −λ_H, turns at λ = 0 (where t, φ, τ vanish) and crosses the future
-(black-hole) horizon at λ = λ_H, inside the ergoregion throughout. `component` selects the full
+The Trapped member (cases N1–N6) of E < 0 constants with |a| < 1. The worldline leaves the
+past (white-hole) horizon at `λ = −λH`, turns at λ = 0 (where t, φ and τ vanish) and crosses
+the future (black-hole) horizon at `λ = λH`, inside the ergoregion throughout. `component` selects the full
 worldline (`:full`), the outgoing half (`:outgoing`, λ ≤ 0) or the incoming half (`:incoming`,
 λ ≥ 0); (u, χ) vanish on the past horizon and (v, ψ) on the future horizon. A given
 `disposition_id` (NFD01–NFD06) must match the classification. `Status.causality` records the
@@ -400,7 +407,10 @@ function kerr_geo_trapped(
 end
 
 """
-Construct the named Class N case (`:N1`-`:N6`); the constants must belong to that case.
+    kerr_geo_trapped_case(case_id, a, E, Lz, Q; kwargs...)
+
+`kerr_geo_trapped(a, E, Lz, Q; kwargs...)`, checked to be the Trapped case `case_id`
+(`:N1`–`:N6`).
 """
 function kerr_geo_trapped_case(
         case_id::Symbol, a::Real, energy::Real, lz::Real, q::Real; kwargs...)

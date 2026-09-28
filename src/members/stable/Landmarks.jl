@@ -202,7 +202,8 @@ end
 """
     kerr_geo_ibso(a, x)
 
-Return the IBSO radius, the innermost spherical orbit with E = 1.
+The radius of the innermost bound spherical orbit of inclination `x`: the unstable spherical
+orbit with E = 1, also called the marginally bound orbit.
 """
 function kerr_geo_ibso(a::Real, x::Real)
     # Schwarzschild
@@ -258,16 +259,14 @@ end
 """
     kerr_geo_separatrix(a, e, x)
 
-Separatrix radius p_s(a, e, x) of Kerr geodesics.
+The separatrix `ps(a, e, x)`: the smallest semi-latus rectum of a stable orbit with
+eccentricity `e` and inclination `x`. Below it the orbit plunges; on it the orbit is Critical
+(the ISCO or ISSO for e = 0, a homoclinic orbit for 0 < e < 1).
 
-Special cases:
-- Negative spin: symmetry a -> -a, x -> -x
-- Schwarzschild (a=0): p_s = 6 + 2e
-- Extremal Kerr prograde equatorial (a=1, x=1): p_s = 1 + e
-- Extremal Kerr polar (a=1, x=0, e=0): analytic closed form
-- Extremal Kerr polar (a=1, x=0, e=1): analytic closed form
-- e=1: p_s = 2 * kerr_geo_ibso(a, x)
-- General case: numerical solution of polynomial conditions
+Closed forms are used where they exist: `6 + 2e` for a = 0, `1 + e` for prograde equatorial
+orbits at a = 1, the polar orbits at a = 1 with e = 0 and e = 1, and `2 kerr_geo_ibso(a, x)`
+for e = 1. Elsewhere `ps` is the root of the separatrix polynomial conditions. Negative spin
+uses the symmetry (a, x) → (−a, −x).
 """
 function kerr_geo_separatrix(a::Real, e::Real, x::Real)
     # Negative spin symmetry

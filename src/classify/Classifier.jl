@@ -19,8 +19,12 @@ const CLASSIFICATION_PIPELINE = (
 )
 
 """
-The stages of `kerr_geo_classify` in order, from the canonical constants of motion to the
-optional selection of one component.
+    kerr_geo_classification_pipeline()
+
+The stages of `kerr_geo_classify`, in order: canonical constants, metric limit, energy
+regime, radial degree, roots and multiplicities, allowed components, polar admissibility,
+future direction, case assignment, family assembly and the optional selection of one
+component.
 """
 kerr_geo_classification_pipeline() = CLASSIFICATION_PIPELINE
 
@@ -331,10 +335,10 @@ end
     kerr_geo_is_critical(component)
 
 The Critical rule: the component's radial motion sits on, or tends asymptotically to, a
-repeated root r_c > r₊ of R that is unstable (a double root with R''(r_c) > 0) or marginal (a
-triple root). A repeated root on the horizon itself (P(r₊) = 0: the H tier and the horizon
-roots of the X tier) does not count. The rule is the same at |a| = 1: an exterior unstable or
-marginal root there is Critical (for example K3, K4, K5 at |a| = 1).
+repeated root `rc > r₊` of R that is unstable (a double root with R''(rc) > 0) or marginal
+(a triple root). A repeated root on the horizon itself (P(r₊) = 0, the horizon and extremal
+tiers) does not count. The rule is the same at |a| = 1, where an exterior unstable or
+marginal root is Critical as well (K3, K4 and K5 exist at |a| = 1).
 """
 kerr_geo_is_critical(c::KerrGeoRadialComponent) =
     _has_critical_end(c.LowerEndpoint, c.UpperEndpoint, c.Metadata.roots, c.Metadata.horizon)

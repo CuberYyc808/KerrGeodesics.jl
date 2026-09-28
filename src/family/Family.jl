@@ -25,7 +25,12 @@ struct KerrGeodesicFamily
     Status::NamedTuple
 end
 
-"""All members of a family in class order (Stable, Critical…, Plunge, Capture, Scatter, Trapped)."""
+"""
+    kerr_geo_members(kg)
+
+The members of the family `kg` as a tuple, in class order: Stable, the Critical members,
+Plunge, Capture, Scatter, Trapped.
+"""
 function kerr_geo_members(f::KerrGeodesicFamily)
     members = Any[]
     for row in KERR_GEO_CLASSES

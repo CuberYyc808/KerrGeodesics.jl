@@ -63,6 +63,14 @@ function _stable_radial_component(classification, case_id)
 end
 
 
+"""
+    kerr_geo_stability_metadata(a, E, Lz, Q, component; atol=1e-8)
+
+Shape and radial stability of a Stable component (A1 or A2): `shape` (`:eccentric`,
+`:circular` or `:spherical`), `stability` (`:stable` on the double root of A2, where
+R''(r) < 0 is checked; not applicable to the eccentric A1), the `radial_derivatives` at that
+root, and the `formula_family`.
+"""
 function kerr_geo_stability_metadata(a::Real, energy::Real, lz::Real, q::Real,
         component::KerrGeoRadialComponent; atol::Real=1.0e-8)
     component.CaseId in (:A1, :A2) || error(

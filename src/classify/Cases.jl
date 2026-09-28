@@ -1,6 +1,17 @@
 # Case table: one KerrGeoCaseSpec per primary case (A1-A2, K1-K11, B1-B9, C1-C12, D1-D2,
 # N1-N6), and the records the classifier returns (endpoints, components, classification).
 
+"""
+    KerrGeoCaseSpec
+
+The definition of one primary case, as returned by `kerr_geo_case(id)`: its `CaseId`, the
+`BroadClass`, the `EnergyRegime` (the sign of E² − 1) and `EnergySign`, the `Degree` and
+`LeadingSign` of R, the root structure (`RootTopology`, the ordering of the roots and the
+horizon in `RootOrdering`, their `RootMultiplicities`, and `RootsAboveHorizon`), the
+`AllowedInterval` of r, the `PastEndpoint` and `FutureEndpoint` of the motion, its
+`RadialOrientation`, the cases that share its constants (`PairedCaseIds`,
+`FamilyMemberCaseIds`), and the `FormulaFamily` of its closed-form r(λ).
+"""
 struct KerrGeoCaseSpec
     CaseId::Symbol
     BroadClass::Symbol
@@ -21,6 +32,14 @@ struct KerrGeoCaseSpec
     FormulaFamily::Symbol
 end
 
+"""
+    KerrGeoRadialEndpoint
+
+One end of an allowed radial interval: its `Kind` (`:radial_root`, `:outer_horizon` or
+`:infinity`), `Radius`, whether the interval includes it (`Included`: true for a turning
+point; false for the horizon, infinity and a repeated root approached asymptotically), and
+the `Multiplicity` of the root there.
+"""
 struct KerrGeoRadialEndpoint
     Kind::Symbol
     Radius::Float64
@@ -28,6 +47,17 @@ struct KerrGeoRadialEndpoint
     Multiplicity::Int
 end
 
+"""
+    KerrGeoRadialComponent
+
+One region of radial motion found by `kerr_geo_classify`: an interval between two
+`KerrGeoRadialEndpoint`s (`LowerEndpoint`, `UpperEndpoint`) on which R ≥ 0, or a repeated
+root the orbit can sit on. It carries the `CaseId` and `BroadClass` assigned to it, the
+`EnergyRegime`, its `Connectivity` and `RadialOrientation`, the `FormulaFamily`, the cases
+sharing its constants (`PairedCaseIds`, `FamilyMemberCaseIds`), the `PolarSector` of the
+accompanying polar motion, and `Tags`, `SupportStatus` and `Metadata` (roots, radial
+derivatives at the endpoints).
+"""
 struct KerrGeoRadialComponent
     CaseId::Union{Nothing,Symbol}
     BroadClass::Symbol
@@ -45,6 +75,15 @@ struct KerrGeoRadialComponent
     Metadata::NamedTuple
 end
 
+"""
+    KerrGeoClassification
+
+The result of `kerr_geo_classify`: the input `Parameters` and `ConstantsOfMotion`, the
+`EnergyRegime` and `MetricLimit`, the complex `Roots` of R, every admitted
+`KerrGeoRadialComponent` (`Components`) with their `CaseIds`, the cases the constants rule
+out (`ExcludedCaseIds`), the `PolarMetadata`, `Tags`, the case chosen by the selection
+keywords (`SelectedCase`, `SelectionHint`) and a `Status`.
+"""
 struct KerrGeoClassification
     Parameters::NamedTuple
     ConstantsOfMotion::NamedTuple
@@ -233,5 +272,10 @@ function kerr_geo_case(case_id::Symbol)
     return _CASE_BY_ID[case_id]
 end
 
-"""Copy of the primary case table: a `Dict` from case ID to `KerrGeoCaseSpec`."""
+"""
+    kerr_geo_case_catalog()
+
+The table of primary cases, a `Dict` from case ID to `KerrGeoCaseSpec` (a copy; changing it
+does not affect the package).
+"""
 kerr_geo_case_catalog() = Dict(key => value for (key, value) in _CASE_BY_ID)

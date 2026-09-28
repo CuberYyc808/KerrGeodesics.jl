@@ -1,285 +1,205 @@
 # Examples
 
-## The 56-orbit catalogue
+Each section builds one kind of orbit and reads off what is particular to it. The notebook
+`example/KerrGeodesics_56_Orbit_Catalog.ipynb` holds one set of constants for each of the
+56 cases, with plots and the animated gallery shown on the [home page](index.md).
 
-The notebook `example/KerrGeodesics_56_Orbit_Catalog.ipynb` (with its helpers in
-`example/kerr_geodesics_56_case_support.jl`) holds one fixed set of constants for every
-catalogue orbit, keyed by its case ID (A1–A2, K1–K11, B1–B9, C1–C12, D1–D2, N1–N6) or, for
-the tier members, by their tier name (A-H1, A-H2, A-X1, A-X2, B-X1, B-X2, C-X1…C-X4, D-H1,
-D-H2, D-X1, D-X2). The 56 orbits split into Stable 6, Critical 11, Plunge 11, Capture 16,
-Scatter 6 and Trapped 6. For each one it calls `kerr_geodesic`, shows the classification,
-picks the member from its class slot and plots the trajectory; its last cell animates all
-56 orbits in the style of `example/animations/showcase_all.gif`, the grid of all 56 shown in
-the README.
-
-## Stable orbit
-
-```julia
+```@setup ex
 using KerrGeodesics
-
-family = kerr_geodesic(0.9, 10.0, 0.5, 0.8)     # APEX-like (a, p, e, x)
-family.Status.case_ids                          # (:A1, :B1)
-
-m = family.Stable                               # KerrGeoStableComponent, case A1
-t = m.Trajectory.t
-r = m.Trajectory.r
-theta = m.Trajectory.theta
-phi = m.Trajectory.phi
-m.Status.apex                                   # (a, p, e, x) from the turning points
-m.Status.frequencies                            # Mino-time frequencies
 ```
 
-`λ = 0` is the periapsis and the northern polar turning point; the keyword
-`initPhases = (qt0, qr0, qθ0, qφ0)` shifts the phases as in `kerr_geo_orbit`. The same
-member from constants is `kerr_geo_stable_component(a, E, Lz, Q)`.
+## A stable orbit
 
-The reference implementation `kerr_geo_stable` builds the same orbit from APEX input:
-
-```julia
-stable = kerr_geo_stable(0.9, 10.0, 0.5, 0.8; initPhases=(0.0, 0.0, 0.0, 0.0))
-stable.Trajectory.r(0.0)                        # p/(1+e): periapsis
-stable.Frequencies
+```@example ex
+kg = kerr_geodesic(0.9, 10.0, 0.5, 0.8)
+stable = kg.Stable
+(stable.CaseId, stable.Trajectory.r(0.0), stable.Trajectory.z(0.0))
 ```
 
-Circular equatorial orbits have constant `r = p` and `θ = π/2`. The class of an APEX point
-is
+With zero initial phases, ``λ = 0`` is at periapsis, ``r = p/(1 + e)``, and at the northern
+polar turning point. `initPhases` moves the start along the orbit:
 
-```julia
-metadata = kerr_geo_orbit_type_metadata(0.9, 10.0, 0.5, 0.8)
-metadata.family                                 # "Stable"
-metadata.labels                                 # ["Stable", "Eccentric", "Inclined"]
-metadata.stability                              # "Stable"
-metadata.at_separatrix                          # false
+```@example ex
+shifted = kerr_geodesic(0.9, 10.0, 0.5, 0.8; initPhases = (0.0, π, 0.0, 0.0)).Stable
+shifted.Trajectory.r(0.0)                       # apoapsis, p/(1 - e)
+```
+
+A circular equatorial orbit has ``e = 0`` and ``x = ±1``:
+
+```@example ex
+circular = kerr_geodesic(0.9, 8.0, 0.0, 1.0).Stable
+(circular.CaseId, circular.Trajectory.r(3.0), circular.Trajectory.theta(3.0))
 ```
 
 ## Critical orbits
 
-Constants with an unstable repeated root admit one Critical member per role. At `a = 0.7`:
+These constants have an unstable spherical orbit at ``a = 0.7``. The family holds its three
+Critical members, ordered by role:
 
-```julia
-family = kerr_geodesic(0.7, (0.9171300256198305, 2.2591913519439517, 2.898994491984013))
-Tuple(m.CaseId for m in family.Critical)        # (:K3, :K4, :K5)
-Tuple(m.Role for m in family.Critical)          # (:on_root, :outer, :inner)
-Tuple(m.Status.name for m in family.Critical)   # (:unstable_spherical, :homoclinic, :whirling)
-
-homoclinic = family.Critical[2]                 # K4: r_c -> apastron (λ = 0) -> r_c
-homoclinic.Domain.mino                          # (-Inf, Inf)
-homoclinic.Trajectory.r(0.0)                    # the apastron
-homoclinic.Trajectory.lambda_of_radius(homoclinic.Trajectory.r(1.0); branch=:incoming)  # 1.0
-
-whirling = family.Critical[3]                   # K5: r_c -> future horizon at λ = 0
-whirling.Trajectory.v(0.0)                      # 0.0
+```@example ex
+kg = kerr_geodesic(0.7, (0.9171300256198305, 2.2591913519439517, 2.898994491984013))
+[(member.CaseId, member.Role, member.Status.name) for member in kg.Critical]
 ```
 
-Single members come from `kerr_geo_critical_spherical`, `kerr_geo_critical_homoclinic`,
-`kerr_geo_critical_plunge`, or `kerr_geo_critical_component(a, E, Lz, Q; case_id)`:
+The homoclinic orbit K4 leaves the spherical orbit, turns at apoapsis at ``λ = 0`` and comes
+back, so every radius off the root is reached twice. `lambda_of_radius` takes the branch:
 
-```julia
-k7 = kerr_geo_critical_component(0.7, 1.0, -0.7, 16.0; case_id=:K7)   # E = 1, from infinity
-k7.Domain.endpoint_roles                        # (:past_infinity, :future_repeated_root_asymptote)
+```@example ex
+homoclinic = kg.Critical[2]
+r1 = homoclinic.Trajectory.r(1.0)
+(homoclinic.Trajectory.r(0.0),
+ homoclinic.Trajectory.lambda_of_radius(r1; branch = :incoming),
+ homoclinic.Trajectory.lambda_of_radius(r1; branch = :outgoing))
 ```
 
-The ISCO/ISSO (`p = kerr_geo_isso(a, x)`, `e = 0`) is the Critical member K1:
+The whirling orbit K5 leaves the spherical orbit inward and crosses the horizon at
+``λ = 0``, where ``v`` vanishes:
 
-```julia
+```@example ex
+whirl = kg.Critical[3]
+(whirl.Domain.mino, whirl.Trajectory.v(0.0))
+```
+
+The ISCO or ISSO is the Critical member K1, at ``p =`` [`kerr_geo_isso`](@ref)`(a, x)` and
+``e = 0``:
+
+```@example ex
 isso = kerr_geo_isso(0.9, 0.8)
-kerr_geodesic(0.9, isso, 0.0, 0.8).Critical[1].CaseId     # :K1
+kerr_geodesic(0.9, isso, 0.0, 0.8).Critical[1].CaseId
 ```
 
-## Plunge from constants
+A single Critical member can also be built on its own:
 
-```julia
-family = kerr_geodesic(0.9, (0.94, 0.1, 12.0))
-m = family.Plunge                               # B4: two real roots and a complex pair
-m.Domain.mino                                   # (0.0, λ_H): turning point to future horizon
-λH = m.Domain.horizon_lambda
-m.Trajectory.r(λH)                              # r₊
-m.Trajectory.v(λH), m.Trajectory.psi(λH)        # (0.0, 0.0)
-m.Trajectory.t(0.5λH)                           # BL t, defined on [0, λ_H)
-family.RootClass
+```@example ex
+from_infinity = kerr_geo_critical_component(0.7, 1.0, -0.7, 16.0; case_id = :K7)
+from_infinity.Domain.endpoint_roles
 ```
 
-### Finite-window plunge API
+## A plunge
 
-The reference plunge API takes the same constants:
-
-```julia
-plunge = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:turning_point)
-
-plunge.Trajectory.r(0.0)
-plunge.Trajectory.u(0.0)
-plunge.Trajectory.v(0.0)
-plunge.Trajectory.rstar(0.0)
-plunge.Status.duration.mino_time_to_horizon     # finite Mino time to the horizon
-plunge.OrbitClass                               # "Complex"
+```@example ex
+plunge = kerr_geodesic(0.9, (0.94, 0.1, 12.0)).Plunge
+λH = plunge.Domain.horizon_lambda
+(plunge.CaseId, plunge.Trajectory.r(0.0), plunge.Trajectory.r(λH))
 ```
 
-It can be initialized with explicit Mino-time phases,
+The plunge starts at its turning point and crosses the horizon at ``λ_H``, where ``v`` and
+``ψ`` vanish and Boyer–Lindquist ``t`` diverges:
 
-```julia
-plunge = kerr_geo_plunge(a, E, Lz, Q;
-                         initPhases=(t0, lambda_r0, lambda_theta0, phi0))
+```@example ex
+(plunge.Trajectory.v(λH), plunge.Trajectory.psi(λH), plunge.Trajectory.t(0.999λH))
 ```
 
-or with initial positions:
+## A capture
 
-```julia
-plunge = kerr_geo_plunge(a, E, Lz, Q;
-                         initial_radius=r0,
-                         initial_theta=theta0)
+```@example ex
+capture = kerr_geo_capture_component(0.9, 1.1, 0.5, 3.0)
+(capture.CaseId, capture.Domain.mino)
 ```
 
-`initial_theta` defaults to `π/2`, the equator. With
-`time_origin=:future_horizon_v_zero` the additive time origin is shifted so that the
-advanced time on the future horizon is $v_H=0$:
+The capture comes in from infinity at ``λ_∞ < 0`` and crosses the horizon at ``λ = 0``. ``t``
+and ``φ`` vanish halfway in Mino time, at `ReferenceZero.t_phi_zero_lambda`:
 
-```julia
-plunge = kerr_geo_plunge(a, E, Lz, Q; time_origin=:future_horizon_v_zero)
-plunge.Status.horizon_time_shift
-plunge.Status.horizon_v_anchor_method
+```@example ex
+(capture.ReferenceZero.t_phi_zero_lambda, capture.ReferenceZero.t_phi_zero_radius,
+ capture.Trajectory.v(0.0))
 ```
 
-This does not make the retarded time finite at the future horizon; $u=v-2r_*$ diverges as
-$r_*\to-\infty$. For the Real2 root class (four real roots, one of them outside `r₊`),
-`plunge.Trajectory.v_rstar_series(rstar)` and `u_rstar_series(rstar)` evaluate the same
-convention near the horizon as functions of `rstar`; for the other root classes they return
-`NaN`.
+With four complex radial roots and ``Q < 0`` the orbit is C5, and its polar motion is
+vortical: it stays in one hemisphere.
 
-## Capture
-
-```julia
-c3 = kerr_geo_capture_component(0.9, 1.1, 0.5, 3.0)      # C3
-c3.Domain.mino                                  # (λ_∞, 0.0): infinity to future horizon
-λ = 0.5 * c3.Domain.mino[1]
-c3.Trajectory.r(λ), c3.Trajectory.theta(λ)
-c3.Trajectory.v(0.0)                            # 0.0 on the horizon
-c3.ReferenceZero.t_phi_zero_lambda              # where t, φ vanish (τ vanishes at λ = 0)
+```@example ex
+vortical = kerr_geo_capture_four_complex(0.9, 1.8, 0.2, -1.0; polar_hemisphere = :north)
+λmid = vortical.Domain.mino[1] / 2
+(vortical.CaseId, vortical.Status.polar.sector, vortical.Trajectory.z(λmid))
 ```
 
-Four complex radial roots (C5, formula family FF18):
+With ``L_z = 0`` and ``a^2(1 - E^2) < Q < 0``, the same constants can also describe motion
+over the poles, and `polar_sector` chooses it:
 
-```julia
-c5 = kerr_geo_capture_four_complex(0.9, 1.8, 0.2, -1.0;
-                                   polar_hemisphere=:north, polar_phase=0.0)
-c5.CaseId                                       # :C5
-c5.Status.formula_family                        # :FF18
-lambda_mid = 0.5 * c5.Domain.mino[1]
-c5.Trajectory.r(lambda_mid)
-c5.Trajectory.theta(lambda_mid)
+```@example ex
+a, E = 0.9, 1.5
+over_the_poles = kerr_geo_capture_four_complex(a, E, 0.0, a^2 * (1 - E^2) + 1e-5;
+                                               polar_sector = :axis_crossing)
+over_the_poles.Status.polar.sector
 ```
 
-For constant-latitude C5 the constants select the double polar root; exact axis constants
-use `Lz = 0` and `Q = a²(1 − E²)`, and `polar_hemisphere=:north` or `:south` fixes the
-branch. The negative-`Q` axis-crossing branch (`Lz = 0`, `a²(1 − E²) < Q < 0`) needs the
-polar sector explicitly:
+Motion along the spin axis takes the axis explicitly:
 
-```julia
-a = 0.9
-E = 1.5
-axis_crossing = kerr_geo_capture_four_complex(
-    a, E, 0.0, a^2 * (1 - E^2) + 1e-5;
-    polar_sector=:axis_crossing,
-    polar_hemisphere=:north)
-
-axis_crossing.CaseId                     # :C5
-axis_crossing.Status.polar.sector        # :axis_crossing
+```@example ex
+along_axis = kerr_geo_capture_axis_infall(0.5, 1.2; axis = :north)
+(along_axis.CaseId, along_axis.Trajectory.theta(along_axis.Domain.mino[1] / 2))
 ```
 
-At `Q = 0` the same polar sector uses the elementary `sech` separatrix and belongs to C3:
+## A scattered orbit
 
-```julia
-q_zero_crossing = kerr_geo_capture_component(
-    0.9, 1.5, 0.0, 0.0;
-    polar_sector=:axis_crossing)
-
-q_zero_crossing.CaseId                    # :C3
-q_zero_crossing.Status.polar.formula_kind # :hyperbolic_sech_axis_crossing
+```@example ex
+kg = kerr_geodesic(0.5, (1.1, 5.0, 1.0))
+scatter = kg.Scatter
+(kg.Status.case_ids, scatter.Domain.mino, scatter.ReferenceZero.t_phi_zero_radius)
 ```
 
-Capture along the spin axis needs an explicit axis:
+The orbit turns at closest approach at ``λ = 0``; each radius is reached once on the way in
+and once on the way out. The asymptotic data give the directions of approach and escape and
+the deflection:
 
-```julia
-axis_capture = kerr_geo_capture_axis_infall(0.5, 1.2; axis=:north)
-axis_capture.CaseId                      # :C3
-axis_capture.Domain.mino
-axis_capture.Trajectory.v(0.0)           # zero at the future horizon
+```@example ex
+asymptotics = kerr_geo_scatter_asymptotic_diagnostics(scatter)
+(asymptotics.azimuthal_deflection.value, asymptotics.deflection_angle_3d.value,
+ asymptotics.impact_magnitude.value)
 ```
 
-## Scatter
+## A trapped orbit
 
-```julia
-family = kerr_geodesic(0.5, (1.1, 5.0, 1.0))
-family.Status.case_ids                   # (:B6, :D2)
-d2 = family.Scatter
-d2.Domain.mino                           # (-λ_∞, λ_∞); turning point at λ = 0
-d2.ReferenceZero.t_phi_zero_radius      # the turning radius
-d2.Trajectory.lambda_of_radius(2 * d2.ReferenceZero.t_phi_zero_radius; branch=:outgoing)   # > 0
-kerr_geo_scatter_asymptotic_diagnostics(d2)
-```
+With ``E < 0`` the orbit lives inside the ergoregion. It leaves the past horizon at
+``-λ_H``, turns at ``λ = 0`` and crosses the future horizon at ``λ_H``:
 
-## Trapped orbit
-
-The full Class N trajectory (these constants are case N4) has its radial turning event at
-`λ = 0`:
-
-```julia
+```@example ex
 trapped = kerr_geo_trapped(0.9, -0.8, -4.0, 1.0)
-trapped.CaseId                                # :N4
-LambdaH = trapped.Domain.horizon_half_duration
-
-turn = trapped.Trajectory.full(0.0)           # (t, r, θ, φ, z, τ) at the turning point
-past_u = trapped.Trajectory.u(-LambdaH)       # zero at the past horizon
-future_v = trapped.Trajectory.v(LambdaH)      # zero at the future horizon
+ΛH = trapped.Domain.horizon_half_duration
+(trapped.CaseId, trapped.Domain.mino, trapped.Trajectory.full(0.0).r)
 ```
 
-BL `t` and `phi` are evaluated only for `abs(λ) < LambdaH`. One half is selected with
-`component` (or `trapped_component` in `kerr_geodesic`):
+``t`` and ``φ`` diverge on both horizons. The outgoing coordinates ``u``, ``χ`` vanish on the
+past horizon and the ingoing ``v``, ``ψ`` on the future one:
 
-```julia
-incoming = kerr_geo_trapped(0.9, -0.8, -4.0, 1.0; component=:incoming)
-incoming.Domain.mino                          # (0.0, LambdaH)
-incoming.Trajectory.r(0.4 * LambdaH)
-
-family = kerr_geodesic(0.9, (-0.8, -4.0, 1.0); trapped_component=:incoming)
-family.Trapped.CaseId                         # :N4
-family.Trapped.Status.disposition_id          # :NFD04
+```@example ex
+(trapped.Trajectory.u(-ΛH), trapped.Trajectory.v(ΛH))
 ```
 
-## Horizon and extremal tiers
+`component = :incoming` keeps the half after the turning point; in `kerr_geodesic` the
+keyword is `trapped_component`:
 
-Constants with `P(r₊) = 0` have their own members:
+```@example ex
+incoming = kerr_geodesic(0.9, (-0.8, -4.0, 1.0); trapped_component = :incoming).Trapped
+incoming.Domain.mino
+```
 
-```julia
+## Horizon and extremal members
+
+Constants with ``P(r_+) = 0`` make the horizon a root of ``R``:
+
+```@example ex
 a = 0.9
 rplus = 1 + sqrt(1 - a^2)
 island = kerr_geodesic(a, (0.94, 2rplus * 0.94 / a, 0.0)).Stable
-island.CaseId, island.Tier                    # (:A_H1, :horizon)
-kerr_geo_case_name(island.CaseId)             # "A-H1"
+(island.CaseId, island.Tier, kerr_geo_case_name(island.CaseId))
 ```
 
-Exact `|a| = 1` uses its own formulas; every member has `Tier == :extremal`. These
-mirrored constants give the same radial and polar motion with opposite azimuth:
+At ``a = ±1`` every member belongs to the extremal tier. Reflecting the spin and ``L_z``
+leaves ``r`` unchanged and reverses ``φ``:
 
-```julia
-plus = kerr_geodesic(1.0, (1.2, 2.0, 14.0))
-minus = kerr_geodesic(-1.0, (1.2, -2.0, 14.0))
-
-plus.Status.metric_limit       # :extremal_plus
-minus.Status.metric_limit      # :extremal_minus
-plus.Status.case_ids           # (:B6, :D2)
-minus.Status.case_ids          # (:B6, :D2)
-
-plus_scatter = plus.Scatter
-minus_scatter = minus.Scatter
-lambda_probe = 0.2 * plus_scatter.Domain.mino[2]
-
-plus_scatter.Trajectory.r(lambda_probe)       # equal
-minus_scatter.Trajectory.r(lambda_probe)
-plus_scatter.Trajectory.phi(lambda_probe)     # opposite
-minus_scatter.Trajectory.phi(lambda_probe)
+```@example ex
+plus = kerr_geodesic(1.0, (1.2, 2.0, 14.0)).Scatter
+minus = kerr_geodesic(-1.0, (1.2, -2.0, 14.0)).Scatter
+λ = 0.2 * plus.Domain.mino[2]
+(plus.Tier, plus.Trajectory.r(λ) - minus.Trajectory.r(λ),
+ plus.Trajectory.phi(λ) + minus.Trajectory.phi(λ))
 ```
 
-With the horizon a root of `R` at `a = 1` the members have their X names, e.g.
-`kerr_geodesic(1.0, (0.8, 1.6, 1.0)).Stable.CaseId == :A_X1`.
-`kerr_geo_extremal_family` returns the exact-extremal family object directly. A
-near-extremal value such as `1 - 1e-8` is not treated as exact.
+With ``P(r_+) = 2E - aL_z = 0`` at ``a = 1`` the horizon is a double or triple root, and the
+members have their own IDs:
+
+```@example ex
+kerr_geodesic(1.0, (0.8, 1.6, 1.0)).Stable.CaseId
+```

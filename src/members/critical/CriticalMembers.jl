@@ -5,12 +5,23 @@
 # pairs with K2 only. One assembly builds them all; a role only supplies its radial track
 # (r(λ), λ(r) and the engine endpoints) and the radial models are in Models.jl.
 
-# the side of the repeated root the member lies on (not its direction of motion: K7, K10 move
-# inwards on the outer side)
+"""
+    CRITICAL_ROLES
+
+The Critical cases by role, the side of the repeated root on which the member lies:
+`on_root = (:K1, :K3, :K6, :K9)`, `outer = (:K4, :K7, :K10)` and
+`inner = (:K2, :K5, :K8, :K11)`. The role is a position, not a direction of motion: K7 and
+K10 move inward on the outer side.
+"""
 const CRITICAL_ROLES = (on_root=(:K1, :K3, :K6, :K9), outer=(:K4, :K7, :K10),
     inner=(:K2, :K5, :K8, :K11))
 
-"""Role of a Critical case: `:on_root`, `:outer` or `:inner` (the side of the repeated root)."""
+"""
+    kerr_geo_critical_role(case_id)
+
+The role of a Critical case, the side of the repeated root it lies on: `:on_root`, `:outer`
+or `:inner` (see `CRITICAL_ROLES`).
+"""
 function kerr_geo_critical_role(case_id::Symbol)
     for role in keys(CRITICAL_ROLES)
         case_id in CRITICAL_ROLES[role] && return role
@@ -23,13 +34,18 @@ end
                                 polar_hemisphere=:north, reference_radius=nothing)
 
 The Critical member `case_id` (K1–K11) of the constants `(a, E, Lz, Q)`, a
-`KerrGeoCriticalComponent`. Zero points (`ReferenceZero`): on the root (K1, K3, K6, K9) and on
-the homoclinic K4 (at apastron) t, φ, τ vanish at λ = 0; from infinity (K7, K10) λ = 0 and
-t, φ, τ, v, ψ = 0 at `reference_radius`; into the horizon (K2, K5, K8, K11) λ = 0, τ = 0 and
-v = ψ = 0 on the future horizon, t, φ = 0 at `reference_radius` (default r₊ + 0.55(r_c − r₊),
-(r₊ + r_c)/2 for K5, r_c + max(1, r_c − r₊) from infinity). `polar_phase` is the polar phase at
-λ = 0, except for K2, K8, K11, where it is the phase at the reference-radius event
-(`ReferenceZero.polar_phase_event = :reference_radius`).
+`KerrGeoCriticalComponent`; `rc` below is the repeated root.
+
+Zero points (`ReferenceZero`):
+- on the root (K1, K3, K6, K9) and on the homoclinic orbit K4 (at apastron), t, φ and τ
+  vanish at λ = 0;
+- from infinity (K7, K10), λ = 0 and t = φ = τ = v = ψ = 0 at `reference_radius`
+  (default `rc + max(1, rc − r₊)`);
+- into the horizon (K2, K5, K8, K11), λ = 0, τ = 0 and v = ψ = 0 on the future horizon, and
+  t = φ = 0 at `reference_radius` (default `r₊ + 0.55(rc − r₊)`, `(r₊ + rc)/2` for K5).
+
+`polar_phase` is the polar phase at λ = 0, except for K2, K8 and K11, where it is the phase
+at the reference-radius event (`ReferenceZero.polar_phase_event = :reference_radius`).
 """
 function kerr_geo_critical_component(a::Real, energy::Real, lz::Real, q::Real;
         case_id::Symbol, polar_sector=nothing, kwargs...)
@@ -71,16 +87,31 @@ function _critical_role_member(role, a, energy, lz, q; polar_sector=nothing, kwa
         polar_sector=polar_sector, kwargs...)
 end
 
-"""The Critical member on the repeated root: ISCO/ISSO K1, unstable circular or spherical
-orbit K3 (E < 1), K6 (E = 1), K9 (E > 1)."""
+"""
+    kerr_geo_critical_spherical(a, E, Lz, Q; kwargs...)
+
+The Critical member that sits on the repeated root: the ISCO or ISSO (K1), or an unstable
+circular or spherical orbit with E < 1 (K3), E = 1 (K6) or E > 1 (K9). Keywords as in
+`kerr_geo_critical_component`.
+"""
 kerr_geo_critical_spherical(a::Real, energy::Real, lz::Real, q::Real; kwargs...) =
     _critical_role_member(:on_root, a, energy, lz, q; kwargs...)
 
-"""The homoclinic Critical member K4 (E < 1: repeated root → apastron → repeated root)."""
+"""
+    kerr_geo_critical_homoclinic(a, E, Lz, Q; kwargs...)
+
+The homoclinic orbit K4 (E < 1): it leaves the unstable spherical orbit, turns at apastron
+(λ = 0) and returns to the same orbit. Keywords as in `kerr_geo_critical_component`.
+"""
 kerr_geo_critical_homoclinic(a::Real, energy::Real, lz::Real, q::Real; kwargs...) =
     kerr_geo_critical_component(a, energy, lz, q; case_id=:K4, kwargs...)
 
-"""The Critical member from the repeated root into the future horizon: K2, K5, K8 or K11."""
+"""
+    kerr_geo_critical_plunge(a, E, Lz, Q; kwargs...)
+
+The Critical member that leaves the repeated root inward and crosses the future horizon:
+K2, K5, K8 or K11. Keywords as in `kerr_geo_critical_component`.
+"""
 kerr_geo_critical_plunge(a::Real, energy::Real, lz::Real, q::Real; kwargs...) =
     _critical_role_member(:inner, a, energy, lz, q; kwargs...)
 

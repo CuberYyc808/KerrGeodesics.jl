@@ -267,11 +267,23 @@ function kerr_geo_capture_component(
     return kerr_geo_capture_component(a, constants...; kwargs...)
 end
 
-"""Construct the capture component of `(a, E, Lz, Q)` with vortical polar motion (E > 1, Q < 0)."""
+"""
+    kerr_geo_capture_vortical(a, E, Lz, Q; kwargs...)
+
+The Capture member of `(a, E, Lz, Q)` with vortical polar motion (E > 1, Q < 0: the orbit
+stays in one hemisphere and never crosses the equator). Keywords as in
+`kerr_geo_capture_component`.
+"""
 kerr_geo_capture_vortical(a::Real, energy::Real, lz::Real, q::Real; kwargs...) =
     kerr_geo_capture_component(a, energy, lz, q; polar_sector=:vortical, kwargs...)
 
-"""Construct the isolated constant-latitude member selected by its constants."""
+"""
+    kerr_geo_capture_constant_latitude(a, E, Lz, Q; kwargs...)
+
+The Capture member whose polar motion sits on a double root of Θ(z), at constant latitude.
+The constants must place z on that double root. Keywords as in
+`kerr_geo_capture_component`.
+"""
 function kerr_geo_capture_constant_latitude(a::Real, energy::Real, lz::Real, q::Real;
         kwargs...)
     orbit = kerr_geo_capture_component(a, energy, lz, q;
@@ -281,7 +293,12 @@ function kerr_geo_capture_constant_latitude(a::Real, energy::Real, lz::Real, q::
     return orbit
 end
 
-"""Construct the equator-attractive capture component (E > 1, Q = 0)."""
+"""
+    kerr_geo_capture_equator_attractive(a, E, Lz; kwargs...)
+
+The Capture member with Q = 0 whose polar motion approaches the equator asymptotically
+instead of lying in it (possible for E > 1). Keywords as in `kerr_geo_capture_component`.
+"""
 kerr_geo_capture_equator_attractive(a::Real, energy::Real, lz::Real; kwargs...) =
     kerr_geo_capture_component(a, energy, lz, 0.0; polar_sector=:equator_attractive,
         kwargs...)

@@ -1,12 +1,17 @@
-"""
-KerrGeodesics: timelike geodesics of the Kerr metric in Mino time.
+# Layout (by responsibility): core/ (Chebyshev spectral tools, metric functions, the polar and
+# radial coordinate engines) -> classify/ (class table, case table and classifiers) -> models/
+# (radial and polar motion models) -> members/ (the member type and its shared assembly, one
+# directory per class: Stable, Critical, Plunge, Capture, Scatter, Trapped, plus the
+# exact-extremal members) -> interfaces/ (the APEX-parameter API: constants of motion,
+# frequencies, `kerr_geo_orbit`, `kerr_geo_plunge`) -> family/ (`kerr_geodesic`) -> Diagnostics.
 
-Layout (by responsibility): core/ (Chebyshev spectral tools, metric functions, the polar and
-radial coordinate engines) -> classify/ (class table, case table and classifiers) -> models/
-(radial and polar motion models) -> members/ (the member type and its shared assembly, one
-directory per class: Stable, Critical, Plunge, Capture, Scatter, Trapped, plus the
-exact-extremal members) -> interfaces/ (the APEX-parameter API: constants of motion, frequencies,
-`kerr_geo_orbit`, `kerr_geo_plunge`) -> family/ (`kerr_geodesic`) -> Diagnostics.
+"""
+    KerrGeodesics
+
+Timelike geodesics of the Kerr spacetime in Mino time. `kerr_geodesic(a, (E, Lz, Q))` returns
+every orbit the constants of motion allow outside the black hole, each with its coordinates,
+four-velocity and, for stable orbits, frequencies as functions of Mino time λ; units are
+G = c = M = 1.
 """
 module KerrGeodesics
 

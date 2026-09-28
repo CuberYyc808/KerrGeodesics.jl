@@ -375,6 +375,15 @@ function kerr_geo_proper_frequencies(a, p, e, x)
     return Dict("Ωr" => f["ϒr"] / Γ, "Ωθ" => f["ϒθ"] / Γ, "Ωϕ" => f["ϒϕ"] / Γ)
 end
 
+"""
+    kerr_geo_frequencies(a, p, e, x; Time="Mino")
+
+The fundamental frequencies of the bound orbit `(a, p, e, x)`, as a `Dict`. `Time="Mino"`
+gives the Mino-time frequencies `"ϒr"`, `"ϒθ"`, `"ϒϕ"` and `"ϒt"` (the mean of dt/dλ);
+`Time="BoyerLindquist"` gives `"Ωr"`, `"Ωθ"`, `"Ωϕ"`, the frequencies in coordinate time,
+Ωᵢ = ϒᵢ/ϒt; `Time="Proper"` gives the frequencies in proper time, ϒᵢ divided by the mean
+of dτ/dλ.
+"""
 function kerr_geo_frequencies(a, p, e, x; Time="Mino")
     if Time == "Mino"
         freqs = kerr_geo_mino_frequencies(a, p, e, x)

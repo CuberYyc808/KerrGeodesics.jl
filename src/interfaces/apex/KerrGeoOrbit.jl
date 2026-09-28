@@ -279,9 +279,22 @@ end
 """
     kerr_geo_orbit(a, p, e, x; initPhases=(0.0, 0.0, 0.0, 0.0))
 
-Closed-form Mino-time trajectory (a `Dict`) of a stable orbit or of a constant-radius Critical
-orbit with E < 1. An unbound orbit (e > 1) throws an `ArgumentError`: the bound-orbit formulas
-hold for e ≤ 1, and `kerr_geodesic(a, p, e, x).Scatter` builds it.
+The stable orbit with APEX parameters `(a, p, e, x)`, or the constant-radius Critical orbit
+with E < 1 (the ISCO or ISSO, an unstable circular or spherical orbit), in closed form as a
+`Dict`:
+
+- `"Trajectory"`: `[t, r, θ, ϕ]`, functions of Mino time λ; `"FourVelocity"`: `[uᵗ, uʳ, uᶿ, uᵠ]`;
+- `"Frequencies"`: the Mino frequencies `"ϒt"`, `"ϒr"`, `"ϒθ"`, `"ϒϕ"`, also stored as
+  `"RadialFrequency"`, `"PolarFrequency"`, `"AzimuthalFrequency"`;
+- `"CrossFunction"` and `"DerivativesCrossFunction"`: the oscillating parts `[Δtr, Δtθ, Δϕr,
+  Δϕθ]` of t and ϕ and their derivatives (`nothing` on a circular equatorial orbit);
+- `"Energy"`, `"AngularMomentum"`, `"CarterConstant"`, `"ConstantsOfMotion"`, `"RadialRoots"`,
+  `"a"`, `"p"`, `"e"`, `"Cosθ_inc"`, `"Type"`, `"InitialPhases"`, `"Parametrization"`;
+- `"Stability"`; a constant-radius Critical orbit has `"ϒr" = 0` and, when unstable,
+  `"RadialLyapunovExponent"` = √(R''/2), the Mino-time growth rate of a radial perturbation.
+
+`initPhases = (qt0, qr0, qθ0, qϕ0)`. Any other orbit throws an `ArgumentError`;
+`kerr_geodesic(a, p, e, x)` builds every class, including unbound orbits (e > 1).
 """
 function kerr_geo_orbit(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0.0, 0.0, 0.0))
     e > 1 && throw(ArgumentError("kerr_geo_orbit: e = $e > 1 is an unbound orbit; the bound-orbit " *

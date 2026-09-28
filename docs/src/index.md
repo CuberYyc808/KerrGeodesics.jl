@@ -1,12 +1,19 @@
 # KerrGeodesics.jl
 
-KerrGeodesics.jl builds timelike geodesics of the Kerr spacetime in units with
-$G=c=M=1$, Boyer–Lindquist coordinates and Mino time $\lambda$
-($d\tau/d\lambda=\Sigma$). Given the spin `a` and the constants of motion
-`(E, Lz, Q)`, it classifies the radial motion outside the outer horizon and builds a member
-for each radial range the constants allow, as functions of $\lambda$:
-`t, r, θ (z = cos θ), φ, τ`, and the horizon-regular coordinates `v, ψ` wherever the orbit
-reaches a horizon.
+KerrGeodesics.jl computes timelike geodesics of the Kerr spacetime. Give it the spin ``a``
+and the constants of motion, energy ``E``, axial angular momentum ``L_z`` and Carter
+constant ``Q``, and it returns every orbit these constants allow outside the black hole.
+Each orbit is a set of functions of Mino time ``λ``: the Boyer–Lindquist coordinates
+``t, r, θ, φ``, the proper time ``τ``, the four-velocity and, for orbits that reach a
+horizon, coordinates that stay finite there. Units are ``G = c = M = 1``.
+
+```@raw html
+<img src="assets/showcase_all.gif" width="100%" alt="56 Kerr geodesics, one for each kind of radial motion">
+```
+
+The animation shows the 56 orbits of the example catalogue, one for each kind of radial
+motion the package distinguishes, in class order: Stable, Critical, Plunge, Capture, Scatter
+and Trapped. The label on each tile is its case; [Orbit classes](@ref) explains the names.
 
 ## Installation
 
@@ -15,140 +22,78 @@ using Pkg
 Pkg.add("KerrGeodesics")
 ```
 
-## One constructor, six classes
+## A first orbit
 
-The unified constructor is [`kerr_geodesic`](@ref). It returns a
-[`KerrGeodesicFamily`](@ref) with one slot per class:
+The spin and the three constants go into [`kerr_geodesic`](@ref):
 
-| Class | Symbol | Cases | Family slot | Motion |
-| :--- | :--- | :--- | :--- | :--- |
-| Stable | `:stable` | A1, A2 | `Stable` | libration between two turning points; stable circular or spherical orbit |
-| Critical | `:critical` | K1–K11 | `Critical` (tuple) | on, or asymptotic to, an unstable or marginal repeated root `r_c > r₊` |
-| Plunge | `:plunge` | B1–B9 | `Plunge` | from a turning point into the future horizon |
-| Capture | `:capture` | C1–C12 | `Capture` | from infinity into the future horizon (`E ≥ 1`) |
-| Scatter | `:scatter` | D1, D2 | `Scatter` | from infinity through a turning point back to infinity |
-| Trapped | `:trapped` | N1–N6 | `Trapped` | `E < 0`: past horizon → turning point → future horizon, inside the ergoregion |
-
-The Critical members of one repeated root are ordered by their role: on the root
-(`:on_root`: K1 ISCO/ISSO, K3/K6/K9 unstable circular or spherical orbits), on its outer
-side (`:outer`: K4 homoclinic, K7/K10 from infinity) and on its inner side into the
-future horizon (`:inner`: K2, K5, K8, K11).
-
-Two degenerate situations have members outside the primary numbering, in the slot of their
-class: the **horizon tier** (`0 < |a| < 1` with `P(r₊) = 0`, the horizon a root of `R`:
-A-H1, A-H2, D-H1, D-H2) and the **extremal tier** (`|a| = 1` with the horizon a double or
-triple root of `R`: A-X1, A-X2, B-X1, B-X2, C-X1…C-X4, D-X1, D-X2). A member's tier is
-`m.Tier` (`:primary`, `:horizon` or `:extremal`); every member at `|a| = 1` has
-`m.Tier == :extremal`, including those with primary IDs, while `kerr_geo_tier(id)` gives the
-tier of an ID. In code the IDs are written `:A_H1`, …, and
-`kerr_geo_case_name(:A_H1) == "A-H1"`.
-
-```julia
+```@example home
 using KerrGeodesics
 
-family = kerr_geodesic(0.9, (0.94, 0.1, 12.0)) # constants of motion: a, (E, Lz, Q)
-family_apex = kerr_geodesic(0.9, 10.0, 0.5, 0.8)   # APEX parameters: a, p, e, x
-
-family.Status.case_ids          # the cases of these constants
-kerr_geo_members(family)        # every member, in class order
+kg = kerr_geodesic(0.9, (0.9641204328952226, 2.8359152778998453, 4.544408272395823))
+map(kerr_geo_member_class, kerr_geo_members(kg))
 ```
 
-## Members
+These constants allow two orbits. One is stable: it oscillates between periapsis and
+apoapsis forever. The other starts at a turning point just outside the horizon and plunges
+into the black hole. Each is a *member* of the family `kg`, kept in the slot of its class.
+Their coordinates are functions of ``λ``:
 
-Every member is a [`KerrGeoComponent`](@ref)`{C}`, `C` being its class
-(`KerrGeoStableComponent`, `KerrGeoCriticalComponent`, `KerrGeoPlungeComponent`,
-`KerrGeoCaptureComponent`, `KerrGeoScatterComponent`, `KerrGeoTrappedComponent`), with the
-same fields for all classes: `CaseId`, `Tier`, `Role`, `Component`, `ConstantsOfMotion`,
-`Roots`, `ReferenceZero`, `Domain`, `Trajectory`, `Velocity`, `Potentials`, `Residuals`,
-`Status`. The fields of `m.Trajectory` and `m.Velocity` are functions of `λ`:
-
-```julia
-m = family.Plunge
-m.CaseId                     # :B4
-m.Domain.mino                # Mino-time domain: (0, λ_H), turning point to future horizon
-m.Trajectory.r(0.1)
-m.Trajectory.theta(0.1)
-m.Trajectory.v(m.Domain.horizon_lambda)    # 0: v and ψ vanish on the future horizon
-m.Velocity.ut(0.1) / m.Velocity.dtau_dlambda(0.1)   # dt/dτ
-kerr_geo_member_class(m)     # :plunge
+```@example home
+λ = 1.0
+(t = kg.Stable.Trajectory.t(λ), r = kg.Stable.Trajectory.r(λ),
+ θ = kg.Stable.Trajectory.theta(λ), φ = kg.Stable.Trajectory.phi(λ))
 ```
 
-## Parameter conventions
+A stable orbit also carries its APEX parameters, the semi-latus rectum ``p``, eccentricity
+``e`` and inclination ``x``, and its Mino-time frequencies:
 
-The main input is the spin and the constants of motion, `(a, E, Lz, Q)`; an orbit with a
-periapsis can also be given by its APEX parameters `(a, p, e, x)`. Both are four numbers, so
-the constants go in a tuple (or NamedTuple): `kerr_geodesic(a, (E, Lz, Q))` reads constants,
-`kerr_geodesic(a, p, e, x)` reads APEX parameters, converts them to constants and runs the
-same classifier. Trapped members (`E < 0`) have no APEX
-parametrization and are built from constants; exact `|a| = 1` works with either input:
-
-```julia
-kerr_geodesic(0.9, (-0.8, -4.0, 1.0)).Trapped      # N4
-kerr_geodesic(1.0, (1.2, 2.0, 14.0))                # exact a = 1: B6 and D2
+```@example home
+kg.Stable.Status.apex
 ```
 
-The polar motion is classified separately (`pendular`, `vortical`, `equatorial`,
-`equator_attractive`, `constant_latitude`, `axis_crossing`, `axis_constant`). Where the
-constants leave a choice open, keywords select it: `polar_sector=` where more than one sector
-is possible, `polar_hemisphere=` (default `:north`) for motion confined to one hemisphere,
-and `polar_phase=` (default `0`) for the polar phase at the reference event; what phase 0
-means in each sector is recorded in `m.ReferenceZero.polar_phase_convention`.
+```@example home
+kg.Stable.Status.frequencies
+```
 
-## Time coordinates
+The same orbit can be requested by its APEX parameters instead of its constants:
 
-Boyer–Lindquist `t` and `φ` diverge on a horizon. Members that reach a horizon also give
-`rstar` and the ingoing coordinates $v=t+r_*$ and `psi`, which are finite there and vanish
-at `m.ReferenceZero.lambda_regular`; Trapped members (and the exact `|a| = 1` members) also
-give the outgoing pair `u`, `chi` for the past horizon. `τ` vanishes at `λ = 0`, and `t`,
-`φ` at `m.ReferenceZero.t_phi_zero_lambda`; members that end on the future horizon from a
-repeated root or from infinity (K2, K5, K8, K11, C) put the horizon at `λ = 0`.
+```@example home
+kerr_geodesic(0.9, 10.0, 0.5, 0.8).Stable.ConstantsOfMotion
+```
 
-`t, φ, τ, v, ψ` are Mino-time integrals of rates that split into radial and polar parts;
-each part is stored as adaptive piecewise Chebyshev series, with the logarithmic horizon
-terms of `r*` and `φ_H` added in closed form. The polar series, and the radial series of
-Stable members (which give the frequencies), are fitted when the member is built; the other
-radial series on the first evaluation of `t, φ, τ, v` or `ψ`. At `|a| = 1` the radial parts
-are instead assembled from the closed-form Mino-time integrals of the radial models, with a
-regular series at a simple horizon. `r(λ)` and `z(λ)` are closed forms (Jacobi elliptic or
-elementary functions).
+## Contents
 
-## APEX and finite-window APIs
+- [Orbit classes](@ref): how the constants decide the motion, the six classes and the 56
+  cases.
+- [Working with an orbit](@ref): what a member carries and how to evaluate it.
+- [Conventions](@ref): coordinates, parameters, and where each coordinate is zero.
+- [Numerics and accuracy](@ref): how the coordinates are computed and how accurate they are.
+- [Examples](@ref): worked examples for every class.
+- [APEX and finite-window interfaces](@ref): functions of `(a, p, e, x)` for bound orbits,
+  and the finite-window constructors for plunges, captures and scattering.
+- [API reference](@ref): every exported function, type and constant.
 
-The APEX API (`kerr_geo_orbit`, [`kerr_geo_stable`](@ref), `kerr_geo_frequencies`,
-[`kerr_geo_orbit_type_metadata`](@ref)) and the finite-window APIs
-([`kerr_geo_plunge`](@ref), [`kerr_geo_capture`](@ref), [`kerr_geo_scatter`](@ref)) are
-independent reference implementations of the same geodesics. `kerr_geo_orbit` builds Stable
-orbits, constant-radius Critical orbits with `E < 1` (ISCO/ISSO, unstable circular and
-spherical orbits), and throws an `ArgumentError` for anything else, which
-`kerr_geodesic(a, p, e, x)` covers; the class of an APEX point is
-`kerr_geo_orbit_type_metadata(a, p, e, x).family`.
+The two notebooks in `example/` show the same material with plots:
+`KerrGeodesics_Tutorial.ipynb` walks through the package, and
+`KerrGeodesics_56_Orbit_Catalog.ipynb` builds and animates the 56 orbits above.
 
-## Accuracy limits
+## Citation
 
-These limits come from Float64 itself, not from the method. `m.Status.precision` gives the
-numbers for Stable members, and `m.Status.spectral` the accuracy reached by the Chebyshev
-tables of every member.
+If you use this code to compute Kerr geodesics, please cite:
 
-- **Polar phase.** `z(λ)` is a Jacobi function of `u = u₀ + ωλ`; rounding `u` leaves an
-  absolute phase error of about `ε|ωλ|` (`ε` the machine epsilon), which reaches order one
-  at `|λ| ~ 1/(ω ε)`.
-- **Nearly parabolic stable orbits.** One radial period advances `t` by
-  `m.Status.precision.t_radial_period`; after it `t` is known to
-  `m.Status.precision.t_ulp_per_period` at best (about `10³ M` for `|E − 1| ~ 10⁻¹³`).
-- **Near the spin axis.** On the narrow azimuthal spike of an orbit with small `Lz`,
-  `φ(λ)` carries the error `|dφ/dλ| · ulp(λ)` from the rounding of `λ` (about `10⁻³` rad
-  for `Lz = 10⁻¹²`); `Δφ` over a period from any point off the spike is accurate to
-  `~10⁻¹⁵`.
-- **Far from the hole.** For `E > 1`, `r(λ) ≈ 1/(√(E² − 1) |λ − λ_∞|)`, so `λ` resolves
-  radii only up to `~1/(√(E² − 1) ulp(λ_∞))` (`~10¹⁶`); farther out use the radius-based
-  increments `m.Trajectory.radial_*_increment(r1, r2)`, which take radii directly.
+```bibtex
+@article{Yin:2025kls,
+    author = "Yin, Yucheng and Lo, Rico K. L. and Chen, Xian",
+    title = "{Gravitational radiation from Kerr black holes using the Sasaki-Nakamura formalism: waveforms and fluxes at infinity}",
+    eprint = "2511.08673",
+    archivePrefix = "arXiv",
+    primaryClass = "gr-qc",
+    doi = "10.1103/9ngz-k1lr",
+    journal = "Phys. Rev. D",
+    volume = "113",
+    pages = "124007",
+    year = "2026"
+}
+```
 
-## Source layout
-
-`src/core` (Chebyshev tools, metric functions, the polar and radial coordinate engines) →
-`src/classify` (class table, case table, classifiers) → `src/models` (radial and polar
-motion models) → `src/members` (the member type and its shared assembly; one directory per
-class, plus the exact-extremal members; `kerr_geo_stable` and the finite-window capture and
-scatter APIs sit with their class) → `src/interfaces` (APEX constants, frequencies and
-`kerr_geo_orbit`; the finite-window plunge API) → `src/family` (`kerr_geodesic`) →
-`src/Diagnostics.jl` (`kerr_geo_diagnose`).
+KerrGeodesics.jl is released under the MIT License.

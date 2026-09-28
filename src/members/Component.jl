@@ -8,7 +8,8 @@ One member of a `KerrGeodesicFamily`, a single timelike geodesic in Mino time λ
 broad class (`:stable`, `:critical`, `:plunge`, `:capture`, `:scatter`, `:trapped`);
 `KerrGeoStableComponent`, `KerrGeoCriticalComponent`, … name the six types.
 
-- `CaseId`: case ID (A1, K3, B5, …) or tier-member ID (A_H1, B_X1, …).
+- `CaseId`: the case, such as `:A1`, `:K3` or `:B5`, or the tier member, such as `:A_H1` or
+  `:B_X1`.
 - `Tier`: `:primary`, `:horizon` (P(r₊) = 0) or `:extremal` (|a| = 1).
 - `Role`: for Critical members `:on_root`, `:outer` or `:inner` (the side of the repeated root
   the member lies on); `:none` otherwise.

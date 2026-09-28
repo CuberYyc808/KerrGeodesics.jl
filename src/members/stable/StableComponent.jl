@@ -36,8 +36,9 @@ end
 """
     kerr_geo_stable(a, p, e, x; initPhases=(0.0, 0.0, 0.0, 0.0))
 
-Construct a stable (class A) Kerr geodesic from APEX-like parameters. The phase
-tuple is `(qt0, qr0, qtheta0, qphi0)`.
+The stable orbit with APEX parameters `(a, p, e, x)` as a `KerrGeoStable` record. The
+initial phases `(qt0, qr0, qθ0, qφ0)` shift t, the radial phase, the polar phase and φ at
+λ = 0; with zero phases, λ = 0 is at periapsis and at the northern polar turning point.
 """
 function kerr_geo_stable(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0.0, 0.0, 0.0))
     # Orbital Type
