@@ -21,10 +21,12 @@ six classes of [`KerrGeoComponent`](@ref), `KerrGeoComponent{:stable}` and so on
 
 ## Members by class
 
-Each constructor takes `(a, E, Lz, Q)`, classifies the constants and returns one member.
-The class constructors `kerr_geo_*_component` and [`kerr_geo_trapped`](@ref) also take
+The class constructors `kerr_geo_*_component` and [`kerr_geo_trapped`](@ref) take
+`(a, E, Lz, Q)`, classify the constants and return one member. They also take
 `(a, (E, Lz, Q))`. When the constants allow more than one member of the class, `case_id`
-chooses.
+chooses. Specialized constructors use the independent constants of their sector:
+axis infall takes `(a, E; axis=...)`, and equator-attractive capture takes `(a, E, Lz)`
+with ``Q = 0``. Their docstrings give the individual signatures and keyword defaults.
 
 ### Stable
 

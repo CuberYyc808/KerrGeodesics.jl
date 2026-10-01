@@ -28,15 +28,11 @@ function Base.show(io::IO, kg::KerrGeoStable)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeoStable)
-    println(io, "KerrGeoStable(")
-    print(io, "    OrbitalParameters = "); show(io, kg.OrbitalParameters); println(io, ",")
-    print(io, "    ConstantsOfMotion = "); show(io, kg.ConstantsOfMotion); println(io, ",")
-    print(io, "    OrbitalType = "); show(io, kg.OrbitalType); println(io, ",")
-    print(io, "    Frequencies = "); show(io, kg.Frequencies); println(io, ",")
-    print(io, "    Parametrization = "); show(io, kg.Parametrization); println(io, ",")
-    print(io, "    Trajectory = (t = t(λ), r = r(λ), θ = θ(λ), ϕ = ϕ(λ))"); println(io, ",")
-    print(io, "    InitialPhases = "); show(io, kg.InitialPhases); println(io, ",")
-    print(io, ")")
+    println(io, "KerrGeoStable")
+    _show_summary_field(io, "Parameters", kg.OrbitalParameters)
+    _show_summary_field(io, "Constants", kg.ConstantsOfMotion)
+    _show_summary_field(io, "Orbit type", kg.OrbitalType)
+    print(io, "  Trajectory = (t(lambda), r(lambda), theta(lambda), phi(lambda))")
 end
 
 """

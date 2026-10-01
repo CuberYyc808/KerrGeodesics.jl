@@ -17,8 +17,11 @@ The animation shows 56 orbits, one for each kind of radial motion the package di
 row by row in six classes. Each tile draws `(x, y, z) = (r sinθ cosϕ, r sinθ sinϕ, r cosθ)`
 (units of `M`, spin along `z`), with the outer horizon as the black sphere and the ergosphere as
 the wireframe; `ϕ` is the azimuth `φ` (or `ψ = φ + φ_H` for orbits that cross a horizon) and the
-frames advance in `t` (or `v = t + r_*`). The constants `(a, E, Lz, Q)` of every tile are in
-[`example/data/catalogue_registry.tsv`](example/data/catalogue_registry.tsv).
+frames show the progression along each trajectory. The constants `(a, E, Lz, Q)` are
+printed on the tiles and recorded in the
+[catalogue notebook](example/KerrGeodesics_56_Orbit_Catalog.ipynb);
+[`example/data/catalogue_registry.tsv`](example/data/catalogue_registry.tsv) lists their
+root structures, allowed intervals and formula families.
 
 | Class | Motion | Orbits |
 |---|---|---|

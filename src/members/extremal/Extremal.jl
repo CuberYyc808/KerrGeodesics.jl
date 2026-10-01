@@ -35,13 +35,11 @@ function Base.show(io::IO, family::KerrGeoExtremalFamily)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", family::KerrGeoExtremalFamily)
-    println(io, "KerrGeoExtremalFamily(")
-    print(io, "    MetricLimit = "); show(io, family.MetricLimit); println(io, ",")
-    print(io, "    ConstantsOfMotion = "); show(io, family.ConstantsOfMotion); println(io, ",")
-    print(io, "    CaseIds = "); show(io, family.Classification.case_ids); println(io, ",")
-    print(io, "    MemberCount = "); show(io, length(family.Members)); println(io, ",")
-    print(io, "    Status = "); show(io, family.Status); println(io)
-    print(io, ")")
+    println(io, "KerrGeoExtremalFamily (", family.MetricLimit, ")")
+    _show_summary_field(io, "Constants", family.ConstantsOfMotion)
+    _show_summary_field(io, "Cases", family.Classification.case_ids)
+    _show_summary_field(io, "Members", length(family.Members))
+    _show_summary_status(io, family.Status)
 end
 
 

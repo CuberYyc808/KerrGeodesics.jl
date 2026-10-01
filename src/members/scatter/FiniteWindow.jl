@@ -582,14 +582,12 @@ function Base.show(io::IO, kg::KerrGeoScatter)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeoScatter)
-    println(io, "KerrGeoScatter(")
-    print(io, "    Formula = "); show(io, kg.Formula); println(io, ",")
-    print(io, "    EnergyRegime = "); show(io, kg.EnergyRegime); println(io, ",")
-    print(io, "    Outcome = "); show(io, kg.Outcome); println(io, ",")
-    print(io, "    ConstantsOfMotion = "); show(io, kg.ConstantsOfMotion); println(io, ",")
-    print(io, "    ReferenceZero = "); show(io, kg.ReferenceZero); println(io, ",")
-    print(io, "    Status = "); show(io, kg.Status); println(io, ",")
-    print(io, ")")
+    println(io, "KerrGeoScatter (", kg.EnergyRegime, ")")
+    _show_summary_field(io, "Parameters", kg.OrbitalParameters)
+    _show_summary_field(io, "Constants", kg.ConstantsOfMotion)
+    _show_summary_field(io, "Formula", kg.Formula)
+    println(io, "  Trajectory = (t(lambda), r(lambda), theta(lambda), phi(lambda))")
+    _show_summary_status(io, kg.Status)
 end
 
 # Radial closed forms (r(λ), λ(r), rates) of the two finite-window scatter formulas: D2

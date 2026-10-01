@@ -55,21 +55,18 @@ function Base.show(io::IO, kg::KerrGeodesicFamily)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeodesicFamily)
-    println(io, "KerrGeodesicFamily(")
-    print(io, "    InputType = "); show(io, kg.InputType); println(io, ",")
-    print(io, "    Parameters = "); show(io, kg.Parameters); println(io, ",")
-    print(io, "    ConstantsOfMotion = "); show(io, kg.ConstantsOfMotion); println(io, ",")
-    print(io, "    RootClass = "); show(io, kg.RootClass); println(io, ",")
-    print(io, "    HasStable = "); show(io, kg.Stable !== nothing); println(io, ",")
-    print(io, "    Critical = "); show(io, Tuple(m.CaseId for m in kg.Critical)); println(io, ",")
-    print(io, "    HasPlunge = "); show(io, kg.Plunge !== nothing && kg.Plunge.Status.supported); println(io, ",")
-    print(io, "    HasCapture = "); show(io, kg.Capture !== nothing); println(io, ",")
-    print(io, "    HasScatter = "); show(io, kg.Scatter !== nothing); println(io, ",")
-    print(io, "    HasTrapped = "); show(io, kg.Trapped !== nothing); println(io, ",")
-    print(io, "    BroadClass = "); show(io, kg.BroadClass); println(io, ",")
-    print(io, "    MemberErrors = "); show(io, length(get(kg.Status, :member_errors, ()))); println(io, ",")
-    print(io, "    Status = "); show(io, kg.Status); println(io, ",")
-    print(io, ")")
+    println(io, "KerrGeodesicFamily (", kg.InputType, ")")
+    _show_summary_field(io, "Constants", kg.ConstantsOfMotion)
+    _show_summary_field(io, "Parameters", kg.Parameters)
+    for row in KERR_GEO_CLASSES
+        slot = getfield(kg, row.slot)
+        if slot isa Tuple
+            isempty(slot) || _show_summary_field(io, row.name, Tuple(m.CaseId for m in slot))
+        elseif slot !== nothing
+            _show_summary_field(io, row.name, slot.CaseId)
+        end
+    end
+    _show_summary_status(io, kg.Status)
 end
 
 """

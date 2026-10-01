@@ -92,8 +92,11 @@ Critical members in a tuple ordered by role: on the root, outer, inner.
 
 ### Plunge (B)
 
-Every plunge starts at a turning point (``λ = 0``) and reaches the future horizon at finite
-``λ``.
+A plunge falls inward from a finite outer turning point. Subextremal members normally put
+that point at ``λ = 0`` and reach the future horizon at finite Mino time; axis infall instead
+puts the horizon at zero. Exact-extremal crossing members also use a horizon origin, while
+B-X1 and B-X2 approach the horizon only asymptotically. See [Where the coordinates are zero](@ref)
+for the coordinate origins.
 
 | Case | Energy | Roots of ``R`` | Motion |
 | :--- | :--- | :--- | :--- |

@@ -227,7 +227,7 @@ _c5_polar_sector(a, energy, lz, q, requested) = requested === :vortical &&
                                   polar_phase=0.0, phi0=0.0, reference_radius=nothing)
 
 The C5 capture (E > 1, four complex radial roots): from infinity into the future horizon at
-λ = 0, where τ = v = ψ = 0; t and φ are zero at `reference_radius` (default `λ = λ_∞/2`). On the
+λ = 0, where τ = v = ψ = 0; t and φ are zero at `reference_radius` (default `r(λ_∞/2)`). On the
 spin axis (`polar_sector=:axis_constant`) it is the axis-infall member with azimuth `phi0`.
 """
 function kerr_geo_capture_four_complex(

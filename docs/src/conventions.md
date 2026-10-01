@@ -49,27 +49,36 @@ and `radial_tau` return; over a monotone leg they equal ``\int f(r)\,dr/\sqrt{R(
 The constants are the energy ``E``, the axial angular momentum ``L_z`` and the Carter
 constant ``Q``, all per unit rest mass. They are used exactly as given.
 
-An orbit with a periapsis can also be named by its APEX parameters. The semi-latus rectum
-``p`` and the eccentricity ``e`` fix the radial turning points,
+An orbit with a periapsis can also be named by its APEX parameters. For a bound orbit,
+the semi-latus rectum ``p`` and eccentricity ``0 ≤ e < 1`` fix the radial turning points,
 
 ```math
 r_{\rm apo} = \frac{p}{1 - e}, \qquad r_{\rm peri} = \frac{p}{1 + e},
 ```
 
-and ``x = \cos ι`` fixes the polar ones: the orbit reaches ``z = ±\sqrt{1 - x^2}``, and the
-sign of ``x`` is the sign of ``L_z`` (``x > 0`` for prograde orbits). Bound orbits have
-``0 ≤ e < 1``, ``e = 1`` is parabolic and ``e > 1`` hyperbolic. `kerr_geodesic(a, p, e, x)`
+whereas ``r_{\rm peri} = p/(1+e)`` also applies to scattering orbits. At ``e = 1`` the
+outer endpoint is infinity; for ``e > 1``, ``p/(1-e)`` is not a physical apoapsis.
+The inclination parameter ``x = \cos ι`` fixes the polar turning points
+``z = ±\sqrt{1 - x^2}``, and its sign is the sign of ``L_z``. For nonzero spin, motion is
+prograde when ``aL_z > 0`` (equivalently ``ax > 0``), and retrograde when ``aL_z < 0``.
+At ``a = 0`` these labels have no distinction relative to the black-hole spin.
+``e = 1`` is parabolic and ``e > 1`` hyperbolic. `kerr_geodesic(a, p, e, x)`
 converts ``(p, e, x)`` to ``(E, L_z, Q)`` and continues as for constants; a spin within
 ``8ε`` of ``±1`` is taken as exactly ``±1`` there, and the input is kept in
 `Status.input_provenance`.
 
 ## Where the coordinates are zero
 
-Each member fixes the zero of ``λ`` at a definite event, and ``τ`` vanishes at ``λ = 0`` for
-every member. ``t`` and ``φ`` vanish at ``λ = 0`` too, except where ``λ = 0`` lies on the
-future horizon: ``t`` and ``φ`` diverge there, and vanish instead at a reference radius. `ReferenceZero` records all of
-this: `lambda0_event`, `t_phi_zero_event` with `t_phi_zero_lambda` and `t_phi_zero_radius`,
-`tau_zero_event`, and `lambda_regular`, the ``λ`` where ``v`` and ``ψ`` vanish.
+Each member fixes the zero of ``λ`` at a definite event, and ``τ`` vanishes at ``λ = 0``.
+With the default phases, ``t`` and ``φ`` usually vanish there too. Subextremal members
+anchored at the future horizon instead fix their Boyer–Lindquist zeros at an exterior
+reference radius. Exact-extremal crossing members fix their constants through the regular
+ingoing chart, rather than through a finite zero of ``t`` and ``φ``.
+`ReferenceZero` records the event and coordinate conventions in `lambda0_event`,
+`t_phi_zero_event`, `t_phi_zero_lambda`, `t_phi_zero_radius`, `tau_zero_event` and
+`lambda_regular`. The last field gives the zero of ``v`` and ``ψ`` when it is defined.
+The table assumes default phases and `phi0 = 0`; motion along the axis with nonzero
+`phi0` keeps that constant azimuth.
 
 | Members | ``λ = 0`` | ``t = φ = 0`` | ``v = ψ = 0`` |
 | :--- | :--- | :--- | :--- |
@@ -78,17 +87,25 @@ this: `lambda0_event`, `t_phi_zero_event` with `t_phi_zero_lambda` and `t_phi_ze
 | K1, K3, K6, K9, A-H2, A-X2 | the polar reference event | ``λ = 0`` | |
 | K4 | apoapsis | ``λ = 0`` | |
 | K7, K10 | the reference radius | ``λ = 0`` | ``λ = 0`` |
-| K2, K5, K8, K11 | the future horizon | the reference radius | ``λ = 0`` |
-| B1–B8 | the turning point | ``λ = 0`` | the future horizon |
-| B9 and motion along the axis | the future horizon | the reference radius | ``λ = 0`` |
-| C1–C12 | the future horizon | the reference radius | ``λ = 0`` |
+| K2, K5, K8, K11, ``\lvert a\rvert < 1`` | the future horizon | the reference radius | ``λ = 0`` |
+| B1 to B9, ``\lvert a\rvert < 1``, except axis infall | the turning point | ``λ = 0`` | the future horizon |
+| Axis infall, including Schwarzschild B9 | the future horizon | the reference radius for ``t``; constant ``φ`` | ``λ = 0`` |
+| C1 to C12, ``\lvert a\rvert < 1``, except axis infall | the future horizon | the reference radius | ``λ = 0`` |
+| Primary Plunge, Capture and inward Critical crossing members, ``\lvert a\rvert = 1``, ``P(r_+) ≠ 0`` | the future horizon | fixed through the ingoing chart | ``λ = 0`` |
 | D1, D2, D-H1, D-H2 | the turning point | ``λ = 0`` | |
 | N1–N6 | the turning point | ``λ = 0`` | the future horizon (``u = χ = 0`` on the past horizon) |
 | B-X1, B-X2, D-X1, D-X2 | the turning point | ``λ = 0`` | |
 | C-X1…C-X4 | the reference radius | ``λ = 0`` | |
 
-`reference_radius` sets the reference radius. Its default is ``λ_∞/2``, halfway in Mino time
-between infinity and the horizon, for Capture members; ``r_+ + 0.55\,(r_c - r_+)`` for K2,
+For the exact-extremal crossing members in the table,
+`t_phi_zero_event = :regular_chart_at_future_horizon`: ``t = v - r_*`` and
+``φ = ψ - φ_H`` inherit their constants from ``v = ψ = 0`` on the horizon. Their
+`t_phi_zero_lambda` and `t_phi_zero_radius` are NaN because no finite zero is prescribed.
+
+`reference_radius` sets the exterior reference radius where that convention is used.
+For subextremal Capture members its default is ``r(λ_∞/2)``, where ``λ_∞`` is the Mino-time
+endpoint at infinity and ``λ = 0`` is the horizon: the reference event lies halfway between
+them in Mino time. The defaults are ``r_+ + 0.55\,(r_c - r_+)`` for K2,
 K8 and K11 and ``(r_+ + r_c)/2`` for K5; and ``r_c + \max(1, r_c - r_+)`` for K7 and K10.
 The initial phases of a Stable member, `initPhases = (qt0, qr0, qθ0, qφ0)`, shift its
 ``t``, radial phase, polar phase and ``φ`` at ``λ = 0``.
@@ -111,27 +128,37 @@ on the horizon.
 
 ## Coordinates regular at the horizon
 
-``t`` and ``φ`` diverge logarithmically on a horizon. With the tortoise coordinate
+At a subextremal horizon, ``t`` has a logarithmic divergence on a crossing trajectory;
+the azimuth generally does too, although its divergent coefficient can vanish. For
+``|a| < 1`` the tortoise coordinate is
 
 ```math
 r_* = r + \frac{2r_+}{r_+ - r_-}\ln\frac{r - r_+}{2} - \frac{2r_-}{r_+ - r_-}\ln\frac{r - r_-}{2},
 \qquad \frac{dr_*}{dr} = \frac{r^2 + a^2}{Δ},
 ```
 
-([`kerr_rstar`](@ref)) and the horizon azimuth
+([`kerr_rstar`](@ref)), and the horizon azimuth is
 
 ```math
 φ_H = \frac{a}{r_+ - r_-}\ln\left|\frac{r - r_+}{r - r_-}\right|, \qquad \frac{dφ_H}{dr} = \frac{a}{Δ},
 ```
 
-the ingoing coordinates ``v = t + r_*`` and ``ψ = φ + φ_H`` are finite on the future
+The ingoing coordinates ``v = t + r_*`` and ``ψ = φ + φ_H`` are finite on the future
 horizon, and the outgoing coordinates ``u = t - r_*`` and ``χ = φ - φ_H`` are finite on the
-past horizon. At ``|a| = 1`` both horizons sit at ``r = 1`` and ``r_*`` takes its limiting
-form ``r + 2\ln(r - 1) - 2/(r - 1) - 2\ln 2``.
+past horizon. At ``|a| = 1`` both horizons sit at ``r = 1``. Outside the horizon the
+limiting forms, with the package's additive constants, are
+
+```math
+r_* = r + 2\ln(r - 1) - \frac{2}{r - 1} - 2\ln 2,
+\qquad φ_H = -\frac{a}{r - 1}.
+```
+
+Thus generic exact-extremal crossing has a pole as well as a logarithm in ``t``, and a
+pole in ``φ``; the subextremal logarithmic statement does not apply there.
 
 A member that crosses the future horizon returns ``v``, ``ψ`` there directly; they are
-computed without the cancellation between ``t`` and ``r_*``, so they keep full precision next
-to the horizon.
+computed without subtracting the divergent Boyer–Lindquist terms. Their accuracy does not
+follow from the accuracy of ``t`` and ``φ`` separately (see [Limits of double precision](@ref)).
 
 ## The sign of the spin
 

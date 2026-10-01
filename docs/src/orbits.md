@@ -23,6 +23,11 @@ The result is a [`KerrGeodesicFamily`](@ref) that holds every orbit the constant
 | `RootClass` | a label for the root structure of ``R`` |
 | `Status` | `supported`, `reason`, `case_ids` and the classification details |
 
+Default display shows a short summary of the family or member, not its full diagnostic
+records or function objects. The fields remain available, for example `kg.Status.reason`
+and `m.Status.spectral.achieved`. Display does not evaluate the trajectory or build
+spectral tables.
+
 ```@example orbits
 using KerrGeodesics
 
@@ -44,7 +49,7 @@ and has the same fields in every class:
 | `Tier` | `:primary`, `:horizon` or `:extremal` |
 | `Role` | `:on_root`, `:outer` or `:inner` for Critical members, `:none` otherwise |
 | `ConstantsOfMotion` | `(a, E, Lz, Q)` |
-| `Roots` | `radial`, the real roots of ``R``; `polar`, the polar solution (its sector, the turning values of ``z^2``, the phase convention) |
+| `Roots` | `radial`, root data whose representation depends on the member: real-root tuples, complex-pair parameters or records with multiplicity; `polar`, the polar solution (its sector, the turning values of ``z^2``, the phase convention) |
 | `Domain` | `mino`, the range of ``λ``, with the role of each end; `horizon_lambda` for members that end on the future horizon |
 | `ReferenceZero` | the events where ``λ``, ``t``, ``φ``, ``τ``, ``v``, ``ψ`` vanish (see [Where the coordinates are zero](@ref)) |
 | `Trajectory` | the coordinates, as functions of ``λ`` |
@@ -52,7 +57,12 @@ and has the same fields in every class:
 | `Potentials` | the potentials as functions of their own variable: `radial(r)` ``= R(r)``, `polar_z(z)` ``= Θ(z)`` |
 | `Residuals` | functions of ``λ``: `radial` ``= (dr/dλ)^2 - R``, `polar_z` ``= (dz/dλ)^2 - Θ``, `normalization` ``= g_{μν}u^μu^ν + 1`` |
 | `Status` | facts about the member: `supported`, `spectral` (see [Numerics and accuracy](@ref)), and for Stable members `apex`, `frequencies` and `precision` |
-| `Component` | the region of radial motion found by the classifier, a [`KerrGeoRadialComponent`](@ref) |
+| `Component` | the classified region as a [`KerrGeoRadialComponent`](@ref), or `nothing` for members built without one |
+
+`Roots.radial` is not a uniform array of radii. For example, a Trapped N4 member gives
+real roots `x1,x2`, a complex-pair description `rho,eta`, and auxiliary distances `A,B`.
+Exact-extremal primary members may give records with `radius`, `multiplicity` and
+residual metadata. Inspect the member's root data before treating its entries as radii.
 
 The class constructors, such as [`kerr_geo_plunge_component`](@ref) or
 [`kerr_geo_trapped`](@ref), build one member directly from the constants.
@@ -69,8 +79,11 @@ stable = kg.Stable
  z = stable.Trajectory.z(λ), phi = stable.Trajectory.phi(λ), tau = stable.Trajectory.tau(λ))
 ```
 
-They accept any ``λ`` in `Domain.mino`. A stable orbit runs forever; a plunge runs from its
-turning point at ``λ = 0`` to the horizon:
+They accept ``λ`` in `Domain.mino`, except at endpoints where that coordinate diverges.
+A stable orbit runs forever. In the following subextremal example the plunge starts at
+its turning point at ``λ = 0``; axis infall and exact-extremal crossing use other origins
+(see [Where the coordinates are zero](@ref)), and exact-critical plunges approach the
+horizon only asymptotically:
 
 ```@example orbits
 stable.Domain.mino, kg.Plunge.Domain.mino
@@ -161,8 +174,9 @@ kerr_geo_frequencies(0.9, 10.0, 0.5, 0.8; Time = "BoyerLindquist")
 ## At the horizon
 
 Boyer–Lindquist ``t`` and ``φ`` diverge where an orbit crosses the horizon. Members that
-reach it also carry ``r_*``, ``v = t + r_*`` and ``ψ = φ + φ_H``, which stay finite; on the
-future horizon they vanish (see [Coordinates regular at the horizon](@ref)).
+cross it also carry the tortoise coordinate ``r_*`` and the ingoing coordinates
+``v = t + r_*`` and ``ψ = φ + φ_H``. The latter two, not ``r_*``, stay finite there and
+use the zeros specified by `ReferenceZero` (see [Coordinates regular at the horizon](@ref)).
 
 ```@example orbits
 plunge = kerr_geodesic(0.9, (0.94, 0.1, 12.0)).Plunge

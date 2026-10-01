@@ -14,12 +14,14 @@ horizon, coordinates that stay finite there. Units are ``G = c = M = 1``.
 The animation shows the 56 orbits of the example catalogue, one for each kind of radial
 motion the package distinguishes, in class order: Stable, Critical, Plunge, Capture, Scatter
 and Trapped. The label on each tile is its case; [Orbit classes](@ref) explains the names, and
-`example/data/catalogue_registry.tsv` lists the spin and constants ``(a, E, L_z, Q)`` of each
-tile. Each tile draws ``(x, y, z) = (r\sin θ\cos ϕ,\ r\sin θ\sin ϕ,\ r\cos θ)`` in units of
+the spin and constants ``(a, E, L_z, Q)`` are printed on the tiles and recorded in the
+[catalogue notebook](https://github.com/CuberYyc808/KerrGeodesics.jl/blob/TimelikeReconstruction/example/KerrGeodesics_56_Orbit_Catalog.ipynb).
+`example/data/catalogue_registry.tsv` lists their root structures, allowed intervals and
+formula families. Each tile draws ``(x, y, z) = (r\sin θ\cos ϕ,\ r\sin θ\sin ϕ,\ r\cos θ)`` in units of
 ``M``, with the spin along ``z``, the outer horizon ``r_+`` as the black sphere and the
 ergosphere as the wireframe. The azimuth ``ϕ`` is ``φ``, or ``ψ = φ + φ_H`` for orbits that
-cross a horizon, and the frames advance uniformly in ``t``, or in ``v = t + r_*`` for those
-orbits (see [Coordinates regular at the horizon](@ref)).
+cross a horizon. The frames show the progression along each trajectory, not a shared
+physical-time interval between panels (see [Coordinates regular at the horizon](@ref)).
 
 ## Installation
 

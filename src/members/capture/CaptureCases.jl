@@ -157,7 +157,8 @@ end
 
 Classify (a, E, Lz, Q) and construct its Class C (Capture) component: from infinity into the
 future horizon, with λ = 0 on the horizon (where τ = v = ψ = 0) and t, φ zero at
-`reference_radius` (default `λ = λ_∞/2`). C1 and C3 use the closed-form radial formulas of
+`reference_radius` (default `r(λ_∞/2)`, halfway from infinity to the horizon in Mino time).
+C1 and C3 use the closed-form radial formulas of
 `kerr_geo_capture`; C2, C4 and C6–C12 their radial models (C6–C12: repeated roots strictly
 below the outer horizon); C5 the four-complex-root model (`kerr_geo_capture_four_complex`).
 Orbits from infinity that approach a Critical root asymptotically (K7, K10) are Critical

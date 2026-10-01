@@ -30,16 +30,12 @@ function Base.show(io::IO, kg::KerrGeoPlunge)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeoPlunge)
-    println(io, "KerrGeoPlunge(")
-    print(io, "    ConstantsOfMotion = "); show(io, kg.ConstantsOfMotion); println(io, ",")
-    print(io, "    OrbitClass = "); show(io, kg.OrbitClass); println(io, ",")
-    print(io, "    Parametrization = "); show(io, kg.Parametrization); println(io, ",")
-    initial_position = (t0=kg.InitialPhases.t0, r0=kg.Trajectory.r(0.0),
-        theta0=kg.Trajectory.theta(0.0), phi0=kg.InitialPhases.phi0)
-    print(io, "    InitialPosition = "); show(io, initial_position); println(io, ",")
-    println(io, "    Trajectory = (t = t(lambda), r = r(lambda), theta = theta(lambda), phi = phi(lambda), rstar = rstar(lambda), u = u(lambda), v = v(lambda), u_rstar_series = u(rstar), v_rstar_series = v(rstar)),")
-    println(io, "    Velocity = (ut = ut(lambda), ur = ur(lambda), uz = dz/dlambda, utheta = dtheta/dlambda, uphi = uphi(lambda)),")
-    print(io, ")")
+    println(io, "KerrGeoPlunge")
+    _show_summary_field(io, "Parameters", kg.OrbitalParameters)
+    _show_summary_field(io, "Constants", kg.ConstantsOfMotion)
+    _show_summary_field(io, "Root class", kg.OrbitClass)
+    println(io, "  Trajectory = (t(lambda), r(lambda), theta(lambda), phi(lambda))")
+    _show_summary_status(io, kg.Status)
 end
 
 """

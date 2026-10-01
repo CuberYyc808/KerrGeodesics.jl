@@ -128,12 +128,28 @@ function Base.show(io::IO, m::KerrGeoComponent{C}) where {C}
     print(io, ")")
 end
 
+function _show_summary_field(io::IO, label, value)
+    print(io, "  ", rpad(label, 10), " = ")
+    show(IOContext(io, :compact => true, :limit => true), value)
+    println(io)
+end
+
+function _show_summary_status(io::IO, status)
+    supported = get(status, :supported, nothing)
+    print(io, "  Status     = ", supported === nothing ? "not recorded" :
+        supported ? "supported" : "unsupported")
+    errors = get(status, :member_errors, ())
+    isempty(errors) || print(io, "; ", length(errors), " member error(s)")
+    reason = get(status, :reason, nothing)
+    supported === false && reason !== nothing && print(io, "; ", reason)
+end
+
 function Base.show(io::IO, ::MIME"text/plain", m::KerrGeoComponent{C}) where {C}
-    println(io, "KerrGeo", kerr_geo_class(C).name, "Component(")
-    for field in (:CaseId, :Tier, :Role, :ConstantsOfMotion, :ReferenceZero, :Domain)
-        print(io, "    ", field, " = "); show(io, getfield(m, field)); println(io, ",")
-    end
-    print(io, "    Trajectory = ", keys(m.Trajectory), ",\n")
-    print(io, "    Status = "); show(io, m.Status); println(io)
-    print(io, ")")
+    println(io, "KerrGeo", kerr_geo_class(C).name, "Component (", m.CaseId, ")")
+    _show_summary_field(io, "Constants", m.ConstantsOfMotion)
+    _show_summary_field(io, "Tier", m.Tier)
+    C === :critical && _show_summary_field(io, "Role", m.Role)
+    _show_summary_field(io, "Mino time", get(m.Domain, :mino, nothing))
+    println(io, "  Trajectory = (t(lambda), r(lambda), theta(lambda), phi(lambda))")
+    _show_summary_status(io, m.Status)
 end

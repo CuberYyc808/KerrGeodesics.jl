@@ -10,6 +10,7 @@ makedocs(
         prettyurls = get(ENV, "CI", nothing) == "true",
         edit_link = nothing,
         assets = ["assets/custom.css"],
+        size_threshold_warn = 128 * 2^10,
         size_threshold = 400 * 2^10,
     ),
     pages = [
@@ -31,8 +32,10 @@ makedocs(
 cp(joinpath(@__DIR__, "..", "example", "animations", "showcase_all.gif"),
     joinpath(@__DIR__, "build", "assets", "showcase_all.gif"); force = true)
 
-deploydocs(
-    repo = "github.com/CuberYyc808/KerrGeodesics.jl.git",
-    devbranch = "main",
-    versions = ["v0.4.0" => "v0.4.0"],
-)
+if get(ENV, "CI", "false") == "true"
+    deploydocs(
+        repo = "github.com/CuberYyc808/KerrGeodesics.jl.git",
+        devbranch = "main",
+        versions = ["stable" => "v^", "v#.#"],
+    )
+end
