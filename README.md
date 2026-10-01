@@ -14,7 +14,11 @@ trajectory, four-velocity and frequencies as functions of Mino time `λ`
 </p>
 
 The animation shows 56 orbits, one for each kind of radial motion the package distinguishes,
-row by row in six classes:
+row by row in six classes. Each tile draws `(x, y, z) = (r sinθ cosϕ, r sinθ sinϕ, r cosθ)`
+(units of `M`, spin along `z`), with the outer horizon as the black sphere and the ergosphere as
+the wireframe; `ϕ` is the azimuth `φ` (or `ψ = φ + φ_H` for orbits that cross a horizon) and the
+frames advance in `t` (or `v = t + r_*`). The constants `(a, E, Lz, Q)` of every tile are in
+[`example/data/catalogue_registry.tsv`](example/data/catalogue_registry.tsv).
 
 | Class | Motion | Orbits |
 |---|---|---|

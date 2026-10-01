@@ -54,6 +54,17 @@ end
     return muladd(x, b1, c[1] - b2)
 end
 
+# Divided Clenshaw recurrence: (f(x)-f(y))/(x-y), without subtracting
+# two primitives. The physical x-y is supplied separately after rescaling.
+@inline function _clenshaw_divided(c::Vector{Float64}, x::Float64, y::Float64)
+    b1=0.0; b2=0.0; d1=0.0; d2=0.0
+    @inbounds for k in length(c):-1:2
+        d1,d2=muladd(2x,d1,2b1-d2),d1
+        b1,b2=muladd(2y,b1,c[k]-b2),b1
+    end
+    return muladd(x,d1,b1-d2)
+end
+
 # Off-node check points (in [-1, 1], away from the n = 32 Chebyshev points): a function that
 # the nodes alias (e.g. T_64 on 33 points looks constant) or a feature narrower than the
 # node spacing shows up as a misfit there.
@@ -63,9 +74,9 @@ const _CHEB_CHECK = (-0.8763, -0.3371, 0.2197, 0.6639)
 # accuracy. The excess is the largest ratio (error estimate) / (allowed error) over the
 # components, where the error estimate is the larger of the coefficient tail and the
 # off-node misfit, and the allowed error is tol × local size (or `absfloor[k]`), or the
-# abscissa-rounding noise if that is larger. The piece is resolved when the excess is ≤ 1.
-# `nothing` for non-finite samples.
-function _fit_piece(f, a, b, ncomp, tol, absfloor, n)
+# abscissa-rounding noise, or the rounding of the values themselves `abserr[k]`, whichever is
+# larger. The piece is resolved when the excess is ≤ 1. `nothing` for non-finite samples.
+function _fit_piece(f, a, b, ncomp, tol, absfloor, abserr, n)
     xs = _cheb_nodes(n)
     vals = Matrix{Float64}(undef, n + 1, ncomp)
     for (j, x) in enumerate(xs)
@@ -78,6 +89,9 @@ function _fit_piece(f, a, b, ncomp, tol, absfloor, n)
         end
     end
     checks = map(x -> f((a + b) / 2 + (b - a) / 2 * x), _CHEB_CHECK)
+    # the value-rounding floor of this piece: a constant, or a function of x (the larger of its
+    # values at the two ends; it varies slowly along a piece)
+    floorv = abserr isa Function ? max.(abserr(a), abserr(b)) : abserr
     out = Vector{Vector{Float64}}(undef, ncomp)
     excess = 0.0
     achieved = 0.0
@@ -92,7 +106,7 @@ function _fit_piece(f, a, b, ncomp, tol, absfloor, n)
             slope += (j - 1)^2 * abs(c[j])
         end
         noise = 8eps() * max(abs(a), abs(b)) * slope * 2 / (b - a)
-        bound = max(tol * scale, noise, floatmin())
+        bound = max(tol * scale, noise, floorv[k], floatmin())
         tail = maximum(abs, view(c, n-2:n+1))
         misfit = 0.0
         for (x, v) in zip(_CHEB_CHECK, checks)
@@ -118,11 +132,14 @@ function _fit_piece(f, a, b, ncomp, tol, absfloor, n)
 end
 
 """
-    chebfit(f, breaks; ncomp=1, tol=1e-14, absfloor, maxdepth=60, maxpieces=2000)
+    chebfit(f, breaks; ncomp=1, tol=1e-14, absfloor, abserr, maxdepth=60, maxpieces=2000)
 
 Fit `f(x)` (returning `ncomp` values) on each interval of `breaks`, bisecting every
 interval until its error estimate (Chebyshev tail, and the misfit at four off-node points)
-is below `tol` times the local size of the function (or `absfloor[k]`). Non-finite samples
+is below `tol` times the local size of the function (or `absfloor[k]`), or below `abserr`,
+the rounding of the sampled values themselves where the caller knows it (a tuple, or a
+function of x evaluated at a piece's two ends; the radial engine next to a horizon: the rates
+are evaluated from a rounded radius). Non-finite samples
 force a split. A piece whose coefficients have levelled off at a noise plateau far below
 the function's own size (rounding in the function being sampled), or whose tail is at the
 rounding noise of the abscissa, is kept as it is: bisection cannot improve it. A piece
@@ -130,7 +147,8 @@ still unresolved when the depth, the piece budget or the minimum width is exhaus
 an error. `achieved` of the result records each piece's estimate.
 """
 function chebfit(f, breaks::AbstractVector{<:Real}; ncomp::Int=1, tol=1.0e-14,
-        absfloor=zeros(ncomp), maxdepth::Int=60, maxpieces::Int=2000, n::Int=_CHEB_N)
+        absfloor=zeros(ncomp), abserr=zeros(ncomp), maxdepth::Int=60, maxpieces::Int=2000,
+        n::Int=_CHEB_N)
     outb = Float64[float(breaks[1])]
     outc = [Vector{Float64}[] for _ in 1:ncomp]
     achieved = Float64[]
@@ -140,7 +158,7 @@ function chebfit(f, breaks::AbstractVector{<:Real}; ncomp::Int=1, tol=1.0e-14,
     end
     while !isempty(stack)
         a, b, depth = pop!(stack)
-        fit = _fit_piece(f, a, b, ncomp, tol, absfloor, n)
+        fit = _fit_piece(f, a, b, ncomp, tol, absfloor, abserr, n)
         excess = fit === nothing ? Inf : fit[2]
         if excess > 1
             splittable = depth < maxdepth && length(outb) + length(stack) < maxpieces &&
@@ -184,6 +202,20 @@ end
 @inline _eval3(p::ChebPieces, x) = (i = _piece_index(p, x); a = p.breaks[i]; b = p.breaks[i + 1];
     t = (2x - a - b) / (b - a);
     (_clenshaw(p.coefs[1][i], t), _clenshaw(p.coefs[2][i], t), _clenshaw(p.coefs[3][i], t)))
+
+function _cheb_increment(p::ChebPieces, left, right, k)
+    left==right && return 0.0
+    right<left && return -_cheb_increment(p,right,left,k)
+    first=_piece_index(p,left); last=_piece_index(p,right)
+    value=0.0
+    for i in first:last
+        a=p.breaks[i]; b=p.breaks[i+1]
+        lo=i==first ? left : a; hi=i==last ? right : b
+        x=(2hi-a-b)/(b-a); y=(2lo-a-b)/(b-a)
+        value+=2*((hi-lo)/(b-a))*_clenshaw_divided(p.coefs[k][i],x,y)
+    end
+    return value
+end
 
 # ∫ Σ c_k T_k dx on [-1, 1] as a series vanishing at x = -1
 function _cheb_integral(c::Vector{Float64}, halfwidth)

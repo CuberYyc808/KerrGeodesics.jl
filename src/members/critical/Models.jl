@@ -5,7 +5,10 @@
 """
 Radial model of the Critical case `case_id` from the real roots of R (increasing; for K4/K5
 the factorization (x1, r_c, r_a) of R = (1 − E²)(r − x1)(r − r_c)²(r_a − r)). Every model has
-`basis(r) = (I0, I1, I2)`, `pole(h, r)`, `inverse_i0` and its radial range `lower`/`upper`.
+`basis(r) = (I0, I1, I2)`, `pole(h, r)`, `radius(δ)` (the radius at Mino time δ ≥ 0 from the
+model's anchor: the inner simple root for the plunges into the horizon and the whirl K5, the
+apastron for K4, infinity for K7 and K10), its inverse `mino(r)`, `inward` (whether `mino`
+grows as r decreases) and its radial range `lower`/`upper`.
 """
 function _critical_radial_model(case_id, energy, radii)
     case_id === :K2 && return _k2_model(energy, (radii[1], radii[2]))
@@ -16,9 +19,10 @@ function _critical_radial_model(case_id, energy, radii)
     h = _homoclinic_model(energy, radii...)
     # K4: the outer branch (r_c, r_a]; K5: the inner branch (x1, r_c), I0 increasing inwards
     case_id === :K4 && return (kind=:homoclinic_outer_branch, roots=h.roots, lower=h.lower,
-        upper=h.upper, basis=h.basis, pole=h.pole, inverse_i0=h.inverse_i0)
+        upper=h.upper, basis=h.basis, pole=h.pole, radius=h.radius, mino=h.mino, inward=true)
     case_id === :K5 && return (kind=:homoclinic_inner_branch, roots=h.roots, upper=h.lower,
-        basis=h.inner_basis, pole=h.inner_pole, inverse_i0=h.inner_inverse_i0)
+        basis=h.inner_basis, pole=h.inner_pole, radius=h.inner_radius, mino=h.inner_mino,
+        inward=false)
     error("No Critical radial model is registered for $(case_id).")
 end
 
@@ -42,12 +46,13 @@ function _k2_model(energy, roots)
         return scale * (y / (x3 - h) + d / (x3 - h) *
             _quadratic_denominator_primitive(x1 - h, x3 - h, y))
     end
-    function inverse_i0(target)
-        y = max(target / scale, 0.0)
+    function radius(δ)
+        y = max(δ / scale, 0.0)
         return (x1 + x3 * y^2) / (1 + y^2)
     end
+    mino(r) = basis(r).I0
     return (kind=:k2_outer_triple, roots=(x1=x1, x3=x3), upper=x3,
-        basis=basis, pole=pole, inverse_i0=inverse_i0)
+        basis=basis, pole=pole, radius=radius, mino=mino, inward=false)
 end
 
 function _k8_model(roots)
@@ -71,12 +76,13 @@ function _k8_model(roots)
         return scale * (at / (x2 - h) + d / (x2 - h) *
             _quadratic_denominator_primitive(x1 - h, d, y))
     end
-    inverse_i0(target) = begin
-        y = min(tanh(max(target / scale, 0.0)), prevfloat(1.0))
+    radius(δ) = begin
+        y = min(tanh(max(δ / scale, 0.0)), prevfloat(1.0))
         x1 + d * y^2
     end
+    mino(r) = basis(r).I0
     return (kind=:k8_parabolic_outer_double, roots=(x1=x1, x2=x2), upper=x2,
-        basis=basis, pole=pole, inverse_i0=inverse_i0)
+        basis=basis, pole=pole, radius=radius, mino=mino, inward=false)
 end
 
 function _k11_model(energy, roots)
@@ -112,15 +118,15 @@ function _k11_model(energy, roots)
         beta = (p - 1) / (p - n)
         return scale / (x2 - h) * (alpha * _j_inv(n, y) + beta * _j_inv(p, y))
     end
-    function inverse_i0(target)
-        jn = max(target / scale, 0.0)
+    function radius(δ)
+        jn = max(δ / scale, 0.0)
         z = min(tanh(sqrt(n) * jn), prevfloat(1.0))
         y = z / sqrt(n)
         return (x2 - x1 * y^2) / (1 - y^2)
     end
+    mino(r) = basis(r).I0
     return (kind=:k11_hyperbolic_outer_double, roots=(x1=x1, x2=x2, x3=x3),
-        upper=x3, basis=basis, pole=pole,
-        inverse_i0=inverse_i0)
+        upper=x3, basis=basis, pole=pole, radius=radius, mino=mino, inward=false)
 end
 
 function _k7_model(roots)
@@ -143,19 +149,22 @@ function _k7_model(roots)
         return scale * (j0(u) / (x3 - h) - d / (x3 - h) *
             _quadratic_denominator_primitive(x1 - h, d, u))
     end
-    function inverse_i0(target)
-        target < 0 || return Inf
-        u = -inv(tanh(target / scale))
+    # δ from the infinity endpoint, where I0 = 0
+    function radius(δ)
+        δ > 0 || return Inf
+        u = inv(tanh(δ / scale))
         return x1 + d * u^2
     end
+    mino(r) = -basis(r).I0
     return (
         kind=:k7_parabolic_exterior_repeated_root,
         roots=(x1=x1, x3=x3),
         lower=x3,
         basis=basis,
         pole=pole,
-        inverse_i0=inverse_i0,
-        infinity_i0=0.0,
+        radius=radius,
+        mino=mino,
+        inward=true,
     )
 end
 
@@ -193,19 +202,23 @@ function _k10_model(energy, roots)
         return -scale / (x2 - h) * (alpha * j0(z) +
             beta * _j_z2_minus(kh, z))
     end
-    function inverse_i0(target)
-        z = tanh(max(-target / scale, 0.0))
+    # δ from the infinity endpoint, where I0 = −scale atanh(√k)
+    i0_infinity = -scale * atanh(sqrt(k))
+    function radius(δ)
+        z = tanh(max(-(i0_infinity - δ) / scale, 0.0))
         z = clamp(z, nextfloat(sqrt(k)), prevfloat(1.0))
         return x2 + h0 / (z^2 - k)
     end
+    mino(r) = i0_infinity - basis(r).I0
     return (
         kind=:k10_hyperbolic_exterior_repeated_root,
         roots=(x1=x1, x2=x2, x3=x3),
         lower=x3,
         basis=basis,
         pole=pole,
-        inverse_i0=inverse_i0,
-        infinity_i0=-scale * atanh(sqrt(k)),
+        radius=radius,
+        mino=mino,
+        inward=true,
     )
 end
 
@@ -295,22 +308,24 @@ function _homoclinic_model(energy, x1, rc, ra)
         )
     end
 
-    function inverse_i0(target)
-        target <= 0 || throw(DomainError(
-            target, "The homoclinic I0 target must not exceed zero."))
-        target == 0 && return ra
-        exponential = exp(2 * alpha * target / scale)
+    # K4: δ from the apastron r_a (I0 = 0 there, decreasing towards r_c)
+    function radius(δ)
+        δ >= 0 || throw(DomainError(δ,
+            "The homoclinic Mino time from the apastron must not be negative."))
+        δ == 0 && return ra
+        exponential = exp(-2 * alpha * δ / scale)
         t = alpha * (1 + exponential) / (1 - exponential)
         return (x1 + ra * t^2) / (1 + t^2)
     end
-
-
-    function inner_inverse_i0(target)
-        target >= 0 || throw(DomainError(
-            target, "The whirling I0 target must be nonnegative."))
-        t = alpha * tanh(alpha * target / scale)
+    mino(r) = -basis(r).I0
+    # K5: δ from the inner simple root x1 (I0 = 0 there, increasing towards r_c)
+    function inner_radius(δ)
+        δ >= 0 || throw(DomainError(δ,
+            "The whirling Mino time from the inner root must not be negative."))
+        t = alpha * tanh(alpha * δ / scale)
         return (x1 + ra * t^2) / (1 + t^2)
     end
+    inner_mino(r) = inner_basis(r).I0
 
     return (
         kind=:homoclinic_outer_simple_inner_double,
@@ -319,10 +334,12 @@ function _homoclinic_model(energy, x1, rc, ra)
         upper=ra,
         basis=basis,
         pole=pole,
-        inverse_i0=inverse_i0,
+        radius=radius,
+        mino=mino,
         inner_basis=inner_basis,
         inner_pole=inner_pole,
-        inner_inverse_i0=inner_inverse_i0,
+        inner_radius=inner_radius,
+        inner_mino=inner_mino,
         scale=scale,
         alpha=alpha,
     )

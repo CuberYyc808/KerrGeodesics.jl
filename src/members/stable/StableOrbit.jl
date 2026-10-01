@@ -31,7 +31,7 @@ end
 
 # the labels of kerr_geo_orbit_type_metadata: [family, shape, inclination]
 _class_a_labels(case_id, q) = ["Stable", case_id === :A1 ? "Eccentric" : "Circular",
-    abs(q) > 1.0e-13 ? "Inclined" : "Equatorial"]
+    iszero(q) ? "Equatorial" : "Inclined"]
 
 """
     _class_a_orbit(a, energy, lz, q, component; initPhases)
@@ -46,29 +46,27 @@ function _class_a_orbit(a, energy, lz, q, component; initPhases=(0.0, 0.0, 0.0, 
     r2 = float(component.LowerEndpoint.Radius)
     r1 = case_id === :A1 ? float(component.UpperEndpoint.Radius) : r2
     r3, r4 = _class_a_inner_roots(a, energy, lz, q, r1, r2)
-    rc = _rc(a, energy, lz, q)
+    potential = _radial_potential_from_roots(a, energy, lz, q, component.Metadata.structure)
+    rc = _rc(a, energy, lz, q, potential)
     qt0, qr0, qθ0, qϕ0 = float.(initPhases)
 
     # ---- radial: r = r2 + (r1−r2)(r2−r3) sn² / ((r1−r3) cn² + (r2−r3) sn²), u = ωr λ
     # (A2: r1 = r2, k = 0 and ϒr is the epicyclic frequency)
-    kr = case_id === :A1 ? (r1 - r2) * (r3 - r4) / ((r1 - r3) * (r2 - r4)) : 0.0
-    ωr = sqrt(max(0.0, (1 - energy) * (1 + energy) * (r1 - r3) * (r2 - r4))) / 2
-    Kr = Elliptic.K(kr)
-    ϒr = π * ωr / Kr
-    function radial_state(λ)
-        case_id === :A1 || return (r2, 0.0)
-        sn, cn, dn = Elliptic.ellipj(ωr * λ, kr)
-        D = (r1 - r3) * cn^2 + (r2 - r3) * sn^2
-        w = (r1 - r2) * (r2 - r3)
-        return (r2 + w * sn^2 / D, 2ωr * w * (r1 - r3) * sn * cn * dn / D^2)
-    end
+    libration = case_id === :A1 ? _libration_model(energy,r1,r2,r3,r4) : nothing
+    omega = case_id === :A1 ? libration.omega :
+        sqrt(max(0.0,(1-energy)*(1+energy)*(r1-r3)*(r2-r4)))/2
+    Kr = case_id === :A1 ? libration.K : _ellip_k(1.0)
+    ϒr = π * omega / Kr
+    radial_state(λ) = case_id === :A1 ?
+        libration.state(λ) : (r2,0.0)
     radial_r(λ) = radial_state(λ)[1]
     radial = case_id === :A1 ?
-        _radial_engine(a, energy, lz, q, radial_r; domain=(0.0, 2Kr / ωr), period=2Kr / ωr) :
+        _radial_engine(a, energy, lz, q, radial_r; potential=potential, domain=(0.0, 2Kr / omega),
+            period=2Kr / omega) :
         _plain_rates(rc, r2)
 
     # ---- polar: northern turning point at λ = 0
-    polar = abs(q) <= 1.0e-13 ? _equatorial_polar_solution(a, energy, lz) :
+    polar = iszero(q) ? _equatorial_polar_solution(a, energy, lz) :
         _polar_solution(a, energy, lz, q, :pendular, 0.0)
     ϒθ = polar.metadata.sector === :equatorial ?
         sqrt(lz^2 + a^2 * (1 - energy) * (1 + energy)) :
@@ -151,7 +149,8 @@ function _class_a_assemble(g, radial_state::RS, radial::RE, polar_primitive::PP,
     # the member's own fields: z, dz/dλ and τ (zero at λ = 0) besides the orbit's t, r, θ, φ
     z(λ) = polar.position(λ + δθ)[1]
     τ(λ) = (radial_primitive(λ + δr)[3] - R0[3]) + (polar.primitive(λ + δθ)[3] - Z0[3])
-    functions = (t=t, r=r, theta=θ, z=z, phi=ϕ, tau=τ, uz=λ -> polar.position(λ + δθ)[2],
+    functions = (t=t, r=r, theta=θ, z=z, phi=ϕ, tau=τ, position=λ -> polar.position(λ + δθ),
+        uz=λ -> polar.position(λ + δθ)[2],
         sin2=λ -> polar.position(λ + δθ)[3],
         sign_r=λ -> sign(radial_state(λ + δr)[2]))
     return orbit, (roots=g.roots, apex=(a=a, p=p, e=e, x=x), functions=functions)

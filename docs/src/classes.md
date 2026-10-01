@@ -208,16 +208,18 @@ primary case IDs. A repeated root on the horizon is not Critical: the Critical r
 
 ## Polar motion
 
-The polar motion is classified separately, from the roots of ``Θ(z)``. The constants fix
-it except in two situations, where the keyword `polar_sector` chooses: with ``Q = 0`` and
-``E > 1`` the orbit can lie in the equatorial plane or approach it asymptotically, and with
-``L_z = 0`` and ``Q < 0`` it can pass over the poles or stay in one hemisphere.
+The polar motion is classified separately, from the roots of ``Θ(z)``. The sign of ``Q``
+decides; only ``Q = 0`` itself is the equatorial limit, however small a nonzero ``Q`` is. The
+constants fix the motion except in two situations, where the keyword `polar_sector` chooses:
+with ``Q = 0`` and ``L_z^2 < a^2(E^2 - 1)`` the orbit can lie in the equatorial plane or
+approach it asymptotically, and with ``L_z = 0`` and ``Q < 0`` it can pass over the poles or
+stay in one hemisphere.
 
 | Sector | Constants | Motion |
 | :--- | :--- | :--- |
 | `:pendular` | ``Q > 0`` | crosses the equator and turns at the same latitude north and south |
 | `:equatorial` | ``Q = 0`` | stays in the equatorial plane |
-| `:equator_attractive` | ``Q = 0``, ``E > 1`` | approaches the equatorial plane asymptotically |
+| `:equator_attractive` | ``Q = 0``, ``L_z^2 < a^2(E^2 - 1)`` | approaches the equatorial plane asymptotically |
 | `:vortical` | ``Q < 0``, ``E > 1`` | stays in one hemisphere, oscillating between two latitudes |
 | `:constant_latitude` | a double root of ``Θ`` | stays at one latitude off the equator |
 | `:axis_crossing` | ``L_z = 0``, ``Q > a^2(1 - E^2)``, ``Q ≠ 0`` | passes over the poles |

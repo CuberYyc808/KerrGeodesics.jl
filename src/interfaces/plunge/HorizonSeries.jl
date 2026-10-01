@@ -1,5 +1,5 @@
-# Plunge reference API: near-horizon series of the ingoing/outgoing coordinates and the
-# horizon anchoring of `kerr_geo_plunge`'s time origin.
+# Plunge reference API: near-horizon series of the ingoing/outgoing coordinates (series
+# arithmetic in core/Series.jl) and the horizon anchoring of `kerr_geo_plunge`'s time origin.
 
 function _rstar_series_constants(a)
     rp = _rplus(a)
@@ -8,100 +8,6 @@ function _rstar_series_constants(a)
     alpha = 2 * rp / d
     cstar = rp - 2 * rp / d * log(2) - 2 * rm / d * log(d / 2)
     return (rp=rp, rm=rm, d=d, alpha=alpha, cstar=cstar)
-end
-
-function _series_mul(a, b, order)
-    c = zeros(Float64, order + 1)
-    for i in 0:order
-        ai = a[i + 1]
-        iszero(ai) && continue
-        for j in 0:(order - i)
-            c[i + j + 1] += ai * b[j + 1]
-        end
-    end
-    return c
-end
-
-function _series_inv(a, order)
-    if iszero(a[1])
-        error("Series inverse requires a nonzero constant term.")
-    end
-    b = zeros(Float64, order + 1)
-    b[1] = inv(a[1])
-    for n in 1:order
-        s = 0.0
-        for k in 1:n
-            s += a[k + 1] * b[n - k + 1]
-        end
-        b[n + 1] = -s / a[1]
-    end
-    return b
-end
-
-function _series_div(a, b, order)
-    return _series_mul(a, _series_inv(b, order), order)
-end
-
-function _series_sqrt_positive(a, order)
-    if a[1] <= 0
-        error("Positive-root series square root requires positive leading coefficient.")
-    end
-    b = zeros(Float64, order + 1)
-    b[1] = sqrt(a[1])
-    for n in 1:order
-        s = 0.0
-        for k in 1:(n - 1)
-            s += b[k + 1] * b[n - k + 1]
-        end
-        b[n + 1] = (a[n + 1] - s) / (2 * b[1])
-    end
-    return b
-end
-
-function _series_exp(a, order)
-    b = zeros(Float64, order + 1)
-    b[1] = exp(a[1])
-    for n in 1:order
-        s = 0.0
-        for k in 1:n
-            s += k * a[k + 1] * b[n - k + 1]
-        end
-        b[n + 1] = s / n
-    end
-    return b
-end
-
-function _series_compose(f, g, order)
-    if abs(g[1]) > 100 * eps(Float64)
-        error("Series composition expects an inner series with zero constant term.")
-    end
-    out = zeros(Float64, order + 1)
-    power = zeros(Float64, order + 1)
-    power[1] = 1.0
-    for n in 0:order
-        if n > 0
-            power = _series_mul(power, g, order)
-        end
-        if !iszero(f[n + 1])
-            out .+= f[n + 1] .* power
-        end
-    end
-    return out
-end
-
-function _series_revert_unit_linear(f, order)
-    if abs(f[1]) > 100 * eps(Float64) || abs(f[2] - 1) > 1e-10
-        error("Series reversion requires q = x + O(x²).")
-    end
-    g = zeros(Float64, order + 1)
-    g[2] = 1.0
-    for n in 2:order
-        trial = copy(g)
-        trial[n + 1] = 0.0
-        composed = _series_compose(f, trial, order)
-        g[n + 1] = -composed[n + 1]
-    end
-    return g
 end
 
 function _horizon_vq_coefficients(a, energy, lz, q, fcoeffs; order=10)

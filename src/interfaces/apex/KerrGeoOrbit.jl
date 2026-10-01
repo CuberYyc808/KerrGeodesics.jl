@@ -56,7 +56,7 @@ function kerr_geo_orbit_circular(a::Float64, p::Float64, e::Float64=0.0, x::Floa
     consts = kerr_geo_constants_of_motion(a, p, e, x)
     En, Lz, Q = consts["E"], consts["Lz"], consts["Q"]
     # Radial roots
-    r1,r2,r3,r4 = kerr_geo_radial_roots(a, p, e, x; En = En, Q = Q)  
+    r1,r2,r3,r4 = kerr_geo_radial_roots(a, p, e, x; En = En, Lz = Lz, Q = Q)
 
     # Trajectory functions (broadcastable)
     # Uniform motion at the Mino frequencies (prograde and retrograde, x = ±1).
@@ -94,18 +94,6 @@ function kerr_geo_orbit_circular(a::Float64, p::Float64, e::Float64=0.0, x::Floa
 end
 
 
-# [F(r+) - F(r-)] / (r+ - r-), or its |a| -> 1 limit F'((r+ + r-)/2) when the horizons merge.
-function _horizon_divdiff(F, rp, rm)
-    # Plain divided difference while its cancellation error, ~eps/(rp - rm), stays below
-    # ~1e-10; it differs from F'(ρ0) only by F‴ (rp - rm)^2/24, so below that the
-    # derivative is a symmetric difference with two Richardson steps (truncation O(δ^6)).
-    rp - rm > 1e-6 && return (F(rp) - F(rm)) / (rp - rm)
-    ρ0 = (rp + rm) / 2
-    g(δ) = (F(ρ0 + δ) - F(ρ0 - δ)) / (2δ)
-    δ = 1e-3
-    return (64g(δ / 4) - 20g(δ / 2) + g(δ)) / 45      # two Richardson steps: O(δ⁶)
-end
-
 function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0.0, 0.0, 0.0))
     # Orbit type
     orbit_type = _apex_orbit_gate(a, p, e, x)
@@ -122,7 +110,7 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
     ϒϕ = Frequencies["ϒϕ"]
 
     # Radial and polar roots
-    r1,r2,r3,r4 = kerr_geo_radial_roots(a, p, e, x; En, Q)
+    r1,r2,r3,r4 = kerr_geo_radial_roots(a, p, e, x; En, Lz, Q)
     zp, zm = kerr_geo_polar_roots(a, p, e, x)
 
     # Jacobi elliptic modulus for radial and polar motion

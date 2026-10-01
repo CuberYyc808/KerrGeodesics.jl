@@ -18,6 +18,11 @@
 #     cn: y = sn u, y' = cn dn,   B = A
 #     dn: y = sn u, y' = cn dn,   B = A m,   p = 1 + m,  q = −m  (cn and dn)
 # with the spike at u = 0 in every case.
+#
+# Close to the equator (small |Q| with Lz² < a²(E² − 1)) the parameter m approaches 1 and
+# K ≈ ½ log(16/k'²) is fixed by k'² = 1 − m, which a rounded m no longer carries. Every
+# sector therefore supplies m1 = k'² from its polar roots, and sn, cn, dn come from the
+# Landen sequence started at √m1 (`_landen`, `_ellipj_reduced`).
 
 """
     _polar_one_minus_root(a, energy, lz, q, u)
@@ -38,52 +43,33 @@ function _polar_one_minus_root(a, energy, lz, q, u)
     return abs(1 - y_near - u) <= abs(1 - y_far - u) ? y_near : y_far
 end
 
-# the spike variable y, its derivative y' and B, p, q of the φ-rate split (header)
-@inline function _polar_spike(kind::Symbol, jac, A, m)
+# the spike variable y, its derivative y' and B, p, q of the φ-rate split (header);
+# `L` is the parameter record of `_landen`
+@inline function _polar_spike(kind::Symbol, jac, A, L)
     sn, cn, dn = jac
     if kind === :cd
-        kp2 = 1 - m
-        return (sn / dn, cn / dn^2), (A * kp2, 1 - 2m, m * kp2)
+        return (sn / dn, cn / dn^2), (A * L.m1, 1 - 2L.m, L.m * L.m1)
     end
-    return (sn, cn * dn), (kind === :cn ? A : A * m, 1 + m, -m)
+    return (sn, cn * dn), (kind === :cn ? A : A * L.m, 1 + L.m, -L.m)
 end
 
-# ∫ dy/(ε + B y²), including B = 0
-_polar_spike_primitive(y, ε, B) = B > 0 ? atan(sqrt(B / ε) * y) / sqrt(ε * B) : y / ε
-
 # z²/A and (1 − z²) for J(u|m); `jac` = (sn, cn, dn)
-@inline function _polar_z2(kind::Symbol, jac, A, one_minus_A, m)
+@inline function _polar_z2(kind::Symbol, jac, A, one_minus_A, L)
     sn, cn, dn = jac
     if kind === :cd                        # 1 − cd² = k'² sd²
-        return A * (cn / dn)^2, one_minus_A + A * (1 - m) * (sn / dn)^2
+        return A * (cn / dn)^2, one_minus_A + A * L.m1 * (sn / dn)^2
     elseif kind === :cn
         return A * cn^2, one_minus_A + A * sn^2
     else                                   # :dn,  dn² = 1 − m sn²
-        return A * dn^2, one_minus_A + A * m * sn^2
+        return A * dn^2, one_minus_A + A * L.m * sn^2
     end
 end
 
-"""
-(sn, cn, dn)(u | m) with u first reduced to [−K, K] (sn, cn have period 4K and change sign
-under u → u ± 2K), so large arguments and m → 1 keep full accuracy.
-"""
-function _ellipj_reduced(u, m, K)
-    y = u - 4K * round(u / (4K))                 # [−2K, 2K]
-    flip = false
-    if y > K
-        y -= 2K; flip = true
-    elseif y < -K
-        y += 2K; flip = true
-    end
-    sn, cn, dn = Elliptic.ellipj(y, m)
-    return flip ? (-sn, -cn, dn) : (sn, cn, dn)
-end
-
-@inline function _polar_j(kind::Symbol, jac, m)
+@inline function _polar_j(kind::Symbol, jac, L)
     sn, cn, dn = jac
-    kind === :cd && return cn / dn, -(1 - m) * sn / dn^2
+    kind === :cd && return cn / dn, -L.m1 * sn / dn^2
     kind === :cn && return cn, -sn * dn
-    return dn, -m * sn * cn
+    return dn, -L.m * sn * cn
 end
 
 """
@@ -103,36 +89,44 @@ function _equatorial_polar_solution(a, energy, lz)
 end
 
 """
-    _elliptic_polar_solution(a, energy, lz, q; kind, A, one_minus_A, m, omega, u0,
+    _elliptic_polar_solution(a, energy, lz, q; kind, A, one_minus_A, m, m1, omega, u0,
                              sign=1.0, metadata)
 
-Polar motion z = sign·√A·J(u0 + ωλ | m) with t, φ, τ primitives from one Chebyshev period.
+Polar motion z = sign·√A·J(u0 + ωλ | m) with t, φ, τ primitives from one Chebyshev period;
+`m1` is 1 − m formed from the polar roots.
 Returns `(formula, primitive, position, metadata)`: `formula(λ)` gives
 `(z, uz = dz/dλ, sin2 = 1 − z², theta, phi, t, tau)`, `primitive(λ)` the polar `(t, φ, τ)`
 and `position(λ)` `(z, dz/dλ, 1 − z²)`; the primitives vanish at λ = 0.
 """
-function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A, m,
+function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A, m, m1,
         omega, u0, sign=1.0, metadata::NamedTuple)
-    K = Elliptic.K(m)
+    L = _landen(m, m1)
+    K = L.K
     period = 2K
     ε = one_minus_A
-    _, (B, ps, qs) = _polar_spike(kind, (0.0, 0.0, 0.0), A, m)
+    _, (B, ps, qs) = _polar_spike(kind, (0.0, 0.0, 0.0), A, L)
+    lz_over_omega = lz / omega
+    spike_scale = !iszero(lz) && B > 0 ? sqrt(B / ε) : 0.0
+    spike_denom = !iszero(lz) && B > 0 ? sqrt(ε * B) : 1.0
+    @inline spike_of_y(y) = iszero(lz) ? 0.0 : lz_over_omega *
+        (B > 0 ? atan(spike_scale * y) / spike_denom : y / ε)
     # the closed-form part of the φ primitive, zero at u = 0
-    spike_primitive(u) = iszero(lz) ? 0.0 :
-        lz / omega * _polar_spike_primitive(_polar_spike(kind, _ellipj_reduced(u, m, K), A, m)[1][1], ε, B)
+    # primitive() has already folded u to [0, K].
+    @inline spike_primitive(u) = iszero(lz) ? 0.0 :
+        spike_of_y(_polar_spike(kind, _ellipj_reduced(u, L), A, L)[1][1])
     # its values at the ends of [0, K] are exact (y = 0 and 1/k' for cd, 1 for cn, dn): an
     # evaluated y at u = K would carry the rounding of K
-    y_ends = kind === :cd ? (0.0, 1 / sqrt(1 - m)) : (0.0, 1.0)
-    S0 = iszero(lz) ? 0.0 : lz / omega * _polar_spike_primitive(y_ends[1], ε, B)
-    spike_half = iszero(lz) ? 0.0 : lz / omega * _polar_spike_primitive(y_ends[2], ε, B) - S0
-    spike(u) = spike_primitive(u) - S0
-    # z² is even about u = 0 and about u = K: fit the rates on [0, K] only (where ellipj is
-    # accurate even for m → 1) and unfold by symmetry. The φ component is the bounded rest
+    y_ends = kind === :cd ? (0.0, 1 / sqrt(m1)) : (0.0, 1.0)
+    S0 = spike_of_y(y_ends[1])
+    spike_half = iszero(lz) ? 0.0 : spike_of_y(y_ends[2]) - S0
+    @inline spike(u) = spike_primitive(u) - S0
+    # z² is even about u = 0 and about u = K: fit the rates on [0, K] only and unfold by
+    # symmetry. The φ component is the bounded rest
     # of Lz/(1 − z²) after the closed-form spike.
     rates = function (u)
-        jac = _ellipj_reduced(u, m, K)
-        z2, omz2 = _polar_z2(kind, jac, A, one_minus_A, m)
-        (y, yp), _ = _polar_spike(kind, jac, A, m)
+        jac = _ellipj_reduced(u, L)
+        z2, omz2 = _polar_z2(kind, jac, A, one_minus_A, L)
+        (y, yp), _ = _polar_spike(kind, jac, A, L)
         rest = iszero(lz) ? 0.0 : lz * y^2 * (ps + qs * y^2) / ((1 + yp) * omz2 * omega)
         return ((a * lz - a^2 * energy * omz2) / omega, rest, a^2 * z2 / omega)
     end
@@ -143,8 +137,8 @@ function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A
     prim = chebintegrate(fit)
     half = (chebtotal(prim, 1), chebtotal(prim, 2) + spike_half, chebtotal(prim, 3))
     totals = 2 .* half
-    F(y) = (P = _eval3(prim, y); (P[1], P[2] + spike(y), P[3]))
-    function primitive(u)
+    @inline F(y) = (P = _eval3(prim, y); (P[1], P[2] + spike(y), P[3]))
+    @inline function primitive(u)
         n = floor(u / period)
         y = u - n * period
         Fy = y <= K ? F(y) : 2 .* half .- F(period - y)
@@ -153,11 +147,11 @@ function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A
     p0 = primitive(float(u0))
     amp = sign * sqrt(A)
     # (t, φ, τ) polar primitives, and (z, dz/dλ, sin²θ = 1 − z² without cancellation)
-    rates_primitive(lambda) = primitive(u0 + omega * float(lambda)) .- p0
+    @inline rates_primitive(lambda) = primitive(u0 + omega * float(lambda)) .- p0
     function position(lambda)
-        jac = _ellipj_reduced(u0 + omega * float(lambda), m, K)
-        J, dJ = _polar_j(kind, jac, m)
-        return (amp * J, amp * omega * dJ, _polar_z2(kind, jac, A, one_minus_A, m)[2])
+        jac = _ellipj_reduced(u0 + omega * float(lambda), L)
+        J, dJ = _polar_j(kind, jac, L)
+        return (amp * J, amp * omega * dJ, _polar_z2(kind, jac, A, one_minus_A, L)[2])
     end
     formula = function (lambda)
         z, uz, s2 = position(lambda)

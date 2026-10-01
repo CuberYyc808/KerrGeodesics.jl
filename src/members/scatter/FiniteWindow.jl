@@ -37,120 +37,27 @@ function _d2_roots(outcome)
     return (rA=roots[1], rB=roots[2], rC=roots[3], rD=roots[4])
 end
 
-function _d2_modulus(roots)
-    return ((roots.rD - roots.rA) * (roots.rC - roots.rB)) /
-           ((roots.rD - roots.rB) * (roots.rC - roots.rA))
-end
-
-# am(u) with sin² am = s2(r): as atan, since s2 → 1 − (r_D − r_C)/(r_D − r_A) at infinity (and
-# asin near 1 loses half the digits when r_A is far away, E → 1⁺)
-function _d2_amplitude(roots, r)
-    return atan(sqrt(max((roots.rC - roots.rA) * (r - roots.rD), 0.0) /
-        ((roots.rD - roots.rC) * (r - roots.rA))))
-end
-
-function _d2_prefactor(energy, roots)
-    a_lead = _e2m1(energy)
-    return 2 / sqrt(a_lead * (roots.rD - roots.rB) * (roots.rC - roots.rA))
-end
-
-function _d2_lambda_from_turn(energy, roots, r)
-    r >= roots.rD - 1e-12 || error("D2 radius lies below the outer turning point.")
-    m = _d2_modulus(roots)
-    return _d2_prefactor(energy, roots) * Elliptic.F(_d2_amplitude(roots, r), m)
-end
-
-function _d2_lambda_infinity(energy, roots)
-    phi_infinity = atan(sqrt((roots.rC - roots.rA) / (roots.rD - roots.rC)))
-    return _d2_prefactor(energy, roots) * Elliptic.F(phi_infinity, _d2_modulus(roots))
-end
-
-"""
-r(λ) of the D2 leg from the turning point, λ ≥ 0. With u = λ/prefactor, sn²u = s2(r) (a
-Möbius map) gives r = r_D + (r_D − r_C) sn²u/(s∞ − sn²u), s∞ = s2(∞) = sn²u∞ (exactly r_D at
-the turning point); the difference s∞ − sn²u = sn(u∞ + u) sn(u∞ − u) (1 − m sn²u s∞) is formed
-from u∞ − u = (λ∞ − λ)/prefactor itself, so r keeps its digits up to the conditioning of
-λ ↦ r as r → ∞.
-"""
-function _d2_radius_map(energy, roots)
-    m = _d2_modulus(roots)
-    pref = _d2_prefactor(energy, roots)
-    s∞ = (roots.rC - roots.rA) / (roots.rD - roots.rA)
-    λ∞ = _d2_lambda_infinity(energy, roots)
-    u∞ = λ∞ / pref
-    function radius(target)
-        -2e-13 <= target < λ∞ || throw(DomainError(target,
-            "D2 Mino time from the turning point must lie in [0, λ∞)."))
-        u = max(target, 0.0) / pref
-        sn_u = Elliptic.ellipj(u, m)[1]
-        gap = Elliptic.ellipj(u∞ + u, m)[1] * Elliptic.ellipj((λ∞ - max(target, 0.0)) / pref, m)[1] *
-            (1 - m * sn_u^2 * s∞)
-        return roots.rD + (roots.rD - roots.rC) * sn_u^2 / gap
-    end
-    return radius
-end
-
-function _d2_k_infinity(roots)
-    return (roots.rD - roots.rA) / (roots.rC - roots.rA)
-end
-
-function _d2_j2_boundary(roots, n, phi)
-    m = _d2_modulus(roots)
-    return sin(phi) * cos(phi) * sqrt(max(1 - m * sin(phi)^2, 0.0)) /
-           (1 - n * sin(phi)^2)
-end
-
-function _d2_j2_primitive(roots, n, phi)
-    m = _d2_modulus(roots)
-    acoef = 1 / (2 * (n - 1))
-    bcoef = n / (2 * (m - n) * (n - 1))
-    ccoef = (2 * m * n - 3 * m - n^2 + 2 * n) /
-            (2 * (m - n) * (n - 1))
-    dcoef = -n^2 / (2 * (m - n) * (n - 1))
-    return acoef * Elliptic.F(phi, m) +
-           bcoef * Elliptic.E(phi, m) +
-           ccoef * Elliptic.Pi(n, phi, m) +
-           dcoef * _d2_j2_boundary(roots, n, phi)
-end
-
-function _d2_i0_primitive(energy, roots, phi)
-    return _d2_prefactor(energy, roots) * Elliptic.F(phi, _d2_modulus(roots))
-end
-
-function _d2_i1_primitive(energy, roots, phi)
-    m = _d2_modulus(roots)
-    k = _d2_k_infinity(roots)
-    return _d2_prefactor(energy, roots) *
-           (roots.rC * Elliptic.F(phi, m) +
-            (roots.rD - roots.rC) * Elliptic.Pi(k, phi, m))
-end
-
-function _d2_i2_primitive(energy, roots, phi)
-    m = _d2_modulus(roots)
-    k = _d2_k_infinity(roots)
-    return _d2_prefactor(energy, roots) *
-           (roots.rC^2 * Elliptic.F(phi, m) +
-            2 * roots.rC * (roots.rD - roots.rC) * Elliptic.Pi(k, phi, m) +
-            (roots.rD - roots.rC)^2 * _d2_j2_primitive(roots, k, phi))
+# Mino time from the turning point of a scattering leg, in [0, λ∞): within MINO_ENDPOINT_TOL
+# below 0 it is the turning point
+function _leg_time(s, λ∞)
+    -MINO_ENDPOINT_TOL <= s < λ∞ || throw(DomainError(s,
+        "Mino time from the turning point must lie in [0, λ∞ = $(λ∞))."))
+    return max(s, 0.0)
 end
 
 function _d2_rminus(a)
     return 1 - sqrt(max(0.0, 1 - a^2))
 end
 
-function _d2_pole_n(roots, h)
-    alpha = roots.rC - roots.rA
-    beta = roots.rD - roots.rA
-    return beta * (roots.rC - h) / (alpha * (roots.rD - h))
-end
-
-function _d2_pole_primitive(a, energy, roots, h, phi)
-    n = _d2_pole_n(roots, h)
-    m = _d2_modulus(roots)
-    return _d2_prefactor(energy, roots) *
-           (Elliptic.F(phi, m) / (roots.rC - h) +
-            ((roots.rC - roots.rD) / ((roots.rD - h) * (roots.rC - h))) *
-            Elliptic.Pi(n, phi, m))
+# the pole primitive of 1/(r − h) on the D2 leg: F and the R_J term share the common R_F, no
+# division by r_C − h remains, and cos φ is not recovered from a sine close to one
+function _d2_pole_primitive(leg, h, phi)
+    roots = leg.roots
+    n1 = _four_real_characteristic(leg, h)[2]
+    s, c = sincos(phi)
+    alpha = (roots.rD - roots.rC) * (roots.rD - roots.rA) / ((roots.rC - roots.rA) * (roots.rD - h))
+    return leg.prefactor / (roots.rD - h) *
+        (_ellip_f(s, c, leg.m1) - alpha * _ellip_pole(s, c, leg.m1, n1))
 end
 
 function _d2_radial_residues(a, energy, lz)
@@ -185,111 +92,6 @@ function _d1_roots(outcome)
     return (x1=roots[1], x2=roots[2], x3=roots[3])
 end
 
-function _d1_A(roots)
-    return roots.x3 - roots.x1
-end
-
-function _d1_modulus(roots)
-    return (roots.x2 - roots.x1) / _d1_A(roots)
-end
-
-function _d1_scale(roots)
-    return sqrt(2 / _d1_A(roots))
-end
-
-function _d1_amplitude(roots, r)
-    r >= roots.x3 - 1e-12 || error("D1 radius lies below the outer turning point.")
-    return asin(sqrt(clamp(_d1_A(roots) / (r - roots.x1), 0.0, 1.0)))
-end
-
-function _d1_w(roots, phi)
-    return sqrt(max(1 - _d1_modulus(roots) * sin(phi)^2, 0.0))
-end
-
-function _d1_cot(phi)
-    return cos(phi) / sin(phi)
-end
-
-function _d1_csc2(phi)
-    return 1 / sin(phi)^2
-end
-
-function _d1_j2(roots, phi)
-    m = _d1_modulus(roots)
-    return -_d1_cot(phi) * _d1_w(roots, phi) +
-           Elliptic.F(phi, m) - Elliptic.E(phi, m)
-end
-
-function _d1_j4(roots, phi)
-    m = _d1_modulus(roots)
-    return ((2 + 2 * m) * _d1_j2(roots, phi) -
-            m * Elliptic.F(phi, m) -
-            _d1_cot(phi) * _d1_w(roots, phi) * _d1_csc2(phi)) / 3
-end
-
-function _d1_i0_primitive(roots, phi)
-    return _d1_scale(roots) * Elliptic.F(phi, _d1_modulus(roots))
-end
-
-function _d1_i1_primitive(roots, phi)
-    A = _d1_A(roots)
-    return _d1_scale(roots) *
-           (roots.x1 * Elliptic.F(phi, _d1_modulus(roots)) +
-            A * _d1_j2(roots, phi))
-end
-
-function _d1_i2_primitive(roots, phi)
-    A = _d1_A(roots)
-    return _d1_scale(roots) *
-           (roots.x1^2 * Elliptic.F(phi, _d1_modulus(roots)) +
-            2 * roots.x1 * A * _d1_j2(roots, phi) +
-            A^2 * _d1_j4(roots, phi))
-end
-
-function _d1_pole_primitive(roots, h, phi)
-    A = _d1_A(roots)
-    n = (h - roots.x1) / A
-    abs(n) > 1e-14 || error("The D1 pole primitive is undefined at zero characteristic (h = x1), where the horizon residue vanishes.")
-    m = _d1_modulus(roots)
-    return _d1_scale(roots) *
-           (Elliptic.Pi(n, phi, m) - Elliptic.F(phi, m)) / (A * n)
-end
-
-function _d1_positive_mino(roots, r)
-    phi = _d1_amplitude(roots, r)
-    return _d1_i0_primitive(roots, pi / 2) - _d1_i0_primitive(roots, phi)
-end
-
-function _d1_radius_from_turn_lambda(roots, target; max_iter=90)
-    target >= -2e-13 || error("D1 target lambda must be nonnegative from the turning point.")
-    target <= 2e-13 && return roots.x3
-    lambda_infinity = _d1_i0_primitive(roots, pi / 2)
-    target < lambda_infinity - 1e-12 ||
-        error("D1 Mino time must lie below λ∞ = $(lambda_infinity); the infinity endpoint is excluded.")
-    # closed-form inverse: F(φ|m) = K - target/scale with sin^2 φ = A/(r - x1)
-    m = _d1_modulus(roots)
-    φ = Elliptic.Jacobi.am(Elliptic.K(m) - target / _d1_scale(roots), m)
-    closed = roots.x1 + _d1_A(roots) / sin(φ)^2
-    isfinite(closed) && closed >= roots.x3 && return closed
-    low = roots.x3
-    span = 1.0
-    high = roots.x3 + span
-    while _d1_positive_mino(roots, high) < target
-        span *= 1.5
-        high = roots.x3 + span
-        high > 1e10 && error("Failed to bracket D1 radius from Mino time.")
-    end
-    for _ in 1:max_iter
-        mid = 0.5 * (low + high)
-        if _d1_positive_mino(roots, mid) < target
-            low = mid
-        else
-            high = mid
-        end
-    end
-    return 0.5 * (low + high)
-end
-
 function _d1_rminus(a)
     return 1 - sqrt(max(0.0, 1 - a^2))
 end
@@ -313,18 +115,10 @@ function _d1_radial_residues(a, lz)
     )
 end
 
-function _d1_positive_phi_radial_infinity(a, lz, roots)
+function _d1_positive_phi_radial_infinity(a, lz, leg)
     residues = _d1_radial_residues(a, lz)
-    total = 0.0
-    if abs(residues.c_phi_plus) > 1e-14
-        total += residues.c_phi_plus *
-                 _d1_pole_primitive(roots, residues.rplus, pi / 2)
-    end
-    if abs(residues.c_phi_minus) > 1e-14
-        total += residues.c_phi_minus *
-                 _d1_pole_primitive(roots, residues.rminus, pi / 2)
-    end
-    return total
+    return residues.c_phi_plus * _three_real_pole(leg, residues.rplus, pi / 2) +
+        residues.c_phi_minus * _three_real_pole(leg, residues.rminus, pi / 2)
 end
 
 function _d1_radial_phi_dot(a, lz, r)
@@ -392,7 +186,7 @@ function kerr_geo_scatter(a::Real, constants::Tuple{<:Real,<:Real,<:Real}; kwarg
 end
 
 function _impact_effective_magnitude(energy, lz, q)
-    energy > 1 + 1e-12 || return Inf
+    kerr_energy_regime(energy) === :hyperbolic || return Inf
     return sqrt(max(lz^2 + max(q, 0.0), 0.0)) / sqrt(_e2m1(energy))
 end
 
@@ -427,21 +221,19 @@ function _tuple_norm(v)
 end
 
 function _d2_infinity_amplitude(roots)
-    return asin(sqrt(clamp((roots.rC - roots.rA) / (roots.rD - roots.rA), 0.0, 1.0)))
+    return atan(sqrt((roots.rC - roots.rA) / (roots.rD - roots.rC)))
 end
 
-function _d2_positive_phi_radial_amplitude(a, energy, lz, roots, phi)
+function _d2_positive_phi_radial_amplitude(a, energy, lz, leg, phi)
     residues = _d2_radial_residues(a, energy, lz)
-    return residues.c_phi_plus *
-           _d2_pole_primitive(a, energy, roots, residues.rplus, phi) +
-           residues.c_phi_minus *
-           _d2_pole_primitive(a, energy, roots, residues.rminus, phi)
+    return residues.c_phi_plus * _d2_pole_primitive(leg, residues.rplus, phi) +
+           residues.c_phi_minus * _d2_pole_primitive(leg, residues.rminus, phi)
 end
 
-function _d2_positive_total_phi_infinity(a, energy, lz, roots)
-    phi_inf = _d2_infinity_amplitude(roots)
-    return _d2_positive_phi_radial_amplitude(a, energy, lz, roots, phi_inf) +
-           lz * _d2_i0_primitive(energy, roots, phi_inf)
+function _d2_positive_total_phi_infinity(a, energy, lz, leg)
+    phi_inf = _d2_infinity_amplitude(leg.roots)
+    return _d2_positive_phi_radial_amplitude(a, energy, lz, leg, phi_inf) +
+           lz * leg.lambda_infinity
 end
 
 function _d2_roots_from_scatter(kg::KerrGeoScatter)
@@ -457,7 +249,7 @@ function _d2_equatorial_asymptotic_diagnostics(kg::KerrGeoScatter)
     roots = _d2_roots_from_scatter(kg)
     p_inf = sqrt(_e2m1(energy))
     impact_magnitude = abs(lz) / p_inf
-    phi_turn_to_infinity = _d2_positive_total_phi_infinity(a, energy, lz, roots)
+    phi_turn_to_infinity = _d2_positive_total_phi_infinity(a, energy, lz, _four_real_leg(energy, roots))
     delta_phi = 2 * phi_turn_to_infinity
     lz_sign = sign(iszero(lz) ? 1.0 : lz)
     signed_deflection = delta_phi - lz_sign * pi
@@ -532,67 +324,14 @@ function _d2_generic_hyperbolic_asymptotic_diagnostics(kg::KerrGeoScatter)
     p_inf = sqrt(_e2m1(energy))
 
     polar_phase = kg.ReferenceZero.polar_phase === nothing ? 0.0 : kg.ReferenceZero.polar_phase
-    beta_zero_polar = abs(a^2 * _e2m1(energy)) <= 1e-14
-    polar_parameters = beta_zero_polar ?
-                       _parabolic_polar_parameters(lz, qcarter) :
-                       _hyperbolic_polar_parameters(a, energy, lz, qcarter)
-    start_polar_primitive = beta_zero_polar ?
-                            (
-                                phi=_parabolic_phi_angle_primitive(lz, polar_parameters, polar_phase),
-                                t=_parabolic_t_angle_primitive(a, lz, polar_parameters, polar_phase),
-                            ) :
-                            _hyperbolic_polar_global_primitive(
-                                a,
-                                energy,
-                                lz,
-                                polar_parameters,
-                                polar_phase,
-                            )
-    polar_in = beta_zero_polar ?
-               _parabolic_polar_formula(
-                   a,
-                   lz,
-                   polar_parameters,
-                   polar_phase,
-                   start_polar_primitive.phi,
-                   start_polar_primitive.t,
-                   -lambda_infinity,
-               ) :
-               _hyperbolic_polar_formula(
-                   a,
-                   energy,
-                   lz,
-                   polar_parameters,
-                   polar_phase,
-                   start_polar_primitive,
-                   -lambda_infinity,
-               )
-    polar_out = beta_zero_polar ?
-                _parabolic_polar_formula(
-                    a,
-                    lz,
-                    polar_parameters,
-                    polar_phase,
-                    start_polar_primitive.phi,
-                    start_polar_primitive.t,
-                    lambda_infinity,
-                ) :
-                _hyperbolic_polar_formula(
-                    a,
-                    energy,
-                    lz,
-                    polar_parameters,
-                    polar_phase,
-                    start_polar_primitive,
-                    lambda_infinity,
-                )
+    # the trajectory's own polar motion (same phase convention), φ zero at closest approach
+    polar = _window_polar_motion(a, energy, lz, qcarter, polar_phase)
+    polar_in = (z=polar.z(-lambda_infinity), uz=polar.uz(-lambda_infinity),
+        phi=polar.phi(-lambda_infinity))
+    polar_out = (z=polar.z(lambda_infinity), uz=polar.uz(lambda_infinity),
+        phi=polar.phi(lambda_infinity))
     radial_phi_infinity = _d2_positive_phi_radial_amplitude(
-        a,
-        energy,
-        lz,
-        roots,
-        _d2_infinity_amplitude(roots),
-    )
+        a, energy, lz, _four_real_leg(energy, roots), _d2_infinity_amplitude(roots))
     phi_in = -radial_phi_infinity + polar_in.phi
     phi_out = radial_phi_infinity + polar_out.phi
     delta_phi = phi_out - phi_in
@@ -663,7 +402,7 @@ function _d2_generic_hyperbolic_asymptotic_diagnostics(kg::KerrGeoScatter)
             impact_vector_convention=:incoming_screen_alpha_ephi_plus_beta_etheta,
             phi_reference=:closest_approach_zero,
             polar_phase=kg.ReferenceZero.polar_phase,
-            polar_formula=beta_zero_polar ? :beta_zero_elementary : :hyperbolic_jacobi,
+            polar_phase_convention=polar.metadata.phase_convention,
         ),
     )
 end
@@ -678,34 +417,17 @@ function _d1_parabolic_geometric_diagnostics(kg::KerrGeoScatter)
     a = kg.OrbitalParameters.a
     lz = kg.ConstantsOfMotion.Lz
     qcarter = kg.ConstantsOfMotion.Q
-    roots = _d1_roots_from_scatter(kg)
-    lambda_infinity = _d1_i0_primitive(roots, pi / 2)
+    leg = _three_real_leg(_d1_roots_from_scatter(kg))
+    lambda_infinity = leg.lambda_infinity
     polar_phase = kg.ReferenceZero.polar_phase === nothing ? 0.0 : kg.ReferenceZero.polar_phase
-    generic_inclined = abs(qcarter) > 1e-12
+    generic_inclined = !iszero(qcarter)
 
-    radial_phi_infinity = _d1_positive_phi_radial_infinity(a, lz, roots)
+    radial_phi_infinity = _d1_positive_phi_radial_infinity(a, lz, leg)
     if generic_inclined
-        polar_parameters = _parabolic_polar_parameters(lz, qcarter)
-        start_phi = _parabolic_phi_angle_primitive(lz, polar_parameters, polar_phase)
-        start_t = _parabolic_t_angle_primitive(a, lz, polar_parameters, polar_phase)
-        polar_in = _parabolic_polar_formula(
-            a,
-            lz,
-            polar_parameters,
-            polar_phase,
-            start_phi,
-            start_t,
-            -lambda_infinity,
-        )
-        polar_out = _parabolic_polar_formula(
-            a,
-            lz,
-            polar_parameters,
-            polar_phase,
-            start_phi,
-            start_t,
-            lambda_infinity,
-        )
+        # the trajectory's own polar motion (same phase convention)
+        polar = _window_polar_motion(a, kg.ConstantsOfMotion.E, lz, qcarter, polar_phase)
+        polar_in = (z=polar.z(-lambda_infinity), phi=polar.phi(-lambda_infinity))
+        polar_out = (z=polar.z(lambda_infinity), phi=polar.phi(lambda_infinity))
         z_in = polar_in.z
         z_out = polar_out.z
         phi_in = -radial_phi_infinity + polar_in.phi
@@ -791,12 +513,14 @@ function kerr_geo_scatter_asymptotic_diagnostics(kg::KerrGeoScatter)
     energy = kg.ConstantsOfMotion.E
     lz = kg.ConstantsOfMotion.Lz
     q = kg.ConstantsOfMotion.Q
-    equatorial = abs(q) <= 1e-12
-    if kg.Formula === :hyperbolic_scatter && equatorial && energy > 1 + 1e-12 && kg.Status.supported
+    equatorial = iszero(q)
+    regime = kerr_energy_regime(energy)
+    hyperbolic = regime === :hyperbolic
+    if kg.Formula === :hyperbolic_scatter && equatorial && hyperbolic && kg.Status.supported
         return _d2_equatorial_asymptotic_diagnostics(kg)
-    elseif kg.Formula === :hyperbolic_scatter && !equatorial && energy > 1 + 1e-12 && kg.Status.supported
+    elseif kg.Formula === :hyperbolic_scatter && !equatorial && hyperbolic && kg.Status.supported
         return _d2_generic_hyperbolic_asymptotic_diagnostics(kg)
-    elseif kg.Formula === :parabolic_scatter && abs(energy - 1) <= 1e-12 && kg.Status.supported
+    elseif kg.Formula === :parabolic_scatter && regime === :parabolic && kg.Status.supported
         return _d1_parabolic_geometric_diagnostics(kg)
     end
     magnitude = _impact_effective_magnitude(energy, lz, q)
@@ -811,8 +535,8 @@ function kerr_geo_scatter_asymptotic_diagnostics(kg::KerrGeoScatter)
          status=:unavailable)
     end
     scalar_status =
-        energy > 1 + 1e-12 && equatorial ? :equatorial_hyperbolic_scalar :
-        energy > 1 + 1e-12 ? :effective_impact_norm :
+        hyperbolic && equatorial ? :equatorial_hyperbolic_scalar :
+        hyperbolic ? :effective_impact_norm :
         :parabolic_velocity_at_infinity_singular
     return (
         formula=kg.Formula,
@@ -851,6 +575,12 @@ function kerr_geo_scatter_asymptotic_state(kg::KerrGeoScatter, side::Symbol)
     )
 end
 
+function Base.show(io::IO, kg::KerrGeoScatter)
+    print(io, "KerrGeoScatter(", kg.Formula, ", constants=")
+    show(io, kg.ConstantsOfMotion)
+    print(io, ", supported=", kg.Status.supported, ")")
+end
+
 function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeoScatter)
     println(io, "KerrGeoScatter(")
     print(io, "    Formula = "); show(io, kg.Formula); println(io, ",")
@@ -868,21 +598,26 @@ function _scatter_radial_model(formula, a, energy, lz, outcome)
     if formula === :hyperbolic_scatter
         roots = _d2_roots(outcome)
         roots === nothing && return nothing
-        return (radius=_d2_radius_map(energy, roots),
+        leg = _four_real_leg(energy, roots)
+        λ∞ = leg.lambda_infinity
+        return (radius=s -> (t = _leg_time(s, λ∞);
+                _four_real_radius(leg, t / leg.prefactor, (λ∞ - t) / leg.prefactor)),
             tdot=r -> _d2_radial_time_dot(a, energy, lz, r),
             phidot=r -> _d2_radial_phi_dot(a, energy, lz, r),
-            lambda_from_turn=r -> _d2_lambda_from_turn(energy, roots, r),
-            lambda_infinity=_d2_lambda_infinity(energy, roots), r_turn=roots.rD,
-            radial=(roots.rA, roots.rB, roots.rC, roots.rD), modulus=_d2_modulus(roots))
+            mino=r -> _four_real_mino_from_turn(leg, r),
+            lambda_infinity=λ∞, r_turn=roots.rD,
+            radial=(roots.rA, roots.rB, roots.rC, roots.rD), modulus=leg.m)
     else
         roots = _d1_roots(outcome)
         roots === nothing && return nothing
-        return (radius=s -> _d1_radius_from_turn_lambda(roots, s),
+        leg = _three_real_leg(roots)
+        λ∞ = leg.lambda_infinity
+        return (radius=s -> _three_real_radius_from_infinity(leg, λ∞ - _leg_time(s, λ∞)),
             tdot=r -> _d1_radial_time_dot(a, lz, r),
             phidot=r -> _d1_radial_phi_dot(a, lz, r),
-            lambda_from_turn=r -> _d1_positive_mino(roots, r),
-            lambda_infinity=_d1_i0_primitive(roots, pi / 2), r_turn=roots.x3,
-            radial=(roots.x1, roots.x2, roots.x3), modulus=_d1_modulus(roots))
+            mino=r -> λ∞ - _three_real_mino_from_infinity(leg, r),
+            lambda_infinity=λ∞, r_turn=roots.x3,
+            radial=(roots.x1, roots.x2, roots.x3), modulus=leg.m)
     end
 end
 
@@ -895,14 +630,18 @@ supported.
 function _scatter_finite_window(parameters, constants, outcome; polar_phase=0.0)
     formula = outcome.formula
     a, energy, lz, q = parameters.a, constants.E, constants.Lz, constants.Q
+    # The companion roots need the same metric-based correction as component roots.
+    coefficients = kerr_radial_coefficients(a, energy, lz, q)
+    corrected_roots = sort([_polish_root(coefficients, r) for r in outcome.roots])
+    outcome = merge(outcome, (roots=Tuple(corrected_roots),))
     unsupported(msg) = _unsupported_scatter(parameters, constants, outcome, msg)
     radial = _scatter_radial_model(formula, a, energy, lz, outcome)
     radial === nothing && return unsupported(
         "The radial roots do not have the structure required by the $formula formula.")
-    inclined = abs(q) > 1e-12
+    polar = _window_polar_motion(a, energy, lz, q, polar_phase)
+    inclined = polar.inclined
     inclined && parameters.input !== :constants && return unsupported(
         "Inclined scatter orbits need constants input (the APEX polar-phase convention is not defined).")
-    polar = _window_polar_motion(a, energy, lz, q, polar_phase)
 
     R(r) = kerr_radial_potential(a, energy, lz, q, r)
     Θ(z) = kerr_polar_z_potential(a, energy, lz, q, z)
@@ -912,14 +651,16 @@ function _scatter_finite_window(parameters, constants, outcome; polar_phase=0.0)
     # t, φ: radial spectral engine (infinity → turning point → infinity) + polar primitive,
     # zero at the turning point
     coords = _engine_coordinates(a, energy, lz, q, r_of_lambda, polar.primitive;
+        potential=_coefficient_potential(a, energy, lz, q),
         domain=(-radial.lambda_infinity, radial.lambda_infinity), ends=(:infinity, :infinity),
         turn=0.0, σ=1.0, λ_bl=0.0)
-    t, phi = coords.t, coords.phi
+    t(λ) = _coords_t(coords, λ)
+    phi(λ) = _coords_phi(coords, λ)
     tdot(λ) = radial.tdot(r_of_lambda(λ)) + polar.tdot(λ)
     phidot(λ) = radial.phidot(r_of_lambda(λ)) + polar.phidot(λ)
     utheta(λ) = inclined ? -polar.uz(λ) / sqrt(max(1 - polar.z(λ)^2, 0.0)) : 0.0
     function sample_by_radius(r; branch=:outgoing)
-        λ = radial.lambda_from_turn(r)
+        λ = radial.mino(r)
         branch === :incoming && return (lambda=-λ, r=r)
         branch === :outgoing && return (lambda=λ, r=r)
         error("sample_by_radius branch must be :incoming or :outgoing.")

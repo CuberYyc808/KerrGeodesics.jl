@@ -1,36 +1,15 @@
 # Horizon-root stable members (P(r+) = 0): A-H1 (stable island), A-H2 (stable spherical).
 
-function _horizon_stable_input(a,energy,lz,q)
-    metric=kerr_metric_limit(a)
-    metric in (:subextremal,:near_extremal) || throw(DomainError(
-        a,"A subextremal horizon-root stable orbit requires 0<|a|<1."))
-    0<energy<1 || throw(DomainError(
-        energy,"A horizon-root stable orbit requires 0<E<1."))
-    polar=kerr_polar_admissibility(a,energy,lz,q)
-    polar.admissible || throw(DomainError(
-        (energy,lz,q),"The polar potential is inadmissible."))
-    horizons=kerr_horizons(a)
-    pplus=kerr_radial_momentum(a,energy,lz,horizons.rplus)
-    abs(pplus)<=2e-10*max(1.0,abs(energy),abs(lz)) || throw(DomainError(
-        pplus,"A horizon-root Stable member requires P(r₊) = 0."))
-    structure=kerr_geo_root_structure(a,energy,lz,q)
-    length(structure.horizon_coincident)==1 || error(
-        "A horizon-root Stable member requires exactly one root of R on the outer horizon.")
-    only(structure.horizon_coincident).multiplicity==1 || error(
-        "The subextremal outer-horizon root must be simple.")
-    return horizons,structure
-end
-
 # A-H2: on the exterior (stable) double root, like the Critical members on their root.
 function _horizon_spherical_member(a,energy,lz,q,structure,polar)
     radius=only(structure.exterior).radius
     kerr_radial_derivatives(a,energy,lz,q,radius).R2<0 || error(
         "The horizon-root constant-radius member must be radially stable.")
     return _engine_member(:stable,:A_H2,a,energy,lz,q,polar,
-        _on_root_track(a,energy,lz,polar,radius);
-        roots=(radial=Tuple(root.radius for root in structure.real_roots),),
-        status=(formula_family=:HC_CONSTANT,formula_kind=:constant_radius,
-            stability=:stable))
+        _on_root_track(a,energy,lz,polar,radius),nothing,structure,nothing,kerr_geo_tier(:A_H2),
+        (radial=Tuple(root.radius for root in structure.real_roots),),
+        (formula_family=:HC_CONSTANT,formula_kind=:constant_radius,
+            stability=:stable),nothing)
 end
 
 # A-H1: libration between the two exterior roots, radial t, φ, τ from the closed-form moments
@@ -76,10 +55,10 @@ function _horizon_island_member(a,energy,lz,q,horizons,structure,polar)
         reference=(lambda0_event=:finite_turning_point,t_phi_zero_event=:finite_turning_point,
             t_phi_zero_lambda=0.0,t_phi_zero_radius=lower,tau_zero_event=:finite_turning_point,
             lambda_regular=nothing),trajectory=(;))
-    return _engine_member(:stable,:A_H1,a,energy,lz,q,polar,track;
-        roots=(radial=radii,),
-        status=(formula_family=:HC_FF01,formula_kind=:outer_four_real_libration,
-            radial_period=period))
+    return _engine_member(:stable,:A_H1,a,energy,lz,q,polar,track,nothing,structure,nothing,
+        kerr_geo_tier(:A_H1),(radial=radii,),
+        (formula_family=:HC_FF01,formula_kind=:outer_four_real_libration,
+            radial_period=period),nothing)
 end
 
 """
@@ -92,7 +71,27 @@ double root. t, φ and τ vanish at λ = 0, where `polar_phase` is the polar pha
 """
 function kerr_geo_horizon_stable(a::Real,energy::Real,lz::Real,q::Real;
         polar_sector=nothing,polar_phase::Real=0.0)
-    horizons,structure=_horizon_stable_input(a,energy,lz,q)
+    metric=kerr_metric_limit(a)
+    metric in (:subextremal,:near_extremal) || throw(DomainError(
+        a,"A subextremal horizon-root stable orbit requires 0<|a|<1."))
+    0<energy<1 || throw(DomainError(
+        energy,"A horizon-root stable orbit requires 0<E<1."))
+    horizons=kerr_horizons(a)
+    _horizon_root(a,energy,lz) || throw(DomainError(
+        kerr_radial_momentum(a,energy,lz,horizons.rplus),
+        "A horizon-root Stable member requires P(r₊) = 0."))
+    return _horizon_stable(a,energy,lz,q,horizons,kerr_geo_root_structure(a,energy,lz,q);
+        polar_sector=polar_sector,polar_phase=polar_phase)
+end
+
+# the A-H1 or A-H2 member of P(r₊) = 0 constants with the root structure `structure`
+function _horizon_stable(a,energy,lz,q,horizons,structure;polar_sector=nothing,polar_phase=0.0)
+    kerr_polar_admissibility(a,energy,lz,q).admissible || throw(DomainError(
+        (energy,lz,q),"The polar potential is inadmissible."))
+    length(structure.horizon_coincident)==1 || error(
+        "A horizon-root Stable member requires exactly one root of R on the outer horizon.")
+    only(structure.horizon_coincident).multiplicity==1 || error(
+        "The subextremal outer-horizon root must be simple.")
     sector=polar_sector===nothing ? _constants_polar_sector(energy,lz,q) : polar_sector
     polar=_polar_solution(a,energy,lz,q,sector,float(polar_phase))
     if length(structure.exterior)==2 &&

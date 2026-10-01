@@ -26,7 +26,7 @@ function _outcome_at_infinity(a::Real, energy::Real, lz::Real, q::Real; atol=1e-
     rplus = _rplus(a)
     real_roots = _real_roots(radial_roots_for_constants(a, energy, lz, q); atol=atol)
     root_class = _root_class_symbol(length(real_roots))
-    regime = energy < 1 - atol ? :elliptic : abs(energy - 1) <= atol ? :parabolic : :hyperbolic
+    regime = kerr_energy_regime(energy)
     record(formula, outcome, reason) = (formula=formula, outcome=outcome,
         energy_regime=regime, root_class=root_class, roots=Tuple(real_roots), reason=reason)
     regime === :elliptic && return record(:elliptic, :plunge, "E < 1: no motion to infinity.")

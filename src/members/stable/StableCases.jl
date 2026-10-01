@@ -1,43 +1,31 @@
 # Class A (Stable) helpers: the APEX inclination x from the constants, the constants residual,
 # selection of the Stable component and its stability metadata.
 
-function _polar_turning_cosine_squared(a, energy, lz, q; atol=1.0e-11)
-    abs(lz) <= atol && return 1.0
-    beta = a^2 * _e2m1(energy)
-    quadratic = -beta
-    linear = beta - q - lz^2
-    roots_u = Float64[]
-    if abs(quadratic) <= atol
-        abs(linear) <= atol && error(
-            "The polar turning point is not isolated: a²(E² − 1) and Q + Lz² both vanish.")
-        push!(roots_u, -q / linear)
-    else
-        discriminant = linear^2 - 4 * quadratic * q
-        discriminant >= -atol || error(
-            "Polar APEX inversion has no real turning point.")
-        root = sqrt(max(0.0, discriminant))
-        push!(roots_u, (-linear - root) / (2 * quadratic))
-        push!(roots_u, (-linear + root) / (2 * quadratic))
-    end
-    admissible = [clamp(value, 0.0, 1.0) for value in roots_u
-        if -atol <= value <= 1 + atol]
+# (E < 1 and Q ≥ 0: the discriminant (Q − c)² + 2(Q + c)Lz² + Lz⁴ is never negative)
+function _polar_turning_cosine_squared(a, energy, lz, q)
+    _zero_lz(a, energy, lz, q) && return 1.0
+    roots = _polar_quadratic_roots(a, energy, lz, q)
+    iszero(roots.c) && iszero(q + lz^2) && error(
+        "The polar turning point is not isolated: a²(E² − 1) and Q + Lz² both vanish.")
+    admissible = [clamp(value, 0.0, 1.0) for value in (roots.u_small, roots.u_big)
+        if -POLAR_ROOT_SLACK <= value <= 1 + POLAR_ROOT_SLACK]
     isempty(admissible) && error(
         "Polar APEX inversion found no turning point in cos(theta)^2 in [0,1].")
     return maximum(admissible)
 end
 
-function _apex_x(a, energy, lz, q; atol=1.0e-11)
-    abs(lz) <= atol && return 0.0
-    uturn = _polar_turning_cosine_squared(a, energy, lz, q; atol=atol)
+function _apex_x(a, energy, lz, q)
+    _zero_lz(a, energy, lz, q) && return 0.0
+    uturn = _polar_turning_cosine_squared(a, energy, lz, q)
     # x² = 1 − z²_turn, formed without cancellation (near-polar orbits: x → 0)
     return sign(lz) * sqrt(max(0.0, _polar_one_minus_root(a, energy, lz, q, uturn)))
 end
 
 function _constants_residual(input, reconstructed)
     residuals = (
-        E=reconstructed["E"] - input.E,
-        Lz=reconstructed["Lz"] - input.Lz,
-        Q=reconstructed["Q"] - input.Q,
+        E=reconstructed.E - input.E,
+        Lz=reconstructed.Lz - input.Lz,
+        Q=reconstructed.Q - input.Q,
     )
     scaled = (
         E=abs(residuals.E) / max(1.0, abs(input.E)),
@@ -75,9 +63,8 @@ function kerr_geo_stability_metadata(a::Real, energy::Real, lz::Real, q::Real,
         component::KerrGeoRadialComponent; atol::Real=1.0e-8)
     component.CaseId in (:A1, :A2) || error(
         "Stability metadata requires a Class A component.")
-    equatorial = abs(q) <= atol
     shape = component.CaseId === :A1 ? :eccentric :
-        equatorial ? :circular : :spherical
+        iszero(q) ? :circular : :spherical
     if component.CaseId === :A1
         stability = :not_applicable_nonconstant_radius
         radial_derivatives = nothing

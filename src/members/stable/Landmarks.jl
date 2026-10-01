@@ -3,12 +3,8 @@
 
 # Innermost stable circular orbit (ISCO)
 
-schwarzschild_geo_isco(a::Real, x::Real) = 6.0
-
+# Bardeen's closed form, x = ±1 and a ≠ 0
 function kerr_equatorial_isco(a::Real, x::Real)
-    @assert isapprox(abs(x), 1.0; atol=1e-12) "Equatorial ISCO requires x = ±1"
-    @assert !isapprox(a, 0.0; atol=1e-12) "For a ≈ 0 use schwarzschild_geo_isco"
-
     # Use real cube roots to avoid complex branches for negative arguments
     Z1 = 1 + cbrt(1 - a^2) * (cbrt(1 + a) + cbrt(1 - a))
     Z2 = sqrt(3*a^2 + Z1^2)
@@ -29,28 +25,19 @@ Return the ISCO radius: 6 for `a = 0`, and for `a ≠ 0` the equatorial ISCO wit
 """
 function kerr_geo_isco(a::Real, x::Real)
     if isapprox(a, 0.0; atol=1e-12)
-        return schwarzschild_geo_isco(a, x)
+        return 6.0
     elseif isapprox(abs(x), 1.0; atol=1e-12)
         return kerr_equatorial_isco(a, x)
     else
-        error("kerr_geo_isco is defined for a = 0 and for equatorial orbits (x = ±1); " *
-            "for inclined orbits use kerr_geo_isso(a, x).")
+        throw(DomainError(x, "kerr_geo_isco is defined for a = 0 and for equatorial " *
+            "orbits (x = ±1); for inclined orbits use kerr_geo_isso(a, x)."))
     end
 end
 
 # Photon Sphere
 
-schwarzschild_photon_sphere_radius(a::Real, x::Real) = 3.0
-
-function kerr_equatorial_photon_sphere_radius(a::Real, x::Real)
-    @assert isapprox(abs(x), 1.0; atol=1e-12) "Equatorial formula requires x = ±1"
-    if x > 0
-        return 2 * (1 + cos((2/3) * acos(-a)))
-    else
-        # x == -1
-        return 2 * (1 + cos((2/3) * acos(a)))
-    end
-end
+# x = ±1: prograde for a x > 0
+kerr_equatorial_photon_sphere_radius(a::Real, x::Real) = 2 * (1 + cos((2/3) * acos(-a * sign(x))))
 
 function kerr_polar_photon_sphere_radius(a::Real, x::Real)
     arg_denom = (1 - (a^2) / 3.0)
@@ -60,114 +47,23 @@ function kerr_polar_photon_sphere_radius(a::Real, x::Real)
     return 1.0 + 2.0 * sqrt(arg_denom) * cos((1/3) * acos(inside_clamped))
 end
 
+# |a| = 1 (the caller's test); (a, x) → (−a, −x) is a symmetry
 function kerr_extremal_photon_sphere_radius(a::Real, x::Real)
-    if isapprox(a, 1.0; atol=1e-12)
-        if x < sqrt(3) - 1
-            return 1.0 + sqrt(2.0) * sqrt(1.0 - x) - x
-        else
-            return 1.0
-        end
-    elseif isapprox(a, -1.0; atol=1e-12)
-        # use symmetry
-        return kerr_extremal_photon_sphere_radius(1.0, -x)
-    else
-        error("kerr_extremal_photon_sphere_radius only for a ≈ ±1")
-    end
-end
-
-function _u0sq_of_r(a::Real, r::Real)
-    # avoid singularities: r != 1 for these formulas
-    if isapprox(r, 1.0; atol=1e-14)
-        throw(DomainError(r, "The spherical photon-orbit formula is singular at r = 1."))
-    end
-    # Phi
-    Phi = -((r^3 - 3.0*r^2 + a^2*r + a^2) / (a * (r - 1.0)))
-    # Q
-    Q = - ( r^3 * (r^3 - 6.0*r^2 + 9.0*r - 4.0*a^2) ) / ( a^2 * (r - 1.0)^2 )
-    # discriminant inside sqrt
-    D = (a^2 - Q - Phi^2)
-    arg = D^2 + 4.0*a^2*Q
-    if arg < 0
-        # no real spherical photon orbit at this r
-        return NaN
-    end
-    return (D + sqrt(arg)) / (2.0*a^2)
-end
-
-function _photon_equation(a::Real, x0::Real)
-    f(r) = begin
-        u0 = _u0sq_of_r(a, r)
-        if isnan(u0) || !isfinite(u0)
-            # cause root finder to avoid this r
-            return NaN
-        end
-        return 1.0 - u0 - x0^2
-    end
-    return f
+    a < 0 && return kerr_extremal_photon_sphere_radius(-a, -x)
+    return x < sqrt(3) - 1 ? 1.0 + sqrt(2.0) * sqrt(1.0 - x) - x : 1.0
 end
 
 function kerr_geo_photon_sphere_radius_numeric(a::Real, x0::Real)
     @assert abs(x0) <= 1.0 "Inclination x must satisfy |x| ≤ 1"
-    @assert !isapprox(a, 0.0; atol=1e-12) "Numeric routine only for a ≠ 0; use Schwarzschild formula for a ≈ 0"
-
-    # analytic reference radii
-    req = kerr_equatorial_photon_sphere_radius(a, sign(x0))   # equatorial of same sign
-    rpolar = kerr_polar_photon_sphere_radius(a, 0.0)
-
-    # function to root-find
-    f = _photon_equation(a, x0)
-
-    # bracket based on req,rpolar
-    lo = min(req, rpolar)
-    hi = max(req, rpolar)
-
-    # the two reference radii nearly coincide for small |a|: widen the bracket
-    if isapprox(lo, hi; atol=1e-12)
-        lo = lo * 0.999
-        hi = hi * 1.001
-    end
-
-    # attempt bracketed root find first
-    try
-        # require sign change in bracket: if there's no sign change, find_zero will fail; catch and fallback
-        rroot = find_zero(f, (lo, hi))
-        if !isreal(rroot)
-            throw(ErrorException("Root is not real"))
-        end
-        # sanity: check returned r is finite and gives real-valued equation
-        val = f(rroot)
-        if !isfinite(val)
-            throw(ErrorException("Non-finite value at root"))
-        end
-        return real(rroot)
-    catch err1
-        # fallback: derivative-free iteration from the midpoint (Roots.jl default for one guess)
-        mid = (req + rpolar) / 2.0
-        try
-            rroot2 = find_zero(f, mid)   # single initial guess (method auto-chosen)
-            if !isreal(rroot2)
-                throw(ErrorException("Root is not real (midpoint fallback)"))
-            end
-            val2 = f(rroot2)
-            if !isfinite(val2)
-                throw(ErrorException("Non-finite value at root (midpoint fallback)"))
-            end
-            return real(rroot2)
-        catch err2
-            # final fallback: try a little outward bracket expansion and attempt again
-            lo2 = lo * 0.9
-            hi2 = hi * 1.1
-            try
-                rroot3 = find_zero(f, (lo2, hi2))
-                if !isreal(rroot3)
-                    throw(ErrorException("Root is not real (expanded bracket)"))
-                end
-                return real(rroot3)
-            catch err3
-                throw(ErrorException("Photon-sphere root-finding failed. Tried bracket [$(lo),$(hi)], midpoint $(mid) and expanded bracket. Errors:\n 1) $(err1)\n 2) $(err2)\n 3) $(err3)"))
-            end
-        end
-    end
+    @assert 0 < abs(a) < 1 "Numeric photon radius requires 0 < |a| < 1."
+    # Eliminate the null constants using K = (Phi/x - a*x)^2 and R = R' = 0.
+    # With t = r - 1, Delta = (t - delta)(t + delta); no division by a or r - 1
+    # is needed. The physical root is bracketed by the outer horizon and r = 4.
+    delta2 = (1 - a) * (1 + a)
+    delta = sqrt(delta2)
+    f(t) = t^3 + (a^2 * (1 + x0^2) - 3) * t - 2 * delta2 +
+        2 * a * x0 * (1 + t) * sqrt((t - delta) * (t + delta))
+    return 1 + find_zero(f, (delta, 3.0), Bisection())
 end
 
 function kerr_geo_photon_sphere_radius(a::Real, x::Real)
@@ -175,7 +71,7 @@ function kerr_geo_photon_sphere_radius(a::Real, x::Real)
 
     # Schwarzschild case
     if isapprox(a, 0.0; atol=1e-12)
-        return schwarzschild_photon_sphere_radius(a, x)
+        return 3.0
     end
 
     # Extremal analytic
@@ -197,149 +93,81 @@ function kerr_geo_photon_sphere_radius(a::Real, x::Real)
     return kerr_geo_photon_sphere_radius_numeric(a, x)
 end
 
-# Innermost spherical orbits with E = 1 (IBSO)
+# Separatrix, IBSO and ISSO
+
+"""
+    kerr_geo_separatrix(a, e, x)
+
+The separatrix `ps(a, e, x)`: the semi-latus rectum at which the pericentre p/(1 + e) is a
+double root of the radial potential. For e < 1 it is the smallest p of a stable orbit with
+eccentricity `e` and inclination `x` (below it the orbit plunges; on it the orbit is Critical,
+the ISCO or ISSO for e = 0 and a homoclinic orbit for 0 < e < 1); for e ≥ 1 it separates
+scattering from capture (2 r_IBSO for e = 1). It is found by bisection on the sign of the
+deflated radial polynomial at the pericentre, with the constants of motion of each trial
+orbit, between the extremal prograde and retrograde equatorial values 1 + e and
+5 + e + 4√(1 + e). When no timelike orbit of this eccentricity and inclination has a double
+root at its pericentre (in Schwarzschild spacetime e > 3, where E² < 0 at p = 6 + 2e), a
+`DomainError` is raised.
+"""
+function kerr_geo_separatrix(a::Real, e::Real, x::Real)
+    (abs(a) <= 1 && e >= 0 && abs(x) <= 1) || throw(DomainError((a, e, x),
+        "kerr_geo_separatrix needs |a| ≤ 1, e ≥ 0 and |x| ≤ 1."))
+    lo, hi = float(1 + e), float(5 + e + 4 * sqrt(1 + e))
+    # at |a| = 1 the prograde equatorial family ends on the horizon, p = 1 + e, where its constants
+    # are degenerate (r = 1 is a double root of Δ and of R) and the residual is rounding noise
+    abs(a) == 1 && x == sign(a) && return lo
+    # true inside the separatrix, false outside, missing where no timelike orbit has these roots
+    inside(p) = try
+        _apex_separatrix_residual(a, p, e, x) > 0
+    catch err
+        err isa DomainError || rethrow()
+        missing
+    end
+    # p = 1 + e (pericentre on the horizon) lies below every separatrix; it is never evaluated,
+    # since at |a| = 1 it is the degenerate horizon-root family
+    lo_state = missing
+    # for e > 1 the family of timelike orbits can begin above the extremal retrograde value
+    while inside(hi) !== false
+        hi *= 2
+        isfinite(hi) || throw(DomainError((a, e, x), "No stable or scattering orbit found."))
+    end
+    p0 = lo
+    while true
+        mid = (lo + hi) / 2
+        (mid == lo || mid == hi) && break
+        state = inside(mid)
+        if state === false
+            hi = mid
+        else
+            lo, lo_state = mid, state
+        end
+    end
+    lo_state === true && return hi
+    # The sign change sits at the lower end of the family of timelike orbits. Either the family ends
+    # on a marginally stable orbit at the horizon limit p = 1 + e (|a| = 1, prograde: the constants
+    # tend to finite values, and rounding hides the residual within the last ~1e-8 of p) or it
+    # ends where E² ∝ 1/(p − p_b) diverges (in Schwarzschild spacetime p_b = 3 + e² for e > 3, the
+    # null limit; every timelike orbit with e ≥ 3 scatters). At twice the distance from the lower
+    # end the energy is unchanged in the first case and smaller by √2 in the second.
+    E_near = _apex_constants(a, hi, e, x).E
+    E_far = try
+        _apex_constants(a, p0 + 2 * (hi - p0), e, x).E
+    catch err
+        err isa DomainError || rethrow()
+        E_near                  # still within the rounding sliver above the horizon limit
+    end
+    E_near < 2^(1 / 4) * E_far && return p0
+    throw(DomainError((a, e, x),
+        "No timelike orbit with this eccentricity and inclination has a double root at its pericentre."))
+end
 
 """
     kerr_geo_ibso(a, x)
 
 The radius of the innermost bound spherical orbit of inclination `x`: the unstable spherical
-orbit with E = 1, also called the marginally bound orbit.
+orbit with E = 1, also called the marginally bound orbit; half the e = 1 separatrix.
 """
-function kerr_geo_ibso(a::Real, x::Real)
-    # Schwarzschild
-    if isapprox(a, 0.0; atol=1e-12)
-        return 4.0
-    end
-
-    # Equatorial prograde (x = +1)
-    if isapprox(x, 1.0; atol=1e-12)
-        return 2 - a + 2 * sqrt(1 - a)
-    end
-
-    # Equatorial retrograde (x = -1)
-    if isapprox(x, -1.0; atol=1e-12)
-        return 2 + a + 2 * sqrt(1 + a)
-    end
-
-    # Polar orbits (x = 0)
-    if isapprox(x, 0.0; atol=1e-12)
-        δ = 27*a^4 - 8*a^6 + 3*sqrt(3) * sqrt(27*a^8 - 16*a^10)
-        return 1 + sqrt(12 - 4*a^2 -
-            (6*sqrt(6)*(a^2 - 2)) / sqrt(6 - 2*a^2 + 4*a^4/δ^(1/3) + δ^(1/3)) -
-            4*a^4/δ^(1/3) - δ^(1/3)) / sqrt(6) +
-            sqrt(6 - 2*a^2 + 4*a^4/δ^(1/3) + δ^(1/3)) / sqrt(6)
-    end
-
-    # Extremal case a=1, x=0
-    if isapprox(a, 1.0; atol=1e-12) && isapprox(x, 0.0; atol=1e-12)
-        return (3 + (54 - 6*sqrt(33))^(1/3) + (6*(9 + sqrt(33)))^(1/3)) / 3
-    end
-
-    # Generic case: numerical root of IBSO polynomial
-    IBSOPoly(p, a, x) = ( (-4+p)^2 * p^6 +
-        a^8 * (1 - x^2)^2 +
-        2*a^2*p^5 * (-8 + 2*p + 4*x^2 - 3*p*x^2) +
-        2*a^6*p^2 * (2 - 5*x^2 + 3*x^4) +
-        a^4*p^3 * (-8*(1 - 3*x^2 + 2*x^4) + p*(6 - 14*x^2 + 9*x^4)) )
-
-    # Initial guesses depend on sign of x
-    if x >= 0
-        guess1 = kerr_geo_ibso(a, 1.0)
-        guess2 = kerr_geo_ibso(a, 0.0)
-    else
-        guess1 = kerr_geo_ibso(a, 0.0)
-        guess2 = kerr_geo_ibso(a, -1.0)
-    end
-
-    return find_zero(p -> IBSOPoly(p, a, x), (guess1, guess2), Bisection())
-end
-
-# Separatrix
-
-"""
-    kerr_geo_separatrix(a, e, x)
-
-The separatrix `ps(a, e, x)`: the smallest semi-latus rectum of a stable orbit with
-eccentricity `e` and inclination `x`. Below it the orbit plunges; on it the orbit is Critical
-(the ISCO or ISSO for e = 0, a homoclinic orbit for 0 < e < 1).
-
-Closed forms are used where they exist: `6 + 2e` for a = 0, `1 + e` for prograde equatorial
-orbits at a = 1, the polar orbits at a = 1 with e = 0 and e = 1, and `2 kerr_geo_ibso(a, x)`
-for e = 1. Elsewhere `ps` is the root of the separatrix polynomial conditions. Negative spin
-uses the symmetry (a, x) → (−a, −x).
-"""
-function kerr_geo_separatrix(a::Real, e::Real, x::Real)
-    # Negative spin symmetry
-    if a < 0
-        return kerr_geo_separatrix(-a, e, -x)
-    end
-
-    # Schwarzschild limit
-    if isapprox(a, 0.0; atol=1e-12)
-        return 6 + 2*e
-    end
-
-    # Extremal Kerr (a=1), equatorial prograde
-    if isapprox(a, 1.0; atol=1e-12) && isapprox(x, 1.0; atol=1e-12)
-        return 1 + e
-    end
-
-    # Extremal Kerr polar special cases
-    if isapprox(a, 1.0; atol=1e-12) && isapprox(x, 0.0; atol=1e-12)
-        if isapprox(e, 0.0; atol=1e-12)
-            return 1 + sqrt(3) + sqrt(3 + 2*sqrt(3))
-        elseif isapprox(e, 1.0; atol=1e-12)
-            return (3 + (54 - 6*sqrt(33))^(1/3) + (6*(9 + sqrt(33)))^(1/3)) * (2/3)
-        end
-    end
-
-    # For e=1, separatrix = 2 * IBSO
-    if isapprox(e, 1.0; atol=1e-12)
-        return 2 * kerr_geo_ibso(a, x)
-    end
-
-    # Separatrix polynomials: general inclination, equatorial (x = ±1) and polar (x = 0)
-    SepPoly(p, a, e, x) = (
-        -4*(3+e)*p^11+p^12+a^12*(-1+e)^4*(1+e)^8*(-1+x)^4*(1+x)^4
-        -4*a^10*(-3+e)*(-1+e)^3*(1+e)^7*p*(-1+x^2)^4
-        -4*a^8*(-1+e)*(1+e)^5*p^3*(-1+x)^3*(1+x)^3*(7-7*x^2-e^2*(-13+x^2)+e^3*(-5+x^2)+7*e*(-1+x^2))
-        +8*a^6*(-1+e)*(1+e)^3*p^5*(-1+x^2)^2*(3+e+12*x^2+4*e*x^2+e^3*(-5+2*x^2)+e^2*(1+2*x^2))
-        -8*a^4*(1+e)^2*p^7*(-1+x)*(1+x)*(-3+e+15*x^2-5*e*x^2+e^3*(-5+3*x^2)+e^2*(-1+3*x^2))
-        +4*a^2*p^9*(-7-7*e+e^3*(-5+4*x^2)+e^2*(-13+12*x^2))
-        +2*a^8*(-1+e)^2*(1+e)^6*p^2*(-1+x^2)^3*(2*(-3+e)^2*(-1+x^2)
-        +a^2*(e^2*(-3+x^2)-3*(1+x^2)+2*e*(1+x^2)))
-        -2*p^10*(-2*(3+e)^2+a^2*(-3+6*x^2+e^2*(-3+2*x^2)+e*(-2+4*x^2)))
-        +a^6*(1+e)^4*p^4*(-1+x^2)^2*(-16*(-1+e)^2*(-3-2*e+e^2)*(-1+x^2)
-        +a^2*(15+6*x^2+9*x^4+e^2*(26+20*x^2-2*x^4)+e^4*(15-10*x^2+x^4)+4*e^3*(-5-2*x^2+x^4)
-        -4*e*(5+2*x^2+3*x^4)))-4*a^4*(1+e)^2*p^6*(-1+x)*(1+x)*(-2*(11-14*e^2+3*e^4)*(-1+x^2)
-        +a^2*(5-5*x^2-9*x^4+4*e^3*x^2*(-2+x^2)+e^4*(5-5*x^2+x^4)+e^2*(6-6*x^2+4*x^4)))
-        +a^2*p^8*(-16*(1+e)^2*(-3+2*e+e^2)*(-1+x^2)+a^2*(15-36*x^2+30*x^4+e^4*(15-20*x^2+6*x^4)
-        +4*e^3*(5-12*x^2+6*x^4)+4*e*(5-12*x^2+10*x^4)+e^2*(26-72*x^2+44*x^4)))
-    )
-
-    SepEquat(p, a, e) = a^4*(-3-2*e+e^2)^2 + p^2*(-6-2*e+p)^2 - 2*a^2*(1+e)*p*(14+2*e^2+3*p-e*p)
-    SepPolar(p, a, e) = a^6*(e-1)^2*(1+e)^4 + p^5*(-6-2*e+p) +
-                        a^2*p^3*(-4*(e-1)*(1+e)^2 + (3+e*(2+3*e))*p) -
-                        a^4*(1+e)^2*p*(6+2*e^3 + 2*e*(-1+p) - 3*p - 3*e^2*(2+p))
-
-    # Numerical cases
-    if isapprox(x, 1.0; atol=1e-12)   # Equatorial prograde
-        return find_zero(p -> SepEquat(p, a, e), (1+e, 6+2*e), Bisection())
-    elseif isapprox(x, -1.0; atol=1e-12) # Equatorial retrograde
-        return find_zero(p -> SepEquat(p, a, e), (6+2*e, 5+e+4*sqrt(1+e)), Bisection())
-    elseif isapprox(x, 0.0; atol=1e-12)  # Polar
-        return find_zero(p -> SepPolar(p, a, e), (1+sqrt(3)+sqrt(3+2*sqrt(3)), 8.0), Bisection())
-    elseif 0 < x && x < 1  # Inclined prograde
-        p1 = kerr_geo_separatrix(a, e, 1.0)
-        p2 = kerr_geo_separatrix(a, e, 0.0)
-        return find_zero(p -> SepPoly(p, a, e, x), (p1, p2), Bisection())
-    elseif -1 < x && x < 0  # Inclined retrograde
-        p1 = kerr_geo_separatrix(a, e, 0.0)
-        return find_zero(p -> SepPoly(p, a, e, x), (p1, 12.0), Bisection())
-    else
-        error("Invalid inclination x=$x, must be in [-1,1]")
-    end
-end
+kerr_geo_ibso(a::Real, x::Real) = kerr_geo_separatrix(a, 1.0, x) / 2
 
 # Innermost stable spherical orbit (ISSO)
 
@@ -349,13 +177,7 @@ end
 Return the ISSO radius: the innermost stable spherical orbit of inclination `x`, i.e. the
 `e = 0` separatrix (the equatorial ISCO for `x = ±1`).
 """
-function kerr_geo_isso(a::Real, x::Real)
-    if isapprox(abs(x), 1.0, atol = 1e-12)
-        return kerr_geo_isco(a, x)
-    else
-        return kerr_geo_separatrix(a, 0.0, x)
-    end
-end
+kerr_geo_isso(a::Real, x::Real) = kerr_geo_separatrix(a, 0.0, x)
 
 """
     kerr_geo_orbit_type_metadata(a, p, e, x)
@@ -374,7 +196,13 @@ function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
     circular = iszero_tol(e)
     inclination = iszero_tol(abs(x) - 1) ? "Equatorial" : "Inclined"
     shape = circular ? "Circular" : e < 1 ? "Eccentric" : iszero_tol(e - 1) ? "Parabolic" : "Hyperbolic"
-    separatrix_p = circular ? kerr_geo_isso(a, x) : kerr_geo_separatrix(a, e, x)
+    # e ≥ 1 without a separatrix (no timelike orbit of this eccentricity has a double root at
+    # its pericentre): every orbit scatters
+    separatrix_p = circular ? kerr_geo_isso(a, x) :
+        try kerr_geo_separatrix(a, e, x) catch err
+            (err isa DomainError && e >= 1) || rethrow()
+            NaN
+        end
     photon_p = circular ? kerr_geo_photon_sphere_radius(a, x) : NaN
     ibso_p = circular ? kerr_geo_ibso(a, x) : NaN
     isso_p = circular ? kerr_geo_isso(a, x) : NaN
@@ -400,7 +228,8 @@ function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
         p_effective > separatrix_p ? ("Stable", "Stable") : ("Plunge", "Unstable")
     else
         on_separatrix ? ("Critical", "Unstable") :
-        p_effective > separatrix_p ? ("Scatter", "NotApplicable") : ("Capture", "Unstable")
+        p_effective > separatrix_p || isnan(separatrix_p) ? ("Scatter", "NotApplicable") :
+        ("Capture", "Unstable")
     end
     known = family != "NotClassified"
     return (
@@ -432,4 +261,3 @@ Return the orbit-type labels `[family, shape, inclination]` of
 function kerr_geo_orbit_type(a::Real, p::Real, e::Real, x::Real)
     return kerr_geo_orbit_type_metadata(a, p, e, x).labels
 end
-

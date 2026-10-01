@@ -23,6 +23,12 @@ struct KerrGeoPlunge
     Status::NamedTuple
 end
 
+function Base.show(io::IO, kg::KerrGeoPlunge)
+    print(io, "KerrGeoPlunge(constants=")
+    show(io, kg.ConstantsOfMotion)
+    print(io, ", supported=", kg.Status.supported, ")")
+end
+
 function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeoPlunge)
     println(io, "KerrGeoPlunge(")
     print(io, "    ConstantsOfMotion = "); show(io, kg.ConstantsOfMotion); println(io, ",")

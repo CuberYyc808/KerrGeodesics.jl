@@ -116,17 +116,23 @@ function _polar_period_azimuth(a, energy, lz, q, sector)
     b = q + lz^2 + c
     if sector === :vortical
         # u₋ < u₊ < 1, c < 0; 1 − u₊ = −Lz²/(c (1 − u₋)) from Θ(1) = −Lz²
+        # u₊ from the stable pair of Θ, 1 − u₊ from that of Θ(1 − w) = c w² − (2c − b) w − Lz²
+        # (same discriminant) and the width u₊ − u₋ = s/|c| directly: each keeps its digits whether
+        # the band lies next to the equator or next to the axis
         s = sqrt(b^2 - 4c * q)
         big_root = (b + copysign(s, b)) / (2c)
-        small_root = q / (c * big_root)
-        um, up = minmax(big_root, small_root)
-        ε = -lz^2 / (c * (1 - um))
+        up = max(big_root, q / (c * big_root))
+        t = 2c - b
+        ε = -lz^2 / (c * ((t + copysign(s, t)) / (2c)))    # 1 − u₊ = −Lz²/(c (1 − u₋))
+        dw = s / (-c)
         β = -c
-        f(ζ) = lz / (sqrt(up - (up - um) * sin(ζ)^2) * (ε + (up - um) * sin(ζ)^2) * sqrt(β))
+        f(ζ) = lz / (sqrt(up - dw * sin(ζ)^2) * (ε + dw * sin(ζ)^2) * sqrt(β))
         return 2 * quadgk(f, 0.0, pi / 2; rtol=1e-14)[1]
     end
     iszero(a) && return pi * sign(lz)
-    # pendular: u₁ = z²_max; G(u) = Θ(u)/(u₁ − u) = Q/u₁ − c u; 1 − u₁ = −Lz²/(c (1 − u₂))
+    # pendular: u₁ = z²_max is the root of Θ in (0, 1]; G(u) = Θ(u)/(u₁ − u) = Q/u₁ − c u.
+    # ε = 1 − u₁ is the root in (0, 1] of Θ(1 − w) = c w² − (2c − b) w − Lz² (same discriminant,
+    # roots with product −Lz²/c), so it keeps its digits when u₂ lies within rounding of 1
     if iszero(c)
         u1 = q / b; ε = lz^2 / b
     else
@@ -134,8 +140,10 @@ function _polar_period_azimuth(a, energy, lz, q, sector)
         r_big = (b + copysign(s, b)) / (2c)
         r_small = q / (c * r_big)
         u1 = 0 < r_small <= 1 ? r_small : r_big
-        u2 = u1 === r_small ? r_big : r_small
-        ε = -lz^2 / (c * (1 - u2))
+        t = 2c - b
+        w_big = (t + copysign(s, t)) / (2c)
+        w_small = -lz^2 / (c * w_big)
+        ε = 0 < w_small <= 1 ? w_small : w_big
     end
     g(ζ) = lz / ((ε + u1 * sin(ζ)^2) * sqrt(q / u1 - c * u1 * cos(ζ)^2))
     return 2 * quadgk(g, 0.0, pi / 2; rtol=1e-14)[1]
@@ -213,13 +221,17 @@ function kerr_geo_diagnose(m; a, E, Lz, Q, samples::Int=41, tol=1e-6,
     allow = Dict(k => 0.0 for k in (:radial, :polar, :time, :azimuth))
     skipped = Dict(k => 0 for k in (:radial, :polar, :time, :azimuth))
     failed = Dict(k => 0.0 for k in (:radial, :polar, :time, :azimuth))
-    # one check: raw discrepancy `mis` against `allowance` (absolute), relative to `scale`
+    # one check: raw discrepancy `mis` against `allowance` (absolute), relative to `scale`.
+    # A sample whose allowance is above the tolerance or not finite (a nonfinite reference
+    # rate) cannot decide the check and is counted as skipped; a nonfinite discrepancy
+    # against a finite allowance is a failure.
     function record!(k, mis, allowance, scale)
         raw = mis / scale; al = allowance / scale
-        if al > tol
+        if !(al <= tol)
             skipped[k] += 1
             return
         end
+        isfinite(raw) || (raw = Inf)
         errs[k] = max(errs[k], raw); allow[k] = max(allow[k], al)
         raw > tol + al && (failed[k] = max(failed[k], raw))
     end

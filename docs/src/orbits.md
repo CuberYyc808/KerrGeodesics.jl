@@ -49,8 +49,8 @@ and has the same fields in every class:
 | `ReferenceZero` | the events where ``λ``, ``t``, ``φ``, ``τ``, ``v``, ``ψ`` vanish (see [Where the coordinates are zero](@ref)) |
 | `Trajectory` | the coordinates, as functions of ``λ`` |
 | `Velocity` | the rates ``dx^μ/dλ`` and ``dτ/dλ``, as functions of ``λ`` |
-| `Potentials` | ``R`` and ``Θ`` along the orbit, `radial(λ)` and `polar_z(λ)` |
-| `Residuals` | the residuals of the equations of motion and of the normalization ``u_μ u^μ = -1`` |
+| `Potentials` | the potentials as functions of their own variable: `radial(r)` ``= R(r)``, `polar_z(z)` ``= Θ(z)`` |
+| `Residuals` | functions of ``λ``: `radial` ``= (dr/dλ)^2 - R``, `polar_z` ``= (dz/dλ)^2 - Θ``, `normalization` ``= g_{μν}u^μu^ν + 1`` |
 | `Status` | facts about the member: `supported`, `spectral` (see [Numerics and accuracy](@ref)), and for Stable members `apex`, `frequencies` and `precision` |
 | `Component` | the region of radial motion found by the classifier, a [`KerrGeoRadialComponent`](@ref) |
 
@@ -190,7 +190,7 @@ The radial integrals between two radii,
 
 ```math
 \int_{r_1}^{r_2} \frac{f(r)\,dr}{\sqrt{R(r)}}, \qquad
-f = 1,\ \frac{(r^2+a^2)P(r)}{Δ},\ \frac{aP(r)}{Δ},\ r^2,
+f = 1,\ \frac{(r^2+a^2)P(r)}{Δ},\ \frac{aP(r)}{Δ} - aE,\ r^2,
 ```
 
 are `radial_mino_increment`, `radial_time_increment`, `radial_phi_increment` and

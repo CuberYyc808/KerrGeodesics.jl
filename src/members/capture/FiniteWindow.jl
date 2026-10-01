@@ -30,21 +30,29 @@ function _capture_domain(lambda_infinity)
             endpoint_closed=(false, true))
 end
 
-function _c3_complex_parameters(a, energy, lz, q; atol=1e-10)
-    roots_all = radial_roots_for_constants(a, energy, lz, q)
+function _c3_complex_parameters(a, energy, lz, q; atol=1e-10, structure=nothing)
+    roots_all = structure===nothing ? radial_roots_for_constants(a, energy, lz, q) : structure.raw_roots
     real_roots = Float64[]
     complex_roots = ComplexF64[]
-    for root in roots_all
-        if abs(imag(root)) <= atol
-            push!(real_roots, real(root))
-        else
-            push!(complex_roots, root)
+    if structure===nothing
+        for root in roots_all
+            if abs(imag(root)) <= atol
+                push!(real_roots, real(root))
+            else
+                push!(complex_roots, root)
+            end
         end
+    else
+        append!(real_roots,(root.radius for root in structure.real_roots))
+        append!(complex_roots,_nonreal_roots(structure))
     end
-    sort!(real_roots)
     length(real_roots) == 2 || return nothing
     length(complex_roots) == 2 || return nothing
+    # (polished: near E = 1 the companion roots lose digits to the far root r1 ≈ −2/(E² − 1))
+    coefficients = kerr_radial_coefficients(a, energy, lz, q)
+    real_roots = structure===nothing ? sort!([_polish_root(coefficients, x) for x in real_roots]) : sort!(real_roots)
     upper = complex_roots[argmax(imag.(complex_roots))]
+    structure===nothing && (upper=_polish_root(coefficients,upper))
     eta = abs(imag(upper))
     eta > 0 || return nothing
     rplus = _rplus(a)
@@ -67,29 +75,13 @@ function _c3_shape(c)
     b = sqrt((c.r2 - c.rho)^2 + c.eta^2)
     d = sqrt((c.r1 - c.rho)^2 + c.eta^2)
     n = ((c.r2 - c.rho) * (c.rho - c.r1) - c.eta^2) / (b * d)
-    m = (1 - n) / 2
-    return (B=b, C=d, n=n, m=m)
+    return (B=b, C=d, n=n, m=(1 - n) / 2, m1=(1 + n) / 2)
 end
 
-function _c3_phi_of_r(c, r)
-    shape = _c3_shape(c)
-    s2 = (r - c.r2) / (r - c.r1)
-    y = sqrt(shape.C / shape.B) * sqrt(max(s2, 0.0))
-    return 2 * atan(y)
-end
-
-function _c3_lambda_of_r(c, r)
-    shape = _c3_shape(c)
-    return Elliptic.F(_c3_phi_of_r(c, r), shape.m) /
-           (sqrt(c.lead) * sqrt(shape.B * shape.C))
-end
-
-function _c3_lambda_infinity(c)
-    shape = _c3_shape(c)
-    phi_infinity = 2 * atan(sqrt(shape.C / shape.B))
-    return Elliptic.F(phi_infinity, shape.m) /
-           (sqrt(c.lead) * sqrt(shape.B * shape.C))
-end
+# λ(r) of C3 measured from infinity (λ(∞) = 0): minus the Mino time from r to infinity, in
+# Carlson's form with the complex pair ρ ± iη (`_mino_to_infinity`)
+_c3_lambda_of_r(c, r) = -_mino_to_infinity(c.lead,
+    (c.r1, c.r2, complex(c.rho, c.eta), complex(c.rho, -c.eta)), r)
 
 function _capture_positive_radial_interval(r_left, r_right)
     r_left == r_right && return (r_left, r_right, 1)
@@ -97,165 +89,69 @@ function _capture_positive_radial_interval(r_left, r_right)
     return (r_right, r_left, -1)
 end
 
-function _c3_bl_laurent_coefficients(a, energy, lz, q, c, component, order)
-    rp = c.rplus
-    rm = _rminus(a)
-    d = rp - rm
-    pplus = 2 * energy * rp - a * lz
-    pplus > 0 || error("C3 endpoint anchor requires positive future-horizon P_+.")
-    bconst = (lz - a * energy)^2 + q
-    inv_order = order + 1
 
-    p = zeros(Float64, inv_order + 1)
-    p[1] = pplus
-    p[2] = 2 * energy * rp
-    p[3] = energy
 
-    delta = zeros(Float64, inv_order + 1)
-    delta[2] = d
-    delta[3] = 1.0
-
-    sgeom = zeros(Float64, inv_order + 1)
-    sgeom[1] = rp^2 + bconst
-    sgeom[2] = 2 * rp
-    sgeom[3] = 1.0
-
-    rseries = _series_mul(p, p, inv_order) .-
-              _series_mul(delta, sgeom, inv_order)
-    invsqrt = _series_inv(_series_sqrt_positive(rseries, inv_order), inv_order)
-
-    regular_denom = zeros(Float64, inv_order + 1)
-    regular_denom[1] = d
-    regular_denom[2] = 1.0
-
-    dot = zeros(Float64, order + 2) # powers -1:order, offset by +2.
-    if component === :psi
-        p_over_regular = _series_div(p, regular_denom, inv_order)
-        dot[1] = a * p_over_regular[1]
-        for k in 0:order
-            dot[k + 2] = a * p_over_regular[k + 2] -
-                         (k == 0 ? a * energy : 0.0)
-        end
-    elseif component === :v
-        r2pa2 = zeros(Float64, inv_order + 1)
-        r2pa2[1] = 2 * rp
-        r2pa2[2] = 2 * rp
-        r2pa2[3] = 1.0
-        numerator = _series_mul(r2pa2, p, inv_order)
-        t_over_regular = _series_div(numerator, regular_denom, inv_order)
-        dot[1] = t_over_regular[1]
-        for k in 0:order
-            dot[k + 2] = t_over_regular[k + 2]
-        end
-    else
-        error("Unknown C3 endpoint component $(component).")
-    end
-
-    coeffs = Dict{Int,Float64}()
-    for k in -1:order
-        s = 0.0
-        for j in -1:k
-            inv_idx = k - j
-            0 <= inv_idx <= inv_order || continue
-            s += dot[j + 2] * invsqrt[inv_idx + 1]
-        end
-        coeffs[k] = s
-    end
-    return coeffs
-end
-
-function _c3_subtraction_laurent_coefficients(a, c, component, order)
-    rp = c.rplus
-    rm = _rminus(a)
-    d = rp - rm
-    denom = zeros(Float64, order + 2)
-    denom[1] = d
-    denom[2] = 1.0
-    coeffs = Dict{Int,Float64}()
-    if component === :psi
-        q = _series_inv(denom, order + 1)
-        coeffs[-1] = a * q[1]
-        for k in 0:order
-            coeffs[k] = a * q[k + 2]
-        end
-        return coeffs
-    elseif component === :v
-        numerator = zeros(Float64, order + 2)
-        numerator[1] = 2 * rp
-        numerator[2] = 2 * rp
-        numerator[3] = 1.0
-        q = _series_div(numerator, denom, order + 1)
-        coeffs[-1] = q[1]
-        for k in 0:order
-            coeffs[k] = q[k + 2]
-        end
-        return coeffs
-    end
-    error("Unknown C3 endpoint component $(component).")
-end
-
-function _c3_regular_endpoint_coefficients(a, energy, lz, q, c, component, order)
-    bl = _c3_bl_laurent_coefficients(a, energy, lz, q, c, component, order)
-    sub = _c3_subtraction_laurent_coefficients(a, c, component, order)
-    abs(bl[-1] - sub[-1]) <= 1.0e-10 ||
-        error("C3 regular endpoint pole cancellation failed for $(component).")
-    coeffs = Dict{Int,Float64}()
-    for k in 0:order
-        coeffs[k] = bl[k] - sub[k]
-    end
-    return coeffs
-end
-
-function _c3_regular_endpoint_series_integral(coeffs, y, order)
-    value = 0.0
-    for k in 0:order
-        value += coeffs[k] * y^(k + 1) / (k + 1)
-    end
-    return value
-end
-
-function _c3_radius_from_horizon_lambda(c, lambda; max_iter=90)
-    lambda_horizon = _c3_lambda_of_r(c, c.rplus)
-    lambda_infinity = lambda_horizon - _c3_lambda_infinity(c)
-    lambda <= 2e-13 || error("C3 horizon-zero lambda must be nonpositive outside the future horizon.")
-    lambda >= lambda_infinity - 2e-13 ||
-        error("C3 lambda is beyond the infinity endpoint for this finite branch.")
-    abs(lambda) <= 2e-13 && return c.rplus
-    target = lambda_horizon - lambda
-    # closed-form inverse of λ(r) = F(φ(r)|m)/sqrt(lead B C): φ = am(...), then
-    # tan^2(φ/2) B/C = (r - r2)/(r - r1)
+# r at Mino time δ after the infinity endpoint, as a closure over the constants. With
+# u = F(φ|m) (φ = 0 at r2; u is √(lead B C) times the Mino time from r2), φ = am u and
+# ratio = tan²(φ/2) B/C = (r − r2)/(r − r1),
+# r = (r2 − ratio r1)/(1 − ratio). At infinity ratio = 1 (tan²(φ∞/2) = C/B), and with the
+# offset η = u∞ − u = δ √(lead B C)
+#     D = cn u − cn u∞ = 2 sn P sn(η/2) dn P dn(η/2)/(1 − m sn²P sn²(η/2)),  P = u∞ − η/2,
+#     1 + cn u = 2B/(B + C) + D,  1 − ratio = (B + C)/C · D/(1 + cn u),
+#     ratio = (B/C)(1 − cn u)/(1 + cn u),
+# every quantity a sum of positive terms or a product, including E → 1⁺ where r1 → −∞ and
+# u∞ → 2K. The Jacobi functions at u∞ are exact (sn φ∞ = 2√(BC)/(B + C), cn φ∞ =
+# (B − C)/(B + C)); those of P follow from η/2 by the addition formulas.
+function _c3_radius_from_infinity(c)
     shape = _c3_shape(c)
-    φ = Elliptic.Jacobi.am(target * sqrt(c.lead * shape.B * shape.C), shape.m)
-    ratio = tan(φ / 2)^2 * shape.B / shape.C
-    closed = (c.r2 - ratio * c.r1) / (1 - ratio)
-    isfinite(closed) && closed >= c.rplus && return closed
-    low = c.rplus
-    high = c.rplus + 1.0
-    while _c3_lambda_of_r(c, high) < target
-        high *= 1.5
-        high > 1e10 && error("Failed to bracket C3 radius from horizon-zero Mino time.")
+    m, B, C = shape.m, shape.B, shape.C
+    L = _landen(m, shape.m1)
+    k = sqrt(c.lead * B * C)
+    s∞ = 2 * sqrt(B * C) / (B + C)
+    c∞ = (B - C) / (B + C)
+    d∞ = sqrt(1 - m * s∞^2)
+    return function (δ)
+        s, cq, dq = _ellipj_reduced(δ * k / 2, L)
+        # 1 − m s∞² s² = d∞² + m s∞² cn²u and 1 − m sn²P s² = dn²P + m sn²P cn²u: sums of positive
+        # terms (as differences they lose a digit next to the horizon, where m → 1)
+        w = d∞^2 + m * s∞^2 * cq^2
+        snP = (s∞ * cq * dq - s * c∞ * d∞) / w                  # P = u∞ − η/2
+        dnP = (d∞ * dq + m * s∞ * c∞ * s * cq) / w
+        D = 2 * snP * s * dnP * dq / (dnP^2 + m * snP^2 * cq^2)  # cn u − cn u∞
+        onep = 2B / (B + C) + D                                 # 1 + cn u
+        gap = (B + C) / C * D / onep                            # 1 − ratio
+        ratio = B / C * (2 - onep) / onep
+        return (c.r2 - ratio * c.r1) / gap
     end
-    for _ in 1:max_iter
-        mid = 0.5 * (low + high)
-        if _c3_lambda_of_r(c, mid) < target
-            low = mid
-        else
-            high = mid
-        end
-    end
-    return 0.5 * (low + high)
 end
 
-function _c1_one_real_parameters(a, lz, q; atol=1e-10)
-    roots_all = radial_roots_for_constants(a, 1.0, lz, q)
+# The radial model of C3: `radius(δ)` at Mino time δ after the infinity endpoint and its
+# inverse `mino(r)`, with the parameters and root data of the finite-window API
+function _c3_radial_model(a, energy, lz, q; structure=nothing)
+    c = _c3_complex_parameters(a, energy, lz, q;structure=structure)
+    c === nothing && return nothing
+    return (kind=:c3_hyperbolic_two_real_complex, params=c, rplus=c.rplus,
+        radius=_c3_radius_from_infinity(c), mino=r -> -_c3_lambda_of_r(c, r), inward=true,
+        roots=(real=c.real_roots, complex=(rho=c.rho, eta=c.eta)),
+        rootdata=(radial=c.real_roots, complex=(rho=c.rho, eta=c.eta), lead=c.lead,
+            shape=_c3_shape(c)))
+end
+
+function _c1_one_real_parameters(a, lz, q; atol=1e-10, structure=nothing)
+    roots_all = structure===nothing ? radial_roots_for_constants(a, 1.0, lz, q) : structure.raw_roots
     real_roots = Float64[]
     complex_roots = ComplexF64[]
-    for root in roots_all
-        if abs(imag(root)) <= atol
-            push!(real_roots, real(root))
-        else
-            push!(complex_roots, root)
+    if structure===nothing
+        for root in roots_all
+            if abs(imag(root)) <= atol
+                push!(real_roots, real(root))
+            else
+                push!(complex_roots, root)
+            end
         end
+    else
+        append!(real_roots,(root.radius for root in structure.real_roots))
+        append!(complex_roots,_nonreal_roots(structure))
     end
     sort!(real_roots)
     length(real_roots) == 1 || return nothing
@@ -281,87 +177,33 @@ end
 function _c1_shape(c)
     d = c.x0 - c.rho
     B = sqrt(d^2 + c.eta^2)
-    m = (B - d) / (2 * B)
-    return (d=d, B=B, m=m)
-end
-
-function _c1_psi_of_r(c, r)
-    r > c.x0 || error("C1 radius must lie above the real cubic root.")
-    shape = _c1_shape(c)
-    return 2 * atan(sqrt(r - c.x0) / sqrt(shape.B))
+    return (d=d, B=B, m=(B - d) / (2 * B), m1=(B + d) / (2 * B))
 end
 
 function _c1_lambda_of_r(c, r)
     shape = _c1_shape(c)
-    return Elliptic.F(_c1_psi_of_r(c, r), shape.m) / sqrt(2 * shape.B)
-end
-
-function _c1_lambda_infinity(c)
-    shape = _c1_shape(c)
-    return Elliptic.F(pi, shape.m) / sqrt(2 * shape.B)
-end
-
-function _c1_u_of_r(c, r)
     r > c.x0 || error("C1 radius must lie above the real cubic root.")
-    shape = _c1_shape(c)
-    return sqrt(r - c.x0) / sqrt(shape.B)
+    # Measure from infinity using the complementary amplitude, without 2K - F.
+    phi = 2atan(sqrt(shape.B / (r - c.x0)))
+    return -_ellip_f(phi, shape.m1) / sqrt(2 * shape.B)
 end
 
-function _c1_q4(shape, u)
-    return u^4 + (2 - 4 * shape.m) * u^2 + 1
-end
-
-function _c1_k_legendre_delta(c, power, r_left, r_right)
+# The radial model of C1: `radius(δ)` at Mino time δ after the infinity endpoint (am(2K − u) =
+# π − am(u): the amplitude measured from infinity is small there) and its inverse `mino(r)`
+function _c1_radial_model(a, lz, q; structure=nothing)
+    c = _c1_one_real_parameters(a, lz, q;structure=structure)
+    c === nothing && return nothing
     shape = _c1_shape(c)
-    u_left = _c1_u_of_r(c, r_left)
-    u_right = _c1_u_of_r(c, r_right)
-    psi_left = _c1_psi_of_r(c, r_left)
-    psi_right = _c1_psi_of_r(c, r_right)
-    delta_f = Elliptic.F(psi_right, shape.m) - Elliptic.F(psi_left, shape.m)
-    k0 = 0.5 * delta_f
-    power == 0 && return k0
-    boundary(u) = u * sqrt(_c1_q4(shape, u)) / (1 + u^2)
-    delta_e = Elliptic.E(psi_right, shape.m) - Elliptic.E(psi_left, shape.m)
-    k1 = k0 + (boundary(u_right) - boundary(u_left)) - delta_e
-    power == 1 && return k1
-    avec = 2 - 4 * shape.m
-    radial_boundary(u) = u * sqrt(_c1_q4(shape, u))
-    k2 = ((radial_boundary(u_right) - radial_boundary(u_left)) -
-          2 * avec * k1 - k0) / 3
-    power == 2 && return k2
-    error("C1 K_j is defined for the powers 0, 1 and 2.")
-end
-
-function _c1_radius_from_horizon_lambda(c, lambda; max_iter=90)
-    lambda_horizon = _c1_lambda_of_r(c, c.rplus)
-    lambda_infinity = lambda_horizon - _c1_lambda_infinity(c)
-    lambda <= 2e-13 || error("C1 horizon-zero lambda must be nonpositive outside the future horizon.")
-    lambda >= lambda_infinity - 2e-13 ||
-        error("C1 lambda is beyond the infinity endpoint for this finite branch.")
-    abs(lambda) <= 2e-13 && return c.rplus
-    target = lambda_horizon - lambda
-    # closed-form inverse of λ(r) = F(ψ(r)|m)/sqrt(2B): r = x0 + B tan^2(ψ/2)
-    shape = _c1_shape(c)
-    ψ = Elliptic.Jacobi.am(target * sqrt(2 * shape.B), shape.m)
-    closed = c.x0 + shape.B * tan(ψ / 2)^2
-    isfinite(closed) && closed >= c.rplus && return closed
-    low = c.rplus
-    span = 1.0
-    high = c.rplus + span
-    while _c1_lambda_of_r(c, high) < target
-        span *= 1.5
-        high = c.rplus + span
-        high > 1e10 && error("Failed to bracket C1 radius from horizon-zero Mino time.")
+    L = _landen(shape.m, shape.m1)
+    # tan(am u / 2) = sn u / (1 + cn u)
+    function radius(δ)
+        sn, cn, _ = _ellipj_reduced(δ * sqrt(2 * shape.B), L)
+        return c.x0 + shape.B * ((1 + cn) / sn)^2
     end
-    for _ in 1:max_iter
-        mid = 0.5 * (low + high)
-        if _c1_lambda_of_r(c, mid) < target
-            low = mid
-        else
-            high = mid
-        end
-    end
-    return 0.5 * (low + high)
+    return (kind=:c1_parabolic_one_real_complex, params=c, rplus=c.rplus,
+        radius=radius, mino=r -> -_c1_lambda_of_r(c, r), inward=true,
+        roots=(real=c.real_roots, complex=(rho=c.rho, eta=c.eta)),
+        rootdata=(radial=c.real_roots, complex=(rho=c.rho, eta=c.eta), shape=shape))
 end
 
 function _unsupported_capture(parameters, constants, outcome, reason)
@@ -424,6 +266,12 @@ function kerr_geo_capture(a::Real, constants::Tuple{<:Real,<:Real,<:Real}; kwarg
     return kerr_geo_capture(a, constants[1], constants[2], constants[3]; input=:constants, kwargs...)
 end
 
+function Base.show(io::IO, kg::KerrGeoCapture)
+    print(io, "KerrGeoCapture(", kg.Formula, ", constants=")
+    show(io, kg.ConstantsOfMotion)
+    print(io, ", supported=", kg.Status.supported, ")")
+end
+
 function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeoCapture)
     println(io, "KerrGeoCapture(")
     print(io, "    Formula = "); show(io, kg.Formula); println(io, ",")
@@ -438,25 +286,8 @@ end
 # Radial closed forms (r(λ), λ(r)) of the two finite-window capture formulas:
 # C3 (E > 1, two real roots inside the horizon plus a complex pair) and
 # C1 (E = 1, one real root plus a complex pair).
-function _capture_radial_model(formula, a, energy, lz, q)
-    if formula === :hyperbolic_capture
-        c = _c3_complex_parameters(a, energy, lz, q)
-        c === nothing && return nothing
-        return (params=c, rplus=c.rplus, lambda_of_r=r -> _c3_lambda_of_r(c, r),
-            lambda_infinity=_c3_lambda_infinity(c),
-            radius=λ -> _c3_radius_from_horizon_lambda(c, λ),
-            rootdata=(radial=c.real_roots, complex=(rho=c.rho, eta=c.eta), lead=c.lead,
-                      shape=_c3_shape(c)))
-    else
-        c = _c1_one_real_parameters(a, lz, q)
-        c === nothing && return nothing
-        return (params=c, rplus=c.rplus, lambda_of_r=r -> _c1_lambda_of_r(c, r),
-            lambda_infinity=_c1_lambda_infinity(c),
-            radius=λ -> _c1_radius_from_horizon_lambda(c, λ),
-            rootdata=(radial=c.real_roots, complex=(rho=c.rho, eta=c.eta),
-                      shape=_c1_shape(c)))
-    end
-end
+_capture_radial_model(formula, a, energy, lz, q) = formula === :hyperbolic_capture ?
+    _c3_radial_model(a, energy, lz, q) : _c1_radial_model(a, lz, q)
 
 """
 Finite-window capture orbit for E > 1 (two real roots inside the horizon plus a complex
@@ -468,7 +299,7 @@ function _capture_finite_window(parameters, constants, outcome; polar_phase=0.0)
     formula = outcome.formula
     a, energy, lz, q = parameters.a, constants.E, constants.Lz, constants.Q
     unsupported(msg) = _unsupported_capture(parameters, constants, outcome, msg)
-    inclined = abs(q) > 1e-12
+    inclined = !iszero(q)
     inclined && parameters.input !== :constants && return unsupported(
         "Inclined capture needs constants input (the APEX polar-phase convention is not defined).")
     radial = _capture_radial_model(formula, a, energy, lz, q)
@@ -476,30 +307,33 @@ function _capture_finite_window(parameters, constants, outcome; polar_phase=0.0)
         "The radial roots do not have the ordering required by the $formula formula.")
     polar = _window_polar_motion(a, energy, lz, q, polar_phase)
 
-    lambda_horizon = radial.lambda_of_r(radial.rplus)
-    lambda_infinity = lambda_horizon - radial.lambda_infinity
+    # λ = 0 on the horizon; the infinity endpoint precedes it by the Mino time from infinity
+    lambda_infinity = -radial.mino(radial.rplus)
     R(r) = kerr_radial_potential(a, energy, lz, q, r)
     Θ(z) = kerr_polar_z_potential(a, energy, lz, q, z)
-    r_of_lambda = radial.radius
+    r_of_lambda(λ) = λ == 0 ? radial.rplus : radial.radius(λ - lambda_infinity)
     rdot(λ) = -sqrt(max(R(r_of_lambda(λ)), 0.0))
     # Mino time of radius r (λ = 0 on the horizon) and the polar increments between radii.
     function λ_of(r)
         r >= radial.rplus || throw(DomainError(r, "Capture radius must lie outside the future horizon."))
-        return lambda_horizon - radial.lambda_of_r(r)
+        return lambda_infinity + radial.mino(r)
     end
     polar_phi(r1, r2) = polar.phi(λ_of(r1)) - polar.phi(λ_of(r2))
     polar_t(r1, r2) = polar.t(λ_of(r1)) - polar.t(λ_of(r2))
     # τ, v, ψ and the radial increments: radial spectral engine (infinity → horizon) +
     # polar primitive; τ, v, ψ vanish on the horizon (λ = 0)
     coords = _engine_coordinates(a, energy, lz, q, r_of_lambda, polar.primitive;
+        potential=_coefficient_potential(a, energy, lz, q),
         domain=(lambda_infinity, 0.0), ends=(:infinity, :horizon), σ=-1.0,
         λ_bl=0.5 * lambda_infinity, λ_tau=0.0, λ_regular=0.0, σ_regular=-1.0)
     inc = _radius_increments(coords, λ_of, -1.0)
     radial_time, radial_phi, proper, radial_v, radial_psi = inc.radial_time_increment,
         inc.radial_phi_increment, inc.radial_proper_increment, inc.radial_v_increment,
         inc.radial_psi_increment
-    tau, v, psi = coords.tau, coords.v, coords.psi
-    rstar(λ) = λ >= -2e-13 ? NaN : kerr_rstar(a, r_of_lambda(λ))
+    tau(λ) = _coords_tau(coords, λ)
+    v(λ) = _coords_v(coords, λ)
+    psi(λ) = _coords_psi(coords, λ)
+    rstar(λ) = λ >= -MINO_ENDPOINT_TOL ? NaN : kerr_rstar(a, r_of_lambda(λ))
     utheta(λ) = inclined ? -polar.uz(λ) / sqrt(max(1 - polar.z(λ)^2, 0.0)) : 0.0
     phase = _polar_phase_metadata(polar, polar_phase, :future_horizon_regular_endpoint)
 
@@ -556,8 +390,3 @@ function _capture_radial_quadrature(integrand, c, r_left, r_right)
     value, _ = quadgk(g, lower, log(right - rp); rtol=1.0e-13, atol=0.0, maxevals=20_000)
     return sign * value
 end
-
-_capture_t_rate(a, energy, lz, r) =
-    (r^2 + a^2) * kerr_radial_momentum(a, energy, lz, r) / kerr_delta(a, r)
-_c1_radial_time_increment(a, lz, c, r_left, r_right) =
-    _capture_radial_quadrature(r -> _capture_t_rate(a, 1.0, lz, r), c, r_left, r_right)

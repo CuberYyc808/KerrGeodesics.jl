@@ -1,44 +1,51 @@
 # Motion along the spin axis (Lz = 0, Q = a²(1 − E²)): the axis-infall members of the Plunge
-# (E < 1) and Capture (E ≥ 1) classes, with their shared radial models and endpoint series.
+# (E < 1) and Capture (E ≥ 1) classes. r(λ) comes from the elementary (a = 0) or Legendre (a ≠ 0)
+# radial model; t, τ, v from the radial engine, as for every other member. On the axis φ is a
+# gauge (phi0), and so is ψ.
 
-function _axis_legendre_f(phi, m)
-    if m <= 1
-        return Elliptic.F(phi, m)
-    end
-    transformed = asin(clamp(sqrt(m) * sin(phi), -1.0, 1.0))
-    return Elliptic.F(transformed, inv(m)) / sqrt(m)
+# Legendre forms of the axis model, whose parameter m = 2/(1 + a(E² − 1)) exceeds 1 for
+# a(E² − 1) < 1: there the reciprocal-modulus transformation F(φ|m) = F(ψ|1/m)/√m,
+# sin ψ = √m sin φ, applies, with the complement 1 − 1/m = −m1/m
+function _axis_legendre_f(phi, m, m1)
+    m <= 1 && return _ellip_f(phi, m1)
+    return _ellip_f(asin(clamp(sqrt(m) * sin(phi), -1.0, 1.0)), -m1 / m) / sqrt(m)
 end
 
-function _axis_sin_from_f(u, m)
-    if m <= 1
-        return Elliptic.Jacobi.sn(u, m)
-    end
-    return Elliptic.Jacobi.sn(sqrt(m) * u, inv(m)) / sqrt(m)
-end
+# the Landen record of the parameter actually used, m or 1/m
+_axis_landen(m, m1) = m <= 1 ? _landen(m, m1) : _landen(inv(m), -m1 / m)
 
-function _axis_legendre_basis(phi, m, n; second_order=false)
+_axis_sin_from_f(u, L, m) = m <= 1 ? _ellipj_reduced(u, L)[1] :
+    _ellipj_reduced(sqrt(m) * u, L)[1] / sqrt(m)
+
+function _axis_legendre_basis(phi, m, m1, n; second_order=false)
     if m <= 1
-        f = Elliptic.F(phi, m)
-        pin = _pi_real(n, phi, m)
-        j2 = second_order ? _j2_legendre(n, m, phi) : NaN
+        f = _ellip_f(phi, m1)
+        pin = _ellip_pi(phi, m1, n, 1 - n)
+        j2 = second_order ? _ellip_pi2(phi, m1, n, 1 - n) : NaN
         return (F=f, Pi=pin, J2=j2)
     end
     rootm = sqrt(m)
     transformed = asin(clamp(rootm * sin(phi), -1.0, 1.0))
-    mt = inv(m)
+    mt, mt1 = inv(m), -m1 / m
     nt = n / m
-    f = _axis_legendre_f(phi, m)
-    pin = _pi_real(nt, transformed, mt) / rootm
-    j2 = second_order ?
-        _j2_legendre(nt, mt, transformed) / rootm : NaN
+    f = _axis_legendre_f(phi, m, m1)
+    pin = _ellip_pi(transformed, mt1, nt, 1 - nt) / rootm
+    j2 = second_order ? _ellip_pi2(transformed, mt1, nt, 1 - nt) / rootm : NaN
     return (F=f, Pi=pin, J2=j2)
 end
 
-function _odd_h1(n, m, s)
+# The odd-power primitives ∫ ds/((1 − n s²)^k √(1 − m s²)) in u = √(1 − m s²), whose quadratic
+# denominator a0 + n u² has a0 = m − n: within rounding of a0 = 0 the primitive is the
+# elementary limit (the atan form's constant π/(2√(a0 n)) diverges there).
+function _odd_argument(n, m, s)
     u = sqrt(max(1 - m * s^2, 0.0))
     a0 = m - n
-    scale = max(1.0, abs(m), abs(n))
-    if abs(a0) <= 32 * eps(Float64) * scale
+    return u, a0, abs(a0) <= 32 * eps(Float64) * max(1.0, abs(m), abs(n))
+end
+
+function _odd_h1(n, m, s)
+    u, a0, limit = _odd_argument(n, m, s)
+    if limit
         u > 0 || return Inf
         return 1 / (n * u)
     end
@@ -46,10 +53,8 @@ function _odd_h1(n, m, s)
 end
 
 function _odd_h2(n, m, s)
-    u = sqrt(max(1 - m * s^2, 0.0))
-    a0 = m - n
-    scale = max(1.0, abs(m), abs(n))
-    if abs(a0) <= 32 * eps(Float64) * scale
+    u, a0, limit = _odd_argument(n, m, s)
+    if limit
         u > 0 || return Inf
         return m / (3 * n^2 * u^3)
     end
@@ -66,11 +71,13 @@ function _axis_kerr_radial_model(a, energy)
     denominator > 0 || error("Axis Legendre scale is not real.")
     omega = sqrt(spin * denominator)
     m = 2 / denominator
+    m1 = (spin * k - 1) / denominator
+    L = _axis_landen(m, m1)
     chi(r) = atan(r / spin) - pi / 4
     function basis(r)
         amplitude = chi(r)
         s = sin(amplitude)
-        legendre2 = _axis_legendre_basis(amplitude, m, 2.0;
+        legendre2 = _axis_legendre_basis(amplitude, m, m1, 2.0;
             second_order=true)
         h1 = _odd_h1(2.0, m, s)
         h2 = _odd_h2(2.0, m, s)
@@ -85,16 +92,16 @@ function _axis_kerr_radial_model(a, energy)
         amplitude = chi(r)
         s = sin(amplitude)
         n = 2 * (spin^2 + h^2) / (spin - h)^2
-        legendre = _axis_legendre_basis(amplitude, m, n)
+        legendre = _axis_legendre_basis(amplitude, m, m1, n)
         h1 = _odd_h1(n, m, s)
         c0 = -2 * h / n
         c1 = spin - h + 2 * h / n
         return (c0 * legendre.F + c1 * legendre.Pi - 2 * spin * h1) /
             ((spin - h)^2 * omega)
     end
-    lambda_primitive(r) = _axis_legendre_f(chi(r), m) / omega
+    lambda_primitive(r) = _axis_legendre_f(chi(r), m, m1) / omega
     function radius_from_primitive(value)
-        s = clamp(_axis_sin_from_f(omega * value, m), -1.0, 1.0)
+        s = clamp(_axis_sin_from_f(omega * value, L, m), -1.0, 1.0)
         return spin * tan(asin(s) + pi / 4)
     end
     return (
@@ -102,6 +109,7 @@ function _axis_kerr_radial_model(a, energy)
         spin=spin,
         k=k,
         m=m,
+        m1=m1,
         omega=omega,
         chi=chi,
         basis=basis,
@@ -111,187 +119,84 @@ function _axis_kerr_radial_model(a, energy)
     )
 end
 
-function _axis_schwarzschild_j1(k, w)
-    if k > 0
-        root = sqrt(k)
-        return log(abs((w - root) / (w + root))) / (2 * root)
-    elseif k < 0
-        root = sqrt(-k)
-        return atan(w / root) / root
-    end
-    return -inv(w)
-end
 
-function _axis_schwarzschild_j2(k, w)
-    abs(k) <= 1.0e-14 && return -inv(3 * w^3)
-    return -w / (2 * k * (w^2 - k)) -
-        _axis_schwarzschild_j1(k, w) / (2 * k)
-end
 
-function _axis_schwarzschild_time_primitive(energy, w)
-    k = _e2m1(energy)
-    return 2 * log(abs((energy + w) / (energy - w))) +
-        4 * energy * (_axis_schwarzschild_j1(k, w) +
-            _axis_schwarzschild_j2(k, w))
-end
 
-function _axis_schwarzschild_v(energy, w)
-    k = _e2m1(energy)
-    denominator = w^2 - k
-    primitive = 4 * log(energy + w) - 2 * log(denominator) +
-        4 * energy * (_axis_schwarzschild_j1(k, w) +
-            _axis_schwarzschild_j2(k, w)) + 2 / denominator
-    horizon = 4 * log(2 * energy) +
-        4 * energy * (_axis_schwarzschild_j1(k, energy) +
-            _axis_schwarzschild_j2(k, energy)) + 2
-    return primitive - horizon
-end
 
-# the largest offset from the horizon (≤ 1e-3) where the series' last term is below 1e-15
-function _axis_match_offset(coefficients, order)
-    match_offset = 1.0e-3
-    last_term = Inf
-    while match_offset > 1.0e-12
-        last_term = abs(coefficients[order] * match_offset^(order + 1) / (order + 1))
-        last_term <= 1.0e-15 && break
-        match_offset /= 2
-    end
-    return match_offset, last_term
-end
 
-function _axis_endpoint_series(a, energy, q, time_increment)
-    horizons = kerr_horizons(a)
-    marker = (rplus=horizons.rplus,)
-    order = 10
-    coefficients = _c3_regular_endpoint_coefficients(
-        a, energy, 0.0, q, marker, :v, order)
-    match_offset, last_term = _axis_match_offset(coefficients, order)
-    last_term <= 1.0e-15 || error(
-        "Axis endpoint series did not reach the machine-precision match target.")
-    rmatch = horizons.rplus + match_offset
-    local_value = _c3_regular_endpoint_series_integral(
-        coefficients, match_offset, order)
-    rstar(r) = kerr_rstar(a, r)
-    function endpoint(r)
-        y = r - horizons.rplus
-        y >= -1.0e-13 || throw(DomainError(
-            r, "Axis endpoint radius lies inside the future horizon."))
-        y <= 1.0e-15 && return 0.0
-        if y <= match_offset
-            return _c3_regular_endpoint_series_integral(
-                coefficients, y, order)
-        end
-        return local_value + time_increment(rmatch, r) -
-            (rstar(r) - rstar(rmatch))
-    end
-    return (endpoint=endpoint, order=order, match_offset=match_offset,
-        last_term_abs=last_term, coefficients=coefficients)
-end
 
-# Radial pieces of an axis infall: Schwarzschild elementary forms or the Kerr Legendre model.
-# Each branch is its own function so every captured variable is assigned once.
-_axis_radial_parts(spin, evalue, qaxis, rplus) = abs(spin) <= 1.0e-14 ?
+# Radial pieces of an axis infall: the Mino time from the start (turning point or infinity) to
+# the horizon, r at the Mino time δ before the horizon, its inverse, and the start radius.
+_axis_radial_parts(spin, evalue, rplus) = kerr_metric_limit(spin) === :schwarzschild ?
     _axis_schwarzschild_parts(evalue) :
-    _axis_kerr_parts(_axis_kerr_radial_model(spin, evalue), spin, evalue, qaxis, rplus)
+    _axis_kerr_parts(_axis_kerr_radial_model(spin, evalue), evalue, rplus)
 
 function _axis_schwarzschild_parts(evalue)
-    k = evalue^2 - 1
+    k = _e2m1(evalue)
     w = lambda -> evalue + float(lambda)
-    return (model=nothing,
-        lambda_start=evalue >= 1 ? sqrt(max(k, 0.0)) - evalue : -evalue,
-        radius_from_lambda=lambda -> 2 / (w(lambda)^2 - k),
-        start_radius=evalue < 1 ? 2 / (1 - evalue^2) : Inf,
-        time_increment=(left, right) ->
-            _axis_schwarzschild_time_primitive(evalue, sqrt(k + 2 / left)) -
-            _axis_schwarzschild_time_primitive(evalue, sqrt(k + 2 / right)),
-        proper_increment=(left, right) -> 4 * (
-            _axis_schwarzschild_j2(k, sqrt(k + 2 / left)) -
-            _axis_schwarzschild_j2(k, sqrt(k + 2 / right))),
-        regular_v_endpoint=r -> -_axis_schwarzschild_v(evalue, sqrt(k + 2 / r)),
-        formula_kind=:schwarzschild_axis_elementary,
-        endpoint_series=nothing)
+    # δ is the Mino time before the horizon: r = 2/((E − δ)² − k), δ = E − √(k + 2/r)
+    return (lambda_start=evalue >= 1 ? sqrt(max(k, 0.0)) - evalue : -evalue,
+        radius=δ -> 2 / (w(-δ)^2 - k),
+        mino=r -> evalue - sqrt(max(k + 2 / r, 0.0)),
+        start_radius=evalue < 1 ? -2 / k : Inf,
+        formula_kind=:schwarzschild_axis_elementary)
 end
 
-function _axis_kerr_parts(model, spin, evalue, qaxis, rplus)
+function _axis_kerr_parts(model, evalue, rplus)
     lambda_horizon_primitive = model.lambda_primitive(rplus)
-    deficit = 1 - evalue^2
-    start_radius = evalue < 1 ? (1 + sqrt(1 - deficit^2 * spin^2)) / deficit : Inf
+    deficit = -_e2m1(evalue)
+    start_radius = evalue < 1 ? (1 + sqrt(1 - deficit^2 * model.spin^2)) / deficit : Inf
     lambda_start = lambda_horizon_primitive - model.lambda_primitive(start_radius)
-    radius_from_lambda = function(lambda)
-        lam = float(lambda)
-        abs(lam) <= 2.0e-14 && return rplus
-        evalue < 1 && abs(lam - lambda_start) <= 2.0e-13 &&
-            return start_radius
-        return model.radius_from_primitive(lambda_horizon_primitive - lam)
+    # δ is the Mino time before the horizon (δ = 0 there)
+    radius = function(δ)
+        δ <= 0 && return rplus
+        evalue < 1 && δ >= -lambda_start && return start_radius
+        return clamp(model.radius_from_primitive(lambda_horizon_primitive + δ), rplus,
+            start_radius)
     end
-    increments = evalue == 1 ? _axis_parabolic_increments(spin, qaxis) :
-        _axis_legendre_increments(model, spin, evalue)
-    endpoint_series = _axis_endpoint_series(spin, evalue, qaxis, increments.time)
-    return (; model, lambda_start, radius_from_lambda, start_radius,
-        time_increment=increments.time, proper_increment=increments.proper,
-        regular_v_endpoint=endpoint_series.endpoint, formula_kind=increments.kind,
-        endpoint_series)
+    mino(r) = model.lambda_primitive(r) - lambda_horizon_primitive
+    return (; lambda_start, radius, mino, start_radius, formula_kind=:axis_legendre)
 end
 
-function _axis_parabolic_increments(spin, qaxis)
-    cparams = _c1_one_real_parameters(spin, 0.0, qaxis)
-    cparams === nothing && error(
-        "The E = 1 axis radial cubic must have one real root below r+ and a complex pair.")
-    return (time=(left, right) -> _c1_radial_time_increment(spin, 0.0, cparams, left, right),
-        proper=(left, right) -> 0.5 * _c1_k_legendre_delta(cparams, 2, left, right) +
-            2 * spin^2 * _c1_k_legendre_delta(cparams, 0, left, right),
-        kind=:axis_parabolic_cubic_legendre)
+# The classified component of class `broad_class` of axis constants (Lz = 0, Q = a²(1 − E²)):
+# from a classification (the family passes its own), or classified here for the constructors.
+function _axis_component(classification, broad_class)
+    components = [c for c in classification.Components if c.BroadClass === broad_class]
+    isempty(components) && error("These constants admit no $(kerr_geo_class(broad_class).name) " *
+        "member on the spin axis; their cases are $(classification.CaseIds).")
+    return only(components)
 end
 
-function _axis_legendre_increments(model, spin, evalue)
-    residues = _radial_residues(spin, evalue, 0.0)
-    function time_primitive(r)
-        basis = model.basis(r)
-        return evalue * basis.I2 + 2 * evalue * basis.I1 +
-            (evalue * spin^2 + 4 * evalue) * basis.I0 +
-            residues.c_t_plus * model.pole(residues.rplus, r) +
-            residues.c_t_minus * model.pole(residues.rminus, r)
-    end
-    function proper(left, right)
-        left_basis = model.basis(left)
-        right_basis = model.basis(right)
-        return (right_basis.I2 + spin^2 * right_basis.I0) -
-            (left_basis.I2 + spin^2 * left_basis.I0)
-    end
-    return (time=(left, right) -> time_primitive(right) - time_primitive(left),
-        proper=proper, kind=evalue < 1 ? :axis_elliptic_legendre : :axis_hyperbolic_legendre)
-end
-
-function _axis_infall_member(a::Real, energy::Real;
-        axis,
-        broad_class,
-        phi0::Real=0.0,
-        reference_radius=nothing)
-    axis in (:north, :south) || error("Specify axis=:north or axis=:south.")
-    0 < energy || error("Future-directed axis infall requires E>0.")
+function _axis_component(a, energy, broad_class)
     abs(a) < 1 || error("This constructor requires |a| < 1; axis infall at |a| = 1 is " *
         "built by kerr_geo_extremal(a, E, 0, a^2(1 - E^2); axis=axis).")
     broad_class === :plunge && energy < 1 ||
         broad_class === :capture && energy >= 1 || error(
             "Plunge axis infall requires E<1; capture axis infall requires E>=1.")
+    spin, evalue = float(a), float(energy)
+    classification = kerr_geo_classify(spin, evalue, 0.0, kerr_axis_carter_q(spin, evalue);
+        polar_sector=:axis_constant)
+    return _axis_component(classification, broad_class)
+end
+
+function _axis_infall_member(a::Real, energy::Real, component;
+        axis,
+        phi0::Real=0.0,
+        reference_radius=nothing)
+    axis in (:north, :south) || error("Specify axis=:north or axis=:south.")
+    broad_class = component.BroadClass
 
     spin = float(a)
     evalue = float(energy)
     qaxis = kerr_axis_carter_q(spin, evalue)
-    horizons = kerr_horizons(spin)
-    rplus = horizons.rplus
-    classification = kerr_geo_classify(
-        spin, evalue, 0.0, qaxis; polar_sector=:axis_constant)
-    component = only(c for c in classification.Components if c.BroadClass === broad_class)
-
-    (; model, lambda_start, radius_from_lambda, start_radius, time_increment,
-        proper_increment, regular_v_endpoint, formula_kind, endpoint_series) =
-        _axis_radial_parts(spin, evalue, qaxis, rplus)
+    rplus = kerr_horizons(spin).rplus
+    (; lambda_start, radius, mino, start_radius, formula_kind) =
+        _axis_radial_parts(spin, evalue, rplus)
 
     function check_regular(lambda)
         lam = float(lambda)
         lambda_start < lam <= 0 ||
-            (evalue < 1 && isapprox(lam, lambda_start; atol=2.0e-13)) ||
+            (evalue < 1 && abs(lam - lambda_start) <= MINO_ENDPOINT_TOL) ||
             throw(DomainError(lambda,
                 "Mino time must lie between λ = $(lambda_start) and the future horizon λ = 0."))
         return clamp(lam, lambda_start, 0.0)
@@ -303,27 +208,32 @@ function _axis_infall_member(a::Real, energy::Real;
             lambda, "BL t and r* exclude the future-horizon endpoint λ = 0."))
         return lam
     end
-    r(lambda) = radius_from_lambda(check_regular(lambda))
-    theta_value = axis === :north ? 0.0 : pi
-    theta(lambda) = (check_regular(lambda); theta_value)
-    z(lambda) = (check_regular(lambda); axis === :north ? 1.0 : -1.0)
+    r_of(lambda) = radius(-lambda)                   # δ = −λ is the Mino time before the horizon
+    r(lambda) = r_of(check_regular(lambda))
+    z0 = axis === :north ? 1.0 : -1.0
+    theta(lambda) = (check_regular(lambda); acos(z0))
+    z(lambda) = (check_regular(lambda); z0)
     phi(lambda) = (check_regular(lambda); float(phi0))
     lambda_reference = if reference_radius === nothing
         evalue < 1 ? lambda_start : 0.5 * lambda_start
     else
         rref_input = float(reference_radius)
         rref_input > rplus || error("Axis BL reference radius must be exterior.")
-        if model === nothing
-            sqrt(evalue^2 - 1 + 2 / rref_input) - evalue
-        else
-            model.lambda_primitive(rplus) - model.lambda_primitive(rref_input)
-        end
+        -mino(rref_input)
     end
     rref = isfinite(start_radius) && lambda_reference == lambda_start ?
         start_radius : r(lambda_reference)
-    t(lambda) = time_increment(r(check_bl(lambda)), rref)
-    v(lambda) = -regular_v_endpoint(r(check_regular(lambda)))
-    tau(lambda) = -proper_increment(rplus, r(check_regular(lambda)))
+    # the polar motion is the constant z = ±1: its t and φ rates vanish (Lz = 0), dτ/dλ = a²
+    polar = (formula=lambda -> (z=z0, uz=0.0, sin2=0.0, theta=acos(z0), phi=0.0, t=0.0,
+            tau=spin^2 * float(lambda)),
+        metadata=(sector=:axis_constant, axis=axis))
+    coords = _engine_coordinates(spin, evalue, 0.0, qaxis, r_of, _polar_primitive(polar);
+        potential=_radial_potential_from_roots(spin, evalue, 0.0, qaxis, component.Metadata.structure),
+        domain=(lambda_start, 0.0), ends=(evalue < 1 ? :turning : :infinity, :horizon), σ=-1.0,
+        λ_bl=lambda_reference, λ_regular=0.0, σ_regular=-1.0)
+    t(lambda) = _coords_t(coords, check_bl(lambda))
+    v(lambda) = _coords_v(coords, check_regular(lambda))
+    tau(lambda) = _coords_tau(coords, check_regular(lambda))
     rstar(lambda) = kerr_rstar(spin, r(check_bl(lambda)))
 
     radial_potential(rvalue) = kerr_axis_radial_potential(spin, evalue, rvalue)
@@ -339,31 +249,26 @@ function _axis_infall_member(a::Real, energy::Real;
         return -delta / sigma * (ut(lambda) / sigma)^2 + sigma / delta * (ur(lambda) / sigma)^2 + 1
     end
     start_role = evalue < 1 ? :finite_turning_point : :past_infinity
-    return _member(broad_class, component.CaseId; component=component,
-        constants=(a=spin, E=evalue, Lz=0.0, Q=qaxis),
-        roots=(radial=Tuple(item.radius for item in classification.Status.root_structure.real_roots),
-            polar=(sector=:axis_constant, axis=axis)),
-        reference=(lambda0_event=:future_horizon, t_phi_zero_event=:reference_radius,
+    return _member(broad_class, component.CaseId, kerr_geo_tier(component.CaseId), component,
+        (a=spin, E=evalue, Lz=0.0, Q=qaxis),
+        (radial=Tuple(item.radius for item in component.Metadata.roots),
+            polar=polar.metadata),
+        (lambda0_event=:future_horizon, t_phi_zero_event=:reference_radius,
             t_phi_zero_lambda=lambda_reference, t_phi_zero_radius=rref,
             tau_zero_event=:future_horizon, lambda_regular=0.0, phi0=float(phi0)),
-        domain=(mino=(lambda_start, 0.0), endpoint_closed=(evalue < 1, true),
+        (mino=(lambda_start, 0.0), endpoint_closed=(evalue < 1, true),
             endpoint_roles=(start_role, :future_horizon), horizon_lambda=0.0),
-        # on the axis φ is a gauge (phi0) and so is ψ: ψ = φ, not φ + φ_H
-        trajectory=(t=t, r=r, theta=theta, z=z, phi=phi, tau=tau, rstar=rstar, v=v, psi=phi),
-        velocity=(ut=ut, ur=ur, uz=vanishing, utheta=vanishing, uphi=vanishing,
+        (t=t, r=r, theta=theta, z=z, phi=phi, tau=tau, rstar=rstar, v=v, psi=phi),
+        (ut=ut, ur=ur, uz=vanishing, utheta=vanishing, uphi=vanishing,
             dtau_dlambda=lambda -> r(check_regular(lambda))^2 + spin^2),
-        potentials=(radial=radial_potential, polar_z=polar_potential),
-        residuals=(radial=lambda -> ur(lambda)^2 - radial_potential(r(lambda)),
+        (radial=radial_potential, polar_z=polar_potential),
+        (radial=lambda -> ur(lambda)^2 - radial_potential(r(lambda)),
             polar_z=lambda -> polar_potential(z(lambda)),
             normalization=normalization_residual),
-        status=(supported=true, name=evalue < 1 ? :finite_axis_infall : :infinity_axis_infall,
+        (supported=true, name=evalue < 1 ? :finite_axis_infall : :infinity_axis_infall,
             formula_family=component.FormulaFamily, formula_kind=formula_kind, q_axis=qaxis,
-            endpoint_series_order=endpoint_series === nothing ? 0 : endpoint_series.order,
-            endpoint_series_match_offset=endpoint_series === nothing ?
-                0.0 : endpoint_series.match_offset,
-            endpoint_series_last_term_abs=endpoint_series === nothing ?
-                0.0 : endpoint_series.last_term_abs,
-            polar=(sector=:axis_constant, axis=axis)))
+            polar=polar.metadata),
+        SpectralStatus(() -> (_coords_spectral(coords), _polar_spectral(polar))))
 end
 
 """
@@ -377,10 +282,8 @@ function kerr_geo_plunge_axis_infall(a::Real, energy::Real;
         axis,
         phi0::Real=0.0,
         reference_radius=nothing)
-    return _axis_infall_member(
-        a, energy; axis=axis,
-        broad_class=:plunge, phi0=phi0,
-        reference_radius=reference_radius)
+    return _axis_infall_member(a, energy, _axis_component(a, energy, :plunge); axis=axis,
+        phi0=phi0, reference_radius=reference_radius)
 end
 
 """
@@ -392,5 +295,5 @@ t vanishes at `reference_radius` (default: the radius halfway in Mino time betwe
 and the horizon); φ = ψ = `phi0`.
 """
 kerr_geo_capture_axis_infall(a::Real, energy::Real; axis, phi0::Real=0.0,
-        reference_radius=nothing) = _axis_infall_member(a, energy; axis=axis,
-    broad_class=:capture, phi0=phi0, reference_radius=reference_radius)
+        reference_radius=nothing) = _axis_infall_member(a, energy,
+    _axis_component(a, energy, :capture); axis=axis, phi0=phi0, reference_radius=reference_radius)

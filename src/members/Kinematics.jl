@@ -3,37 +3,55 @@
 # direction.
 
 """
-    _kinematics(a, E, Lz, Q; r, rbl=r, z, uz, sin2, sign_r, R)
+    _kinematics(a, E, Lz, Q, r, rbl, position, sign_r, R)
 
 Closures of λ for one member. `r` is the radius on the member's whole domain, `rbl` the
-radius restricted to where Boyer-Lindquist t, φ exist (it throws outside), `z`, `uz` the polar
-position and velocity, `sin2` = sin²θ from the polar solution (formed without cancellation:
+radius restricted to where Boyer-Lindquist t, φ exist (it throws outside), `position(λ)` the
+polar `(z, dz/dλ, sin²θ)`, sin²θ from the polar solution (formed without cancellation:
 1 − z² from a rounded z loses the Lz/sin²θ rate of near-axis orbits), `sign_r(λ)` the sign of
 dr/dλ, `R(r)` the radial potential. The t and φ rates are the radial engine's
-(`_plain_rates`); the polar φ rate vanishes identically for Lz = 0.
+(`_plain_rates`); the polar φ rate vanishes identically for Lz = 0. Every closure captures one
+`_KinematicState` and calls a named function on it (`_kin_ut`, …), so no closure's type
+contains another's.
 """
-function _kinematics(a, E, L, Q; r, rbl=r, z, uz, sin2, sign_r, R)
-    c = _rc(a, E, L, Q)
+function _kinematics(a, E, L, Q, r, rbl, position, sign_r, R)
+    k = _KinematicState(a, E, L, Q, _rc(a, E, L, Q, R), r, rbl, position, sign_r, R)
     Θ(zv) = kerr_polar_z_potential(a, E, L, Q, zv)
-    ur(λ) = sign_r(λ) * sqrt(max(R(r(λ)), 0.0))
-    function utheta(λ)
-        s = sqrt(sin2(λ))
-        return iszero(s) ? NaN : -uz(λ) / s            # (on the axis θ is a chart pole)
-    end
-    ut(λ) = _plain_rates(c, rbl(λ))[1] + a * L - a^2 * E * sin2(λ)
-    uphi(λ) = _plain_rates(c, rbl(λ))[2] + (iszero(L) ? 0.0 : L / sin2(λ))
-    dtau_dlambda(λ) = r(λ)^2 + a^2 * z(λ)^2
-    # g_{μν} u^μ u^ν + 1 with the proper-time velocity u = (dx/dλ)/Σ
-    function normalization_residual(λ)
-        rv = rbl(λ); zv = z(λ)
-        Σ = rv^2 + a^2 * zv^2
-        Δ = kerr_delta(a, rv)
-        s2 = sin2(λ)
-        vt, vr, vθ, vφ = ut(λ) / Σ, ur(λ) / Σ, utheta(λ) / Σ, uphi(λ) / Σ
-        return -(1 - 2rv / Σ) * vt^2 - 2 * (2a * rv * s2 / Σ) * vt * vφ + Σ / Δ * vr^2 +
-            Σ * vθ^2 + s2 * (rv^2 + a^2 + 2a^2 * rv * s2 / Σ) * vφ^2 + 1
-    end
-    return (ur=ur, uz=uz, utheta=utheta, ut=ut, uphi=uphi, dtau_dlambda=dtau_dlambda,
-        radial_residual=λ -> ur(λ)^2 - R(r(λ)), polar_residual=λ -> uz(λ)^2 - Θ(z(λ)),
-        normalization_residual=normalization_residual, R=R, Θ=Θ)
+    return (ur=λ -> _kin_ur(k, λ), uz=λ -> _kin_uz(k, λ), utheta=λ -> _kin_utheta(k, λ),
+        ut=λ -> _kin_ut(k, λ), uphi=λ -> _kin_uphi(k, λ), dtau_dlambda=λ -> _kin_dtau(k, λ),
+        radial_residual=λ -> _kin_ur(k, λ)^2 - R(r(λ)),
+        polar_residual=λ -> _kin_uz(k, λ)^2 - Θ(_kin_z(k, λ)),
+        normalization_residual=λ -> _kin_normalization(k, λ), R=R, Θ=Θ, state=k)
+end
+
+struct _KinematicState{T,C,Fr,Fb,Fp,Fg,FR}
+    a::T; E::T; L::T; Q::T
+    c::C                                     # _RadialConstants for the t, φ rates
+    r::Fr; rbl::Fb; position::Fp; sign_r::Fg; R::FR
+end
+_KinematicState(a, E, L, Q, c, r, rbl, position, sign_r, R) =
+    _KinematicState(promote(a, E, L, Q)..., c, r, rbl, position, sign_r, R)
+
+_kin_z(k::_KinematicState, λ) = k.position(λ)[1]
+_kin_uz(k::_KinematicState, λ) = k.position(λ)[2]
+_kin_sin2(k::_KinematicState, λ) = k.position(λ)[3]
+
+_kin_ur(k::_KinematicState, λ) = k.sign_r(λ) * sqrt(max(k.R(k.r(λ)), 0.0))
+function _kin_utheta(k::_KinematicState, λ)
+    s = sqrt(_kin_sin2(k, λ))
+    return iszero(s) ? NaN : -_kin_uz(k, λ) / s            # (on the axis θ is a chart pole)
+end
+_kin_ut(k::_KinematicState, λ) = _plain_rates(k.c, k.rbl(λ))[1] + k.a * k.L - k.a^2 * k.E * _kin_sin2(k, λ)
+_kin_uphi(k::_KinematicState, λ) = _plain_rates(k.c, k.rbl(λ))[2] + (iszero(k.L) ? 0.0 : k.L / _kin_sin2(k, λ))
+_kin_dtau(k::_KinematicState, λ) = k.r(λ)^2 + k.a^2 * _kin_z(k, λ)^2
+# g_{μν} u^μ u^ν + 1 with the proper-time velocity u = (dx/dλ)/Σ
+function _kin_normalization(k::_KinematicState, λ)
+    a = k.a
+    rv = k.rbl(λ); zv = _kin_z(k, λ)
+    Σ = rv^2 + a^2 * zv^2
+    Δ = kerr_delta(a, rv)
+    s2 = _kin_sin2(k, λ)
+    vt, vr, vθ, vφ = _kin_ut(k, λ) / Σ, _kin_ur(k, λ) / Σ, _kin_utheta(k, λ) / Σ, _kin_uphi(k, λ) / Σ
+    return -(1 - 2rv / Σ) * vt^2 - 2 * (2a * rv * s2 / Σ) * vt * vφ + Σ / Δ * vr^2 +
+        Σ * vθ^2 + s2 * (rv^2 + a^2 + 2a^2 * rv * s2 / Σ) * vφ^2 + 1
 end

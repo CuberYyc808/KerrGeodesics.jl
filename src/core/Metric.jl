@@ -1,9 +1,6 @@
 # Kerr metric functions shared by everything: horizons, energy regime, radial and polar
-# potentials and their roots, and the tortoise coordinate.
-
-const DEFAULT_CLASSIFICATION_ATOL = 64 * eps(Float64)
-const DEFAULT_ENERGY_ATOL = 0.0
-const DEFAULT_ENERGY_RTOL = 0.0
+# potentials and their roots, and the tortoise coordinate. The degeneracy tolerances it uses
+# are defined in core/Degeneracy.jl.
 
 """
     kerr_delta(a, r)
@@ -130,6 +127,16 @@ function kerr_radial_coefficients(a::Real, energy::Real, lz::Real, q::Real;
     )
 end
 
+# R(1+x), formed from P(1) and Delta(1). Unlike translating the expanded
+# r-polynomial, this preserves P(1)^2 when two roots approach the extremal horizon.
+function _radial_shifted_coefficients(a,energy,lz,q)
+    p=kerr_radial_momentum(a,energy,lz,1.0)
+    d=(a-1)*(a+1)
+    k=1+(lz-a*energy)^2+q
+    return (p^2-d*k,4energy*p-2d,4energy^2+2energy*p-k-d,
+        4energy^2-2,_e2m1(energy))
+end
+
 """
     kerr_radial_polynomial(a, E, Lz, Q; energy_atol=0, energy_rtol=0)
 
@@ -174,6 +181,80 @@ function kerr_radial_derivatives(a::Real, energy::Real, lz::Real, q::Real, r::Re
     )
 end
 
+"""
+    _polish_root(coefficients, z; order=0)
+
+Newton's method on the radial polynomial with the given coefficients (constant term first), or
+on its `order`-th derivative (order 1 for a double root), from the estimate `z` (real or
+complex): at most eight steps, stopping when the step is within 4 eps of `z` or when the
+derivative is below rounding relative to the size of its terms.
+"""
+function _polish_root(coefficients, z; order::Int=0, evaluator=nothing)
+    c = coefficients
+    for _ in 1:order
+        c = ntuple(i -> i * c[i + 1], length(c) - 1)
+    end
+    dc = ntuple(i -> i * c[i + 1], length(c) - 1)
+    for _ in 1:8
+        az = abs(z)
+        scale = sum(abs(dc[i]) * az^(i - 1) for i in eachindex(dc))
+        value,dp = evaluator===nothing ? (evalpoly(z,c),evalpoly(z,dc)) : evaluator(z)
+        abs(dp) <= eps(Float64) * scale && break
+        step = value / dp
+        z -= step
+        abs(step) <= 4 * eps(Float64) * max(1.0, abs(z)) && break
+    end
+    return z
+end
+
+# Error-free transforms keep coefficient formation and Newton residuals accurate
+# when simple roots nearly coincide. The Newton iteration itself is unchanged.
+function _two_sum(a,b)
+    s=a+b
+    v=s-a
+    return s,(a-(s-v))+(b-v)
+end
+_two_product(a::Real,b::Real) = (a*b,fma(a,b,-a*b))
+function _two_product(a::Complex,b::Complex)
+    ac,eac=_two_product(real(a),real(b)); bd,ebd=_two_product(imag(a),imag(b))
+    ad,ead=_two_product(real(a),imag(b)); bc,ebc=_two_product(imag(a),real(b))
+    re,er=_two_sum(ac,-bd); im,ei=_two_sum(ad,bc)
+    return complex(re,im),complex(er+eac-ebd,ei+ead+ebc)
+end
+_two_product(a::Real,b::Complex) = _two_product(complex(a),b)
+_two_product(a::Complex,b::Real) = _two_product(a,complex(b))
+_wide(x)=(x,zero(x))
+function _wide_add(a,b)
+    s,e=_two_sum(a[1],b[1])
+    return _two_sum(s,e+a[2]+b[2])
+end
+_wide_neg(a)=(-a[1],-a[2])
+_wide_sub(a,b)=_wide_add(a,_wide_neg(b))
+function _wide_mul(a,b)
+    p,e=_two_product(a[1],b[1])
+    return _two_sum(p,e+a[1]*b[2]+a[2]*b[1]+a[2]*b[2])
+end
+function _wide_evalpoly(x,c)
+    z=_wide(x); v=c[end]
+    for i in length(c)-1:-1:1
+        v=_wide_add(_wide_mul(v,z),c[i])
+    end
+    return v[1]+v[2]
+end
+
+function _radial_root_evaluator(a,E,L,Q)
+    aa,ee,ll,qq=_wide.(float.((a,E,L,Q)))
+    a2=_wide_mul(aa,aa)
+    lead=_wide_mul(_wide_sub(ee,_wide(1.0)),_wide_add(ee,_wide(1.0)))
+    u=_wide_sub(ll,_wide_mul(aa,ee))
+    c=(_wide_neg(_wide_mul(a2,qq)),
+       _wide_mul(_wide(2.0),_wide_add(_wide_mul(u,u),qq)),
+       _wide_sub(_wide_mul(a2,lead),_wide_add(_wide_mul(ll,ll),qq)),
+       _wide(2.0),lead)
+    dc=ntuple(i->_wide_mul(_wide(float(i)),c[i+1]),4)
+    return r->(_wide_evalpoly(r,c),_wide_evalpoly(r,dc))
+end
+
 function _derivative_scales(coefficients, r)
     c0, c1, c2, c3, c4 = coefficients
     ar = abs(float(r))
@@ -187,16 +268,16 @@ function _derivative_scales(coefficients, r)
 end
 
 """
-    kerr_root_multiplicity_at(a, E, Lz, Q, r; atol=1e-9, rtol=1e-9, energy_atol=0,
-                              energy_rtol=0)
+    kerr_root_multiplicity_at(a, E, Lz, Q, r; atol=ROOT_ATOL, rtol=ROOT_RTOL,
+                              energy_atol=0, energy_rtol=0)
 
 Multiplicity of the radius `r` as a root of R: the number of consecutive values R, R′, R″,
 R‴, R⁗ at `r`, starting from R, that vanish within `atol + rtol·max(1, s)`, where `s` is the
 sum of the magnitudes of that derivative's terms (0 when R(r) ≠ 0).
 """
 function kerr_root_multiplicity_at(a::Real, energy::Real, lz::Real, q::Real, r::Real;
-        atol::Real=1.0e-9,
-        rtol::Real=1.0e-9,
+        atol::Real=ROOT_ATOL,
+        rtol::Real=ROOT_RTOL,
         energy_atol::Real=DEFAULT_ENERGY_ATOL,
         energy_rtol::Real=DEFAULT_ENERGY_RTOL)
     kwargs = (; energy_atol=energy_atol, energy_rtol=energy_rtol)
@@ -217,15 +298,15 @@ end
 """
     kerr_polar_theta_potential(a, E, Lz, Q, θ; axis_atol=1e-12)
 
-Θ(θ) = Q − cos²θ [a²(1 − E²) + Lz²/sin²θ] = (dθ/dλ)². On the axis (sin θ = 0) it is finite
-only for Lz = 0, where it equals Q − a²(1 − E²); otherwise it is `-Inf` there.
+Θ(θ) = Q − cos²θ [a²(1 − E²) + Lz²/sin²θ] = (dθ/dλ)². On the axis (|sin θ| ≤ `axis_atol`) it
+is finite only for Lz = 0, where it equals Q − a²(1 − E²); otherwise it is `-Inf` there.
 """
 function kerr_polar_theta_potential(a::Real, energy::Real, lz::Real, q::Real,
         theta::Real; axis_atol::Real=1.0e-12)
     sine = sin(theta)
     cosine2 = cos(theta)^2
     if abs(sine) <= axis_atol
-        abs(lz) <= axis_atol || return -Inf
+        _zero_lz(a, energy, lz, q) || return -Inf
         return q + cosine2 * a^2 * _e2m1(energy)
     end
     return q - cosine2 * (lz^2 / sine^2 - a^2 * _e2m1(energy))
@@ -244,95 +325,75 @@ function kerr_polar_z_potential(a::Real, energy::Real, lz::Real, q::Real, z::Rea
 end
 
 """
-    kerr_polar_admissibility(a, E, Lz, Q; atol=1e-12, rtol=1e-10)
+    kerr_polar_admissibility(a, E, Lz, Q; rtol=1e-10)
 
 Maximize (dz/dλ)² = Q + (β − Q − Lz²)u − βu², u = cos²θ, β = a²(E² − 1), over u ∈ [0, 1] in
 closed form (regular at E = 1 and a = 0). The constants admit polar motion (`admissible`)
-when the maximum is at least −`tolerance`; the result also carries `max_value`,
-`max_cosine_squared`, `tolerance` and the examined `candidates`.
+when the value at one of the examined points is at least −`rtol` times the size of its
+terms, |Q| + |β − Q − Lz²|u + |β|u² (so a small Q keeps its sign; at u = 0 the value is Q
+itself). The axis u = 1 is examined when Lz = 0 and the motion reaches it. The result also
+carries `max_value`, `max_cosine_squared`, the `tolerance` of that maximum and the examined
+`candidates`.
 """
 function kerr_polar_admissibility(a::Real, energy::Real, lz::Real, q::Real;
-        atol::Real=1.0e-12,
         rtol::Real=1.0e-10)
     beta = a^2 * _e2m1(energy)
-    value(u) = q + (beta - q - lz^2) * u - beta * u^2
-    tolerance = atol + rtol * max(1.0, abs(q), abs(beta), lz^2)
-    candidates = [(u=0.0, value=value(0.0))]
-    axis_theta = q + beta
-    if abs(lz) > atol || axis_theta >= -tolerance
-        push!(candidates, (u=1.0, value=value(1.0)))
+    slope = beta - q - lz^2
+    candidate(u) = (u=float(u), value=q + slope * u - beta * u^2,
+        tolerance=rtol * (abs(q) + abs(slope) * u + abs(beta) * u^2))
+    candidates = [candidate(0.0)]
+    # the axis u = 1 (value −Lz²) counts when Lz = 0 and motion reaches it: Q + β ≥ 0
+    if !_zero_lz(a, energy, lz, q) || q + beta >= -rtol * (abs(q) + abs(beta))
+        push!(candidates, candidate(1.0))
     end
-    if abs(beta) > atol
-        stationary = (beta - q - lz^2) / (2 * beta)
-        if 0 < stationary < 1
-            push!(candidates, (u=float(stationary), value=value(stationary)))
-        end
+    if !iszero(beta)
+        stationary = slope / (2 * beta)
+        0 < stationary < 1 && push!(candidates, candidate(stationary))
     end
     best = candidates[argmax(getfield.(candidates, :value))]
     return (
-        admissible=best.value >= -tolerance,
+        admissible=any(c -> c.value >= -c.tolerance, candidates),
         max_value=best.value,
         max_cosine_squared=best.u,
-        tolerance=tolerance,
+        tolerance=best.tolerance,
         candidates=Tuple(candidates),
     )
 end
 
-# |Lz| below which the orbit is treated as passing over the axis: with Lz^2 < eps*Q the
-# polar turning point z_+ = 1 - O(Lz^2/Q) rounds to the pole, so the generic pendular
-# forms have no digits left and the Lz = 0 (axis-crossing) forms are the exact ones.
-# (z_+ = 1 - O(Lz^2/max(Q, |c|)), c = a^2(1 - E^2)).
-_axis_lz_tolerance(q, c=0.0; atol=1.0e-12) =
-    max(atol, 2 * sqrt(eps(1.0)) * sqrt(max(abs(q), abs(c))))
-
 """
-    kerr_polar_sector_candidates(a, E, Lz, Q; atol=1e-12)
+    kerr_polar_sector_candidates(a, E, Lz, Q)
 
 The polar sectors these constants allow, as a tuple of Symbols: `:pendular`, `:equatorial`,
 `:equator_attractive`, `:vortical`, `:constant_latitude`, `:axis_crossing` or
-`:axis_constant`. Where the constants allow more than one (Q = 0 with E > 1 allows both
-`:equatorial` and `:equator_attractive`), the keyword `polar_sector` of the constructors
-chooses the motion.
+`:axis_constant`. The sign of Q decides, and only Q = 0 itself is equatorial. Where the
+constants allow more than one (Q = 0 with Lz² < a²(E² − 1) allows both `:equatorial` and
+`:equator_attractive`), the keyword `polar_sector` of the constructors chooses the motion.
 """
-function kerr_polar_sector_candidates(a::Real, energy::Real, lz::Real, q::Real;
-        atol::Real=1.0e-12)
+function kerr_polar_sector_candidates(a::Real, energy::Real, lz::Real, q::Real)
     sectors = Symbol[]
-    lz_axis = _axis_lz_tolerance(q, -a^2 * _e2m1(energy); atol=atol)
-    axis_value = q + a^2 * _e2m1(energy)
-    axis_tolerance = atol * max(1.0, abs(q), abs(a^2 * _e2m1(energy)))
-    if abs(lz) <= lz_axis && abs(axis_value) <= axis_tolerance
-        return (:axis_constant,)
-    end
+    _on_axis(a, energy, lz, q) && return (:axis_constant,)
     # Lz = 0 with Q ≠ 0 and Q > a²(1-E²): the polar turning point is the pole itself, so
     # the motion passes over the axis. The pendular closed form degenerates there; the
     # vortical one (Q < 0) still describes the same motion and stays available on request.
-    if abs(lz) <= lz_axis && axis_value > axis_tolerance && abs(q) > atol
+    crossing = _axis_crossing(a, energy, lz, q)
+    if crossing && !iszero(q)
         return q > 0 ? (:axis_crossing,) : (:axis_crossing, :vortical)
     end
 
-    if abs(q) <= atol
+    # the sign of Q decides; Q = 0 itself is the equatorial limit, where motion off the
+    # equator (equator attractive) needs Lz² < a²(E² − 1)
+    beta = a^2 * _e2m1(energy)
+    if iszero(q)
         push!(sectors, :equatorial)
-        energy^2 > 1 + atol && push!(sectors, :equator_attractive)
+        lz^2 < beta && push!(sectors, :equator_attractive)
     elseif q > 0
         push!(sectors, :pendular)
-    elseif energy^2 > 1 + atol
-        beta = a^2 * _e2m1(energy)
-        if beta > atol
-            root_sum = (beta - q - lz^2) / beta
-            root_product = -q / beta
-            discriminant = root_sum^2 - 4 * root_product
-            tolerance = 128 * atol * max(
-                1.0, root_sum^2, abs(root_product))
-            push!(sectors, abs(discriminant) <= tolerance ?
-                :constant_latitude : :vortical)
-        else
-            push!(sectors, :unclassified_polar)
-        end
+    elseif beta > 0
+        geometry = _polar_vortical_geometry(beta, lz, q)
+        push!(sectors, geometry.repeated ? :constant_latitude : :vortical)
     end
 
-    if abs(lz) <= lz_axis && axis_value > axis_tolerance
-        push!(sectors, :axis_crossing)
-    end
+    crossing && push!(sectors, :axis_crossing)
     isempty(sectors) && push!(sectors, :unclassified_polar)
     return Tuple(unique(sectors))
 end
@@ -357,13 +418,9 @@ with R(r) = (1 - E²)(r - x1)(r - rc)²(ra - r), the remaining roots taken from 
 coefficients so that the factorization is exact.
 """
 function _double_root_factorization(a, energy, lz, q, rc)
-    for _ in 1:8
-        d = kerr_radial_derivatives(a, energy, lz, q, rc)
-        step = d.R1 / d.R2
-        rc -= step
-        abs(step) <= 4eps(rc) * max(1.0, abs(rc)) && break
-    end
-    c0, c1, c2, c3, c4 = kerr_radial_coefficients(a, energy, lz, q)
+    coefficients = kerr_radial_coefficients(a, energy, lz, q)
+    rc = _polish_root(coefficients, rc; order=1)
+    c0, c1, c2, c3, c4 = coefficients
     kappa = -c4                                    # 1 - E²
     s = c3 / kappa - 2rc                           # x1 + ra
     p = -c0 / (kappa * rc^2)                       # x1 * ra
@@ -380,7 +437,11 @@ cancellation-free form (the textbook formula loses every digit of the small root
 c = 0), so moduli and frequencies can be formed without dividing by c.
 """
 function _polar_quadratic_roots(a, energy, lz, q)
-    c = -a^2 * _e2m1(energy)
+    return _polar_quadratic_roots(-a^2 * _e2m1(energy), lz, q)
+end
+
+# Coefficient form also serves interfaces that supply c directly.
+function _polar_quadratic_roots(c, lz, q)
     s = q + lz^2 + c
     disc = s^2 - 4 * c * q
     sq = sqrt(max(disc, 0.0))
@@ -391,32 +452,15 @@ function _polar_quadratic_roots(a, energy, lz, q)
         cu_small=c * u_small, cu_big=big)
 end
 
-"""
-    _elliptic_D(φ, m)
-
-D(φ|m) = ∫_0^φ sin²θ / sqrt(1 - m sin²θ) dθ = (F(φ|m) - E(φ|m))/m, evaluated without the
-cancellation of F - E at small m (a series in m for |m| < 0.05). Polar t pieces are
-proportional to (F - E)/(1 - E^2) and would otherwise lose ~eps/(1 - E^2) as E -> 1.
-"""
-function _elliptic_D(φ, m)
-    if abs(m) >= 0.05
-        return (Elliptic.F(φ, m) - Elliptic.E(φ, m)) / m
-    end
-    s, c = sincos(φ)
-    S = φ                                     # S_j = ∫ sin^{2j}
-    b = 1.0                                   # binomial(2n,n)/4^n
-    total = 0.0
-    mn = 1.0
-    for n in 0:40
-        j = n + 1
-        S = ((2j - 1) * S - s^(2j - 1) * c) / (2j)
-        term = b * mn * S
-        total += term
-        abs(term) <= 1.0e-17 * abs(total) && n > 2 && break
-        b *= (2n + 1) / (2n + 2)
-        mn *= m
-    end
-    return total
+# Repeated-root test in the normalized vortical polynomial, relative to the two terms of
+# its discriminant (a vortical band close to the equator is not a repeated root).
+function _polar_vortical_geometry(beta, lz, q; rtol=CONSTANT_LATITUDE_RTOL)
+    root_sum = (beta - q - lz^2) / beta
+    root_product = -q / beta
+    discriminant = root_sum^2 - 4 * root_product
+    tolerance = rtol * max(root_sum^2, 4 * abs(root_product))
+    return (root_sum=root_sum, discriminant=discriminant,
+        repeated=abs(discriminant) <= tolerance)
 end
 
 # ---- tortoise coordinate ------------------------------------------------------------
@@ -460,7 +504,7 @@ end
 function _horizon_azimuth(a, r)
     horizons = kerr_horizons(a)
     separation = horizons.rplus - horizons.rminus
-    abs(a) <= 1.0e-15 && return 0.0
+    kerr_metric_limit(a) === :schwarzschild && return 0.0
     u = r - 1
     if abs(u) > 200separation
         # (a/d)[g(rp) - g(rm)] with g(x) = log|r - x|, expanded about x = 1; the extremal
@@ -474,7 +518,7 @@ end
 function _radial_residues(a, energy, lz)
     horizons = kerr_horizons(a)
     separation = horizons.rplus - horizons.rminus
-    separation > 1.0e-12 || error(
+    abs(a) < 1 || error(
         "Horizon residues require r₊ > r₋ (|a| < 1); at |a| = 1 the two horizons coincide.")
     pplus = kerr_radial_momentum(a, energy, lz, horizons.rplus)
     pminus = kerr_radial_momentum(a, energy, lz, horizons.rminus)

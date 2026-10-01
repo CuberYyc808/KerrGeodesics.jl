@@ -9,6 +9,8 @@ broad class. `Stable`, `Plunge`, `Capture`, `Scatter` and `Trapped` hold one mem
 `nothing`; `Critical` is a tuple of the Critical members ordered by role (on the root, outer
 side, inner side). Horizon-root (H) and extremal (X) members sit in the slot of their
 class. `BroadClass` summarises the family (`:critical` when it has Critical members).
+Construction failures are recorded in `Status.member_errors` when present.
+The affected slot is empty; a returned family need not contain every admitted member.
 """
 struct KerrGeodesicFamily
     InputType::Symbol
@@ -46,6 +48,12 @@ _family(input, parameters, constants, root_class, broad, status; stable=nothing,
     KerrGeodesicFamily(input, parameters, constants, root_class, stable, Tuple(critical),
         plunge, capture, scatter, trapped, broad, status)
 
+function Base.show(io::IO, kg::KerrGeodesicFamily)
+    print(io, "KerrGeodesicFamily(", kg.BroadClass, ", cases=")
+    show(io, get(kg.Status, :case_ids, ()))
+    print(io, ", member_errors=", length(get(kg.Status, :member_errors, ())), ")")
+end
+
 function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeodesicFamily)
     println(io, "KerrGeodesicFamily(")
     print(io, "    InputType = "); show(io, kg.InputType); println(io, ",")
@@ -59,6 +67,7 @@ function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeodesicFamily)
     print(io, "    HasScatter = "); show(io, kg.Scatter !== nothing); println(io, ",")
     print(io, "    HasTrapped = "); show(io, kg.Trapped !== nothing); println(io, ",")
     print(io, "    BroadClass = "); show(io, kg.BroadClass); println(io, ",")
+    print(io, "    MemberErrors = "); show(io, length(get(kg.Status, :member_errors, ()))); println(io, ",")
     print(io, "    Status = "); show(io, kg.Status); println(io, ",")
     print(io, ")")
 end
@@ -76,6 +85,15 @@ The four-argument form takes APEX parameters (semi-latus rectum `p`, eccentricit
 `x = cos ι`) and converts them to `(E, Lz, Q)`; a spin within `8eps()` of ±1 is taken as
 exactly ±1, and the original input is kept in `Status.input_provenance`. With
 `input=:constants` the three numbers are read as `(E, Lz, Q)`.
+
+Returns a `KerrGeodesicFamily`. Each member (a `KerrGeoComponent`) gives the Boyer–Lindquist
+coordinates as functions of Mino time ``λ``, defined by ``dτ/dλ = Σ = r^2 + a^2\\cos^2θ``:
+`m.Trajectory.t(λ)`, `r`, `theta`, `phi`, `tau`, and the rates ``dx^μ/dλ`` in `m.Velocity`.
+
+```julia
+kg = kerr_geodesic(0.9, (0.94, 0.1, 12.0))
+kg.Plunge.Trajectory.r(0.5)
+```
 
 Keywords: `case_id`, `initial_radius`, `radial_sign`, `endpoint_intent` select one member
 (exactly one must match); `polar_sector`, `polar_phase`, `polar_hemisphere` fix the polar
@@ -101,31 +119,21 @@ function _family_member(class, a, energy, lz, q, classification, kwargs)
     phase = get(kwargs, :polar_phase, 0.0)
     hemisphere = get(kwargs, :polar_hemisphere, :north)
     reference_radius = get(kwargs, :reference_radius, nothing)
-    class === :plunge && return kerr_geo_plunge_component(a, energy, lz, q; case_id=id,
-        polar_sector=sector, polar_phase=phase, reference_radius=reference_radius)
-    class === :scatter && return kerr_geo_scatter_component(a, energy, lz, q; case_id=id,
+    class === :plunge && return _plunge_component(a, energy, lz, q, classification, id;
+        polar_phase=phase, reference_radius=reference_radius)
+    class === :scatter && return _scatter_component(a, energy, lz, q, classification, id;
         polar_sector=sector, polar_phase=phase, polar_hemisphere=hemisphere)
-    # C5 needs a polar sector even when the classifier leaves the choice to initial data
-    id === :C5 && (sector = _resolved_polar_sector(classification, sector, energy, lz, q))
-    return kerr_geo_capture_component(a, energy, lz, q; case_id=id, polar_sector=sector,
+    return _capture_component(a, energy, lz, q, classification, id; polar_sector=sector,
         polar_phase=phase, polar_hemisphere=hemisphere, reference_radius=reference_radius)
 end
 
 # Motion along the spin axis (Lz = 0, Q = a²(1 - E²)) with an `axis` initial condition: the
-# Plunge (E < 1) or Capture (E ≥ 1) axis-infall member.
-function _family_axis_member(a, energy, lz, q, kwargs)
-    abs(lz) <= 1.0e-12 || error("Axis initial data requires Lz=0.")
-    qaxis = kerr_axis_carter_q(a, energy)
-    abs(q - qaxis) <= 1.0e-10 * max(1.0, abs(qaxis)) || error(
-        "Axis initial data requires Q=a^2(1-E^2).")
-    axis = kwargs[:axis]
-    phi0 = get(kwargs, :phi0, 0.0)
-    reference_radius = get(kwargs, :reference_radius, nothing)
-    return energy < 1 ?
-        kerr_geo_plunge_axis_infall(a, energy; axis=axis, phi0=phi0,
-            reference_radius=reference_radius) :
-        kerr_geo_capture_axis_infall(a, energy; axis=axis, phi0=phi0,
-            reference_radius=reference_radius)
+# Plunge (E < 1) or Capture (E ≥ 1) axis-infall member. (The classification was made with
+# `polar_sector = :axis_constant`, which holds only for axis constants.)
+function _family_axis_member(a, energy, classification, kwargs)
+    component = _axis_component(classification, energy < 1 ? :plunge : :capture)
+    return _axis_infall_member(a, energy, component; axis=kwargs[:axis],
+        phi0=get(kwargs, :phi0, 0.0), reference_radius=get(kwargs, :reference_radius, nothing))
 end
 
 # The Critical members of the classified components, in role order.
@@ -247,8 +255,6 @@ end
 # The constants are used exactly as given: the quartic coefficient E² − 1 decides whether
 # an orbit reaches infinity however small it is, so no energy is moved to E = 1. Only the
 # APEX conversion rounds a spin within a few ulps of |a| = 1 to exactly ±1 (below).
-const _SPIN_SNAP_TOL = 8eps(1.0)
-
 function kerr_geodesic(a::Real, constants::Tuple{<:Real,<:Real,<:Real}; kwargs...)
     energy, lz, q = constants
     family = abs(a) == 1 ? _exact_extremal_family(a, energy, lz, q, kwargs) :
@@ -289,10 +295,16 @@ function _selection_view(m)
     rmid = r(λmid)
     roots = sort!([x isa Number ? float(x) : float(x.radius) for x in get(m.Roots, :radial, ())])
     rplus = _rplus(m.ConstantsOfMotion.a)
+    at_infinity(role) = role in (:past_infinity, :future_infinity)
+    at_horizon(role) = role in (:past_horizon, :future_horizon,
+        :past_horizon_root_asymptote, :future_horizon_root_asymptote)
+    at_repeated_root(role) = role in (:past_repeated_root_asymptote,
+        :future_repeated_root_asymptote)
+    at_asymptote(role) = at_repeated_root(role) || role in
+        (:past_horizon_root_asymptote, :future_horizon_root_asymptote)
     function endpoint(role, λ, side)
-        s = String(role)
-        occursin("infinity", s) && return (Radius=Inf, Included=false, Kind=:infinity)
-        occursin("horizon", s) && !occursin("root", s) &&
+        at_infinity(role) && return (Radius=Inf, Included=false, Kind=:infinity)
+        role in (:past_horizon, :future_horizon) &&
             return (Radius=rplus, Included=true, Kind=:outer_horizon)
         isfinite(λ) && return (Radius=r(λ), Included=true, Kind=:radial_root)
         near = side < 0 ? filter(x -> x <= rmid, roots) : filter(x -> x >= rmid, roots)
@@ -302,14 +314,13 @@ function _selection_view(m)
     past, future = m.Domain.endpoint_roles
     e1 = endpoint(past, lo, -1); e2 = endpoint(future, hi, +1)
     lower, upper = e1.Radius <= e2.Radius ? (e1, e2) : (e2, e1)
-    ps, fs = String(past), String(future)
     orientation = m.Role === :on_root || lower.Radius == upper.Radius ? :constant_radius :
-        occursin("worldline", ps) ? :libration :
-        occursin("infinity", ps) && occursin("infinity", fs) ? :inbound_turn_outbound :
-        occursin("horizon", ps) && occursin("horizon", fs) ? :inbound_turn_outbound :
-        occursin("repeated_root", ps) && occursin("repeated_root", fs) ? :libration :
-        occursin("horizon", ps) ? :outward :
-        occursin("asymptote", fs) || occursin("asymptote", ps) ? :inward_asymptotic : :inward
+        past in (:infinite_past_worldline, :infinite_future_worldline) ? :libration :
+        at_infinity(past) && at_infinity(future) ? :inbound_turn_outbound :
+        at_horizon(past) && at_horizon(future) ? :inbound_turn_outbound :
+        at_repeated_root(past) && at_repeated_root(future) ? :libration :
+        at_horizon(past) ? :outward :
+        at_asymptote(future) || at_asymptote(past) ? :inward_asymptotic : :inward
     return (CaseId=m.CaseId, BroadClass=kerr_geo_member_class(m), LowerEndpoint=lower,
         UpperEndpoint=upper, RadialOrientation=orientation)
 end
@@ -358,25 +369,22 @@ end
 # horizon-root stable or scatter member. Returns `nothing` otherwise.
 function _horizon_root_family(a, energy, lz, q, kwargs)
     metric_limit = kerr_metric_limit(a)
-    if metric_limit in (:subextremal, :near_extremal) && energy > 0
+    if metric_limit in (:subextremal, :near_extremal) && energy > 0 &&
+            _horizon_root(a, energy, lz)
         horizons = kerr_horizons(a)
         pplus = kerr_radial_momentum(a, energy, lz, horizons.rplus)
-        abs(pplus) <= 2e-10 * max(1.0, abs(energy), abs(lz)) || return nothing
         horizon_structure = kerr_geo_root_structure(a, energy, lz, q)
         if !isempty(horizon_structure.horizon_coincident)
             polar_sector = get(kwargs, :polar_sector, nothing)
             polar_phase = get(kwargs, :polar_phase, 0.0)
             member = try
                 if energy < 1
-                    kerr_geo_horizon_stable(
-                        a, energy, lz, q;
+                    _horizon_stable(a, energy, lz, q, horizons, horizon_structure;
                         polar_sector=polar_sector, polar_phase=polar_phase)
                 else
-                    polar_hemisphere = get(kwargs, :polar_hemisphere, :north)
-                    kerr_geo_horizon_scatter(
-                        a, energy, lz, q;
+                    _horizon_scatter(a, energy, lz, q, horizon_structure;
                         polar_sector=polar_sector, polar_phase=polar_phase,
-                        polar_hemisphere=polar_hemisphere)
+                        polar_hemisphere=get(kwargs, :polar_hemisphere, :north))
                 end
             catch err
                 err isa Union{ErrorException,DomainError} || rethrow()
@@ -452,7 +460,8 @@ function _classified_family(a, energy, lz, q, kwargs)
         (get(kwargs, :polar_sector, nothing))
     classification = kerr_geo_classify(
         a, energy, lz, q; polar_sector=requested_polar)
-    axis_member = haskey(kwargs, :axis) ? _family_axis_member(a, energy, lz, q, kwargs) : nothing
+    axis_member = haskey(kwargs, :axis) ?
+        _family_axis_member(a, energy, classification, kwargs) : nothing
     critical = _family_critical_members(a, energy, lz, q, classification, kwargs, member_errors)
     plunge = axis_member !== nothing && energy < 1 ? axis_member :
         _isolated_member(() -> _family_member(:plunge, a, energy, lz, q, classification, kwargs),
@@ -464,7 +473,7 @@ function _classified_family(a, energy, lz, q, kwargs)
         _isolated_member(() -> _family_member(:scatter, a, energy, lz, q, classification, kwargs),
             :scatter, member_errors, kwargs) : nothing
     stable = any(component -> component.CaseId in (:A1, :A2), classification.Components) ?
-        _isolated_member(() -> kerr_geo_stable_component(a, energy, lz, q;
+        _isolated_member(() -> _stable_component(a, energy, lz, q, classification, nothing;
             initPhases=get(kwargs, :initPhases, (0.0, 0.0, 0.0, 0.0))), :stable,
             member_errors, kwargs) : nothing
     outcome = _outcome_at_infinity(a, energy, lz, q)
@@ -497,7 +506,7 @@ function kerr_geodesic(a::Real, p::Real, e::Real, x::Real; input::Symbol=:apex, 
 
     # APEX input only: a spin a few ulps from ±1 (a conversion artefact) is the extremal one
     a_input = a
-    abs(abs(a) - 1) <= _SPIN_SNAP_TOL && (a = copysign(1.0, a))
+    abs(abs(a) - 1) <= SPIN_SNAP_TOL && (a = copysign(1.0, a))
     constants = kerr_geo_constants_of_motion(a, p, e, x)
     energy = constants["E"]
     lz = constants["Lz"]

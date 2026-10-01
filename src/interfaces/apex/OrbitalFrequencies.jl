@@ -4,29 +4,51 @@
 _nonnegative_radicand(value) = max(0.0, real(value))
 _sqrt_nonnegative(value) = sqrt(_nonnegative_radicand(value))
 
+# [F(r+) - F(r-)] / (r+ - r-), or its |a| -> 1 limit F'((r+ + r-)/2) when the horizons merge.
+function _horizon_divdiff(F, rp, rm)
+    # Plain divided difference while its cancellation error, ~eps/(rp - rm), stays below
+    # ~1e-10; it differs from F'(ρ0) only by F‴ (rp - rm)^2/24, so below that the
+    # derivative is a symmetric difference with two Richardson steps (truncation O(δ^6)).
+    rp - rm > 1e-6 && return (F(rp) - F(rm)) / (rp - rm)
+    ρ0 = (rp + rm) / 2
+    g(δ) = (F(ρ0 + δ) - F(ρ0 - δ)) / (2δ)
+    δ = 1e-3
+    return (64g(δ / 4) - 20g(δ / 2) + g(δ)) / 45      # two Richardson steps: O(δ⁶)
+end
+
 # -------------------------------------------------------------------
 # Radial roots
 # -------------------------------------------------------------------
 """
-    kerr_geo_radial_roots(a, p, e, x; En, Q)
+    kerr_geo_radial_roots(a, p, e, x; En, Lz, Q)
 
 Return the four roots (r1, r2, r3, r4) of the radial potential, with r1 = p/(1 − e) and
-r2 = p/(1 + e). `En` and `Q` default to the energy and Carter constant of (a, p, e, x).
+r2 = p/(1 + e). `En`, `Lz` and `Q` default to the constants of motion of (a, p, e, x).
 For e = 1 (E = 1) the potential is cubic: r1 = Inf, and r3, r4 are given in closed form.
 """
-function kerr_geo_radial_roots(a::Real, p::Real, e::Real, x::Real; En = nothing, Q = nothing)
-    En === nothing && (En = kerr_geo_energy(a, p, e, x))
-    Q === nothing && (Q = kerr_geo_carter_constant(a, p, e, x))
+function kerr_geo_radial_roots(a::Real, p::Real, e::Real, x::Real; En = nothing, Lz = nothing,
+        Q = nothing)
+    if En === nothing || Lz === nothing || Q === nothing
+        c = _apex_constants(a, p, e, x)
+        En === nothing && (En = c.E)
+        Lz === nothing && (Lz = c.Lz)
+        Q === nothing && (Q = c.Q)
+    end
 
-    # Generic case (e != 1)
-    if !isapprox(e, 1.0; atol=1e-12)
+    if e != 1
         r1 = p / (1 - e)
         r2 = p / (1 + e)
-        AplusB = 2.0 / (1 - En^2) - (r1 + r2)  
-        AB = (a^2 * Q) / ((1 - En^2) * r1 * r2) 
+        # R(r1) = 0 divided by r1³ gives κ = (1 − E²) r1 and r1(2 − κ) as sums of terms that
+        # shrink with 1/r1. The root sum 2/(1 − E²) = 2r1/κ then yields r3 + r4 without
+        # subtracting r1 from 2/(1 − E²), which near e = 1 would leave no digits.
+        w = 1 + a^2 / r1^2
+        u1 = ((Lz - a * En)^2 + Q) / r1
+        κ = (2 - (Lz^2 + Q) / r1 + 2u1 / r1 - a^2 * Q / r1^3) / w
+        AplusB = (2a^2 / r1 + Lz^2 + Q - 2u1 + a^2 * Q / r1^2) / (w * κ) - r2
+        AB = a^2 * Q / (κ * r2)
 
         r3 = (AplusB + _sqrt_nonnegative(AplusB^2 - 4.0 * AB)) / 2.0
-        r4 = AB / r3
+        r4 = iszero(r3) ? 0.0 : AB / r3
         return (r1, r2, r3, r4)
     end
 
@@ -62,23 +84,9 @@ Return `(zp, zm)` with zm = √(1 − x²) and zp² = a²(1 − E²) + Lz²/x² 
 polar orbits, x = 0); a²(1 − E²)(zm/zp)² is the parameter of the polar elliptic functions.
 """
 function kerr_geo_polar_roots(a::Real, p::Real, e::Real, x::Real)
-    # Constants of motion (a Dict with keys "E", "Lz", "Q")
-    consts = kerr_geo_constants_of_motion(a, p, e, x)
-    En = consts["E"]
-    L = consts["Lz"]
-    Q = consts["Q"]
-
-    zm = _sqrt_nonnegative(1.0 - x^2)
-
-    if isapprox(x, 0.0; atol=1e-12)
-        # polar special-case: use Q directly
-        zp = _sqrt_nonnegative(Q)
-    else
-        # generic polar amplitude
-        zp = _sqrt_nonnegative(a^2 * (1.0 - En^2) + L^2 / (1.0 - zm^2))
-    end
-
-    return (zp, zm)
+    c = _apex_constants(a, p, e, x)
+    # zp² = a²(1 − E²) + (Lz/x)² from Lz/x itself, finite at x = 0 and without 1 − z₋² for |x| ≪ 1
+    return (sqrt(a^2 * c.ν + c.L^2), sqrt(1 - x^2))
 end
 
 function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
@@ -93,32 +101,26 @@ function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
         )
     end
 
-    # Case 2: e == 1
-    if isapprox(e, 1.0; atol=1e-12)
-        m = (4*e) / (p - 6 + 2*e)
-        return Dict(
-            "ϒr" => _sqrt_nonnegative(-(p * (-6 + 2*e + p)) / (3 + e^2 - p)) * π / (2 * Elliptic.K(m)),
-            "ϒθ" => p / _sqrt_nonnegative(p - 3 - e^2),
-            "ϒϕ" => (p * sign(x)) / _sqrt_nonnegative(p - 3 - e^2),
-            "ϒt" => Inf
-        )
-    end
-
-    # Case 3: 0 < e <1
+    # 0 < e < 1. Toward e = 1 the characteristic n1 → 1 and ϒt ∝ (1 − e)^(−3/2) comes from
+    # Π(n1|m)/(e² − 1): e² − 1 and 1 − n1 are formed from their factors.
     m = (4*e) / (p - 6 + 2*e)
+    n1 = (2*e * (-4+p)) / ((1+e) * (-6+2*e+p))
+    Π1 = _complete_pi(n1, (1 - e) * (p - 6 - 2e) / ((1 + e) * (p - 6 + 2e)), m)
+    n2 = (16*e) / (12+8*e-4*e^2-8*p+p^2)
+    Π2 = _complete_pi(n2, (p - 6 - 2e) * (p - 2 + 2e) / ((p - 6 + 2e) * (p - 2 - 2e)), m)
+    e2m1 = (e - 1) * (e + 1)
 
     return Dict(
         "ϒr" => _sqrt_nonnegative(-(p * (-6 + 2*e + p)) / (3 + e^2 - p)) * π / (2 * Elliptic.K(m)),
         "ϒθ" => p / _sqrt_nonnegative(p - 3 - e^2),
         "ϒϕ" => (p * sign(x)) / _sqrt_nonnegative(p - 3 - e^2),
         "ϒt" => begin
-            num = -(((-4+p) * p^2 * (-6+2*e+p) * Elliptic.E(m)) / (-1+e^2)) +
-                (p^2 * (28 + 4*e^2 - 12*p + p^2) * Elliptic.K(m)) / (-1+e^2) -
-                (2 * (6 + 2*e - p) * (3 + e^2 - p) * p^2 * Elliptic.Π((2*e * (-4+p)) / ((1+e) * (-6+2*e+p)), π/2, m)) / ((-1+e) * (1+e)^2) +
-                (4 * (-4+p) * p * (2 * (1+e) * Elliptic.K(m) + (-6 - 2*e + p) * Elliptic.Π((2*e * (-4+p)) / ((1+e) * (-6+2*e+p)), π/2, m))) / (1+e) +
+            num = -(((-4+p) * p^2 * (-6+2*e+p) * Elliptic.E(m)) / e2m1) +
+                (p^2 * (28 + 4*e^2 - 12*p + p^2) * Elliptic.K(m)) / e2m1 -
+                (2 * (6 + 2*e - p) * (3 + e^2 - p) * p^2 * Π1) / ((-1+e) * (1+e)^2) +
+                (4 * (-4+p) * p * (2 * (1+e) * Elliptic.K(m) + (-6 - 2*e + p) * Π1)) / (1+e) +
                 2 * (-4+p)^2 * ((-4+p) * Elliptic.K(m) -
-                ((6+2*e-p) * p * Elliptic.Π((16*e) / (12+8*e-4*e^2-8*p+p^2), π/2, m)) / (2+2*e-p))
-            denom = (p * (-3 - e^2 + p) * ( -4 + p)^2 )
+                ((6+2*e-p) * p * Π2) / (2+2*e-p))
             0.5 * _sqrt_nonnegative((-4*e^2 + (-2+p)^2) / (p * (-3 - e^2 + p))) * (8 + num / ( (-4+p)^2 * Elliptic.K(m) ))
         end
     )
@@ -138,24 +140,17 @@ function kerr_geo_mino_frequency_r(a::Real, p::Real, e::Real, x::Real, EnLQ, roo
         return _sqrt_nonnegative(p*(p-6)/(p-3))
     end
 
-    if isapprox(e, 1.0; atol=1e-12)   # e == 1
-        kr = (ρ3 - ρ4) / (ρ2 - ρ4)
-        return (π * _sqrt_nonnegative(2 * (ρ2 - ρ4))) / (2 * Elliptic.K(kr))
-    else
-        kr = ((ρ1 - ρ2) / (ρ1 - ρ3)) * ((ρ3 - ρ4) / (ρ2 - ρ4))
-        return (π * _sqrt_nonnegative((1 - En^2) * (ρ1 - ρ3) * (ρ2 - ρ4))) / (2 * Elliptic.K(kr))
-    end
+    kr = ((ρ1 - ρ2) / (ρ1 - ρ3)) * ((ρ3 - ρ4) / (ρ2 - ρ4))
+    # 1 − E² = 2/(ρ1 + ρ2 + ρ3 + ρ4), finite times ρ1 − ρ3 as e → 1
+    return (π * _sqrt_nonnegative(2 * (ρ1 - ρ3) / (ρ1 + ρ2 + ρ3 + ρ4) * (ρ2 - ρ4))) /
+        (2 * Elliptic.K(kr))
 end
 
 function kerr_geo_mino_frequency_θ(a::Real, p::Real, e::Real, x::Real, EnLQ, roots)
     En, L, Q = EnLQ
     zp, zm = roots
 
-    if isapprox(e, 1.0; atol=1e-12)   # e == 1
-        return zp
-    else
-        return π * zp / (2 * Elliptic.K(a^2*(1-En^2)*(zm/zp)^2))
-    end
+    return π * zp / (2 * Elliptic.K(a^2*(1-En^2)*(zm/zp)^2))
 end
 
 function kerr_geo_mino_frequency_ϕ(a, p, e, x, EnLQ, roots, zpzm)
@@ -167,21 +162,7 @@ function kerr_geo_mino_frequency_ϕ_r(a, p, e, x, EnLQ, roots)
     En, L, Q = EnLQ
     ρ1, ρ2, ρ3, ρ4 = roots
 
-    if isapprox(a^2, 1.0; atol=1e-12) && isapprox(e, 1.0; atol=1e-12)
-        kr = (ρ3 - ρ4) / (ρ2 - ρ4)
-        hM = (ρ3 - 1) / (ρ2 - 1)
-        return a * (2/(ρ3-1) * (1 - (ρ2-ρ3)/(ρ2-1) * Elliptic.Π(hM, π/2, kr)/Elliptic.K(kr)) +
-                    (2 - a*L)/(2*(ρ3-1)^2) * ((2 - (ρ2-ρ3)/(ρ2-1)) + ((ρ2-ρ4)*(ρ3-1))/((ρ2-1)*(ρ4-1)) * Elliptic.E(kr)/Elliptic.K(kr) +
-                    (ρ2-ρ3)/(ρ2-1) * (1 + (ρ2-ρ3)/(ρ2-1) + (ρ4-ρ3)/(ρ4-1) - 4) * Elliptic.Π(hM, π/2, kr)/Elliptic.K(kr)))
-    elseif isapprox(e, 1.0; atol=1e-12)
-        ρin = 1 - sqrt(1 - a^2)
-        ρout = 1 + sqrt(1 - a^2)
-        kr = (ρ3 - ρ4) / (ρ2 - ρ4)
-        hout = (ρ3 - ρout) / (ρ2 - ρout)
-        hin = (ρ3 - ρin) / (ρ2 - ρin)
-        return a / (2*sqrt(1-a^2)) * ((2*ρout - a*L)/(ρ3-ρout) * (1 - (ρ2-ρ3)/(ρ2-ρout) * Elliptic.Π(hout, π/2, kr)/Elliptic.K(kr)) -
-                                      (2*ρin - a*L)/(ρ3-ρin) * (1 - (ρ2-ρ3)/(ρ2-ρin) * Elliptic.Π(hin, π/2, kr)/Elliptic.K(kr)))
-    elseif isapprox(a^2, 1.0; atol=1e-12)
+    if isapprox(a^2, 1.0; atol=1e-12)
         ρin = 1 - sqrt(1 - a^2)
         ρout = 1 + sqrt(1 - a^2)
         kr = ((ρ1-ρ2)/(ρ1-ρ3)) * ((ρ3-ρ4)/(ρ2-ρ4))
@@ -207,16 +188,10 @@ function kerr_geo_mino_frequency_ϕ_θ(a, p, e, x, EnLQ, zpzm)
     En, L, Q = EnLQ
     zp, zm = zpzm
 
-    if isapprox(x, 0.0; atol=1e-12)  # x == 0: Lz = 0, the polar part L/(1-z^2) of dφ/dλ vanishes
-        return 0.0
-    elseif isapprox(e, 1.0; atol=1e-12)
-        roots = kerr_geo_radial_roots(a, p, e, x)
-        ρ1, ρ2, ρ3, ρ4 = roots
-        return sqrt(2) * _sqrt_nonnegative((ρ2*(a^2 + ρ2^2)) / (a^2 + (-2 + ρ2)*ρ2))
-    else
-        m = a^2*(1 - En^2)*(zm/zp)^2
-        return L * Elliptic.Pi(zm^2, π/2, m) / Elliptic.K(m)
-    end
+    iszero(x) && return 0.0     # Lz = 0: the polar part Lz/(1 − z²) of dφ/dλ vanishes
+    m = a^2*(1 - En^2)*(zm/zp)^2
+    # Π(z₋²|m) with 1 − z₋² = x² supplied: for |x| ≪ 1 the characteristic is within rounding of 1
+    return L * _complete_pi(zm^2, x^2, m) / Elliptic.K(m)
 end
 
 function kerr_geo_mino_frequency_t(a, p, e, x, params, rhos, zvals)
@@ -238,17 +213,15 @@ function kerr_geo_mino_frequency_t_r(a, p, e, x, params, rhos)
     hout = (ρ1 - ρ2)/(ρ1 - ρ3) * (ρ3 - ρout)/(ρ2 - ρout)
     hin  = (ρ1 - ρ2)/(ρ1 - ρ3) * (ρ3 - ρin)/(ρ2 - ρin)
     hr   = (ρ1 - ρ2)/(ρ1 - ρ3)
-
-    if isapprox(e, 1.0; atol=1e-12)
-        return Inf
-    end
+    # Π(hr|kr) with 1 − hr formed directly: hr → 1 as e → 1
+    Πr = _complete_pi(hr, (ρ2 - ρ3)/(ρ1 - ρ3), kr)
 
     if isapprox(a^2, 1.0; atol=1e-12)
         hM = (ρ1 - ρ2)/(ρ1 - ρ3) * (ρ3 - 1)/(ρ2 - 1)
         return 5 * En + En * (0.5 * ((ρ3*(ρ1 + ρ2 + ρ3) - ρ1*ρ2) +
-                (ρ1 + ρ2 + ρ3 + ρ4)*(ρ2 - ρ3) * Elliptic.Π(hr, π/2, kr)/Elliptic.K(kr) +
+                (ρ1 + ρ2 + ρ3 + ρ4)*(ρ2 - ρ3) * Πr/Elliptic.K(kr) +
                 (ρ1 - ρ3)*(ρ2 - ρ4) * Elliptic.E(kr)/Elliptic.K(kr)) +
-                2*(ρ3 + (ρ2 - ρ3) * Elliptic.Π(hr, π/2, kr)/Elliptic.K(kr)) +
+                2*(ρ3 + (ρ2 - ρ3) * Πr/Elliptic.K(kr)) +
                 (2*(4 - a*L/En))/(ρ3 - 1) * (1 - (ρ2 - ρ3)/(ρ2 - 1) * Elliptic.Π(hM, π/2, kr)/Elliptic.K(kr)) +
                 (2 - a*L/En)/(ρ3 - 1)^2 * (
                     (2 - ((ρ1 - ρ3)*(ρ2 - ρ3))/((ρ1 - 1)*(ρ2 - 1))) +
@@ -260,9 +233,9 @@ function kerr_geo_mino_frequency_t_r(a, p, e, x, params, rhos)
     
     term1 = (a^2 + 4) * En
     term2 = En * (0.5 * (ρ3*(ρ1 + ρ2 + ρ3) - ρ1*ρ2 + 
-             (ρ1 + ρ2 + ρ3 + ρ4)*(ρ2 - ρ3) * Elliptic.Π(hr, π/2, kr)/Elliptic.K(kr) +
+             (ρ1 + ρ2 + ρ3 + ρ4)*(ρ2 - ρ3) * Πr/Elliptic.K(kr) +
              (ρ1 - ρ3)*(ρ2 - ρ4) * Elliptic.E(kr)/Elliptic.K(kr)) +
-             2*(ρ3 + (ρ2 - ρ3) * Elliptic.Π(hr, π/2, kr)/Elliptic.K(kr)) +
+             2*(ρ3 + (ρ2 - ρ3) * Πr/Elliptic.K(kr)) +
              2 * _horizon_divdiff(ρ -> ((4 - a*L/En)*ρ - 2a^2)/(ρ3 - ρ) *
                 (1 - (ρ2 - ρ3)/(ρ2 - ρ) * Elliptic.Π(((ρ1 - ρ2)/(ρ1 - ρ3)) * ((ρ3 - ρ)/(ρ2 - ρ)), π/2, kr)/Elliptic.K(kr)),
                 ρout, ρin))
@@ -273,13 +246,10 @@ function kerr_geo_mino_frequency_t_θ(a, p, e, x, params, zvals)
     En, L, Q = params
     zp, zm = zvals
     
-    if isapprox(e, 1.0; atol=1e-12)
-        return -a^2 + (a^2 * Q)/(2 * zp^2)
-    elseif isapprox(x^2, 1.0; atol=1e-12)
-        return -a^2 * En
-    else
-        return (En*Q)/((1 - En^2)*zm^2) * (1 - Elliptic.E(a^2*(1 - En^2)*(zm/zp)^2)/Elliptic.K(a^2*(1 - En^2)*(zm/zp)^2)) - a^2*En
-    end
+    # E Q (1 − E(m)/K(m))/((1 − E²) z₋²) with m = a²(1 − E²)(z₋/z₊)², written with
+    # D(m) = (K − E)/m so that nothing is divided by 1 − E² (→ 0 as e → 1); −a²E for Q = 0
+    m = a^2*(1 - En^2)*(zm/zp)^2
+    return En*Q*a^2/zp^2 * _elliptic_D(π/2, m)/Elliptic.K(m) - a^2*En
 end
 
 function kerr_geo_mino_frequencies(a, p, e, x)
@@ -315,7 +285,7 @@ function kerr_geo_mino_frequencies(a, p, e, x)
         En = consts["E"]
         L = consts["Lz"]
         Q = consts["Q"]
-        r1, r2, r3, r4 = kerr_geo_radial_roots(a, p, e, x)
+        r1, r2, r3, r4 = kerr_geo_radial_roots(a, p, e, x; En=En, Lz=L, Q=Q)
         zp, zm = kerr_geo_polar_roots(a, p, e, x)
 
         U_r     = kerr_geo_mino_frequency_r(a, p, e, x, [En, L, Q], [r1,r2,r3,r4])
@@ -337,10 +307,6 @@ function kerr_geo_boyerlindquist_frequencies(a, p, e, x)
         return schwarzschild_geo_boyerlindquist_frequencies(a, p, e, x)
     end
 
-    if e > 1
-        return Dict("Ωr"=>0, "Ωθ"=>0, "Ωϕ"=>0)
-    end
-
     MinoFreqs = kerr_geo_mino_frequencies(a, p, e, x)
     Γ = MinoFreqs["ϒt"]
 
@@ -353,7 +319,6 @@ end
 
 # Γτ = ⟨Σ⟩ = ⟨r²⟩ + a²⟨z²⟩ averaged over Mino time; proper-time frequency = ϒ / Γτ.
 function kerr_geo_proper_frequency_factor(a, p, e, x)
-    e >= 1 && return Inf
     ρ1, ρ2, ρ3, ρ4 = kerr_geo_radial_roots(a, p, e, x)
     zp, zm = kerr_geo_polar_roots(a, p, e, x)
     En = kerr_geo_energy(a, p, e, x)
@@ -362,14 +327,14 @@ function kerr_geo_proper_frequency_factor(a, p, e, x)
     hr = (ρ1 - ρ2) / (ρ1 - ρ3)
     Kr = Elliptic.K(kr)
     r2 = 0.5 * (ρ3 * (ρ1 + ρ2 + ρ3) - ρ1 * ρ2 +
-                (ρ1 + ρ2 + ρ3 + ρ4) * (ρ2 - ρ3) * Elliptic.Π(hr, π/2, kr) / Kr +
+                (ρ1 + ρ2 + ρ3 + ρ4) * (ρ2 - ρ3) * _complete_pi(hr, (ρ2 - ρ3) / (ρ1 - ρ3), kr) / Kr +
                 (ρ1 - ρ3) * (ρ2 - ρ4) * Elliptic.E(kr) / Kr)
-    a2z2 = iszero(kθ) ? 0.0 : zp^2 * (1 - Elliptic.E(kθ) / Elliptic.K(kθ)) / (1 - En^2)
+    # a²⟨z²⟩ = a² z₋² D(kθ)/K(kθ), D = (K − E)/kθ
+    a2z2 = a^2 * zm^2 * _elliptic_D(π/2, kθ) / Elliptic.K(kθ)
     return r2 + a2z2
 end
 
 function kerr_geo_proper_frequencies(a, p, e, x)
-    isapprox(e, 1.0; atol=1e-12) && return Dict("Ωr" => 0, "Ωθ" => 0, "Ωϕ" => 0)
     f = kerr_geo_mino_frequencies(a, p, e, x)
     Γ = kerr_geo_proper_frequency_factor(a, p, e, x)
     return Dict("Ωr" => f["ϒr"] / Γ, "Ωθ" => f["ϒθ"] / Γ, "Ωϕ" => f["ϒϕ"] / Γ)
@@ -378,13 +343,16 @@ end
 """
     kerr_geo_frequencies(a, p, e, x; Time="Mino")
 
-The fundamental frequencies of the bound orbit `(a, p, e, x)`, as a `Dict`. `Time="Mino"`
+The fundamental frequencies of the bound orbit `(a, p, e, x)`, 0 ≤ e < 1, as a `Dict`
+(other eccentricities have no periodic radial motion and raise a `DomainError`). `Time="Mino"`
 gives the Mino-time frequencies `"ϒr"`, `"ϒθ"`, `"ϒϕ"` and `"ϒt"` (the mean of dt/dλ);
 `Time="BoyerLindquist"` gives `"Ωr"`, `"Ωθ"`, `"Ωϕ"`, the frequencies in coordinate time,
 Ωᵢ = ϒᵢ/ϒt; `Time="Proper"` gives the frequencies in proper time, ϒᵢ divided by the mean
 of dτ/dλ.
 """
 function kerr_geo_frequencies(a, p, e, x; Time="Mino")
+    0 <= e < 1 || throw(DomainError(e,
+        "Orbital frequencies are defined for bound orbits, 0 ≤ e < 1."))
     if Time == "Mino"
         freqs = kerr_geo_mino_frequencies(a, p, e, x)
         return Dict(

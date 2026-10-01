@@ -1,8 +1,6 @@
 # All-component classifier: radial roots of (a, E, Lz, Q) -> allowed exterior intervals ->
 # case IDs and KerrGeoRadialComponent records, plus polar admissibility and component selection.
 
-const ROOT_ATOL = 1.0e-12
-const ROOT_RTOL = 1.0e-12
 
 const CLASSIFICATION_PIPELINE = (
     :canonical_constants,
@@ -31,18 +29,6 @@ kerr_geo_classification_pipeline() = CLASSIFICATION_PIPELINE
 _root_close(x, y; atol=ROOT_ATOL, rtol=ROOT_RTOL) =
     abs(x - y) <= atol + rtol * max(1.0, abs(x), abs(y))
 
-function _polish_simple_root(a, energy, lz, q, candidate)
-    radius = float(candidate)
-    for _ in 1:8
-        values = kerr_radial_derivatives(a, energy, lz, q, radius)
-        abs(values.R1) <= eps(Float64) * max(1.0, abs(radius)) && break
-        step = values.R / values.R1
-        radius -= step
-        abs(step) <= 4 * eps(Float64) * max(1.0, abs(radius)) && break
-    end
-    return radius
-end
-
 function _repeated_root_candidates(a, energy, lz, q, polynomial;
         atol=ROOT_ATOL, rtol=ROOT_RTOL)
     candidates = NamedTuple[]
@@ -55,6 +41,7 @@ function _repeated_root_candidates(a, energy, lz, q, polynomial;
             multiplicity = kerr_root_multiplicity_at(
                 a, energy, lz, q, radius; atol=atol, rtol=rtol)
             multiplicity >= derivative_order + 1 || continue
+            _repeated_radial_zero(a,energy,lz,q,radius) || continue
             push!(candidates, (
                 radius=radius,
                 multiplicity=multiplicity,
@@ -96,7 +83,7 @@ function _repeated_root_candidates(a, energy, lz, q, polynomial;
 end
 
 """
-    kerr_geo_root_structure(a, E, Lz, Q; atol=1e-12, rtol=1e-12)
+    kerr_geo_root_structure(a, E, Lz, Q; atol=ROOT_ATOL, rtol=ROOT_RTOL)
 
 Roots of the radial potential R(r): the raw complex roots, the real roots with their
 multiplicities and R, R′, R″, R‴ residuals, and their split into roots below, on and
@@ -109,8 +96,12 @@ function kerr_geo_root_structure(a::Real, energy::Real, lz::Real, q::Real;
         atol::Real=ROOT_ATOL,
         rtol::Real=ROOT_RTOL)
     horizons = kerr_horizons(a)
+    coefficients = kerr_radial_coefficients(a, energy, lz, q)
     polynomial = kerr_radial_polynomial(a, energy, lz, q)
-    raw_roots = ComplexF64.(roots(polynomial))
+    shifted=_radial_shifted_coefficients(a,energy,lz,q)
+    evaluator=_radial_root_evaluator(a,energy,lz,q)
+    raw_roots = ComplexF64[_polish_root(coefficients,1+z;evaluator=evaluator)
+        for z in roots(Polynomial(collect(shifted)))]
     repeated = _repeated_root_candidates(
         a, energy, lz, q, polynomial; atol=atol, rtol=rtol)
 
@@ -128,7 +119,7 @@ function kerr_geo_root_structure(a::Real, energy::Real, lz::Real, q::Real;
         consumed_raw_roots[index] && continue
         imag_tolerance = atol + rtol * max(1.0, abs(real(value)))
         abs(imag(value)) <= imag_tolerance || continue
-        radius = _polish_simple_root(a, energy, lz, q, real(value))
+        radius = _polish_root(coefficients,real(value);evaluator=evaluator)
         push!(candidates, (radius=radius, multiplicity=1, source=:raw_root))
     end
 
@@ -154,10 +145,14 @@ function kerr_geo_root_structure(a::Real, energy::Real, lz::Real, q::Real;
     end
 
     horizon_tolerance = atol + rtol * max(1.0, abs(horizons.rplus))
+    near(item) = abs(item.radius - horizons.rplus) <= horizon_tolerance
+    # a root within rounding of r₊ is the horizon root when P(r₊) = 0; otherwise R(r₊) = P(r₊)² > 0
+    # and that root bounds the allowed sliver just outside the horizon (width P²/(Δ'(r₊)(r₊² + K)))
+    on_horizon = _horizon_root(a, energy, lz)
     below = [item for item in real_roots if item.radius < horizons.rplus - horizon_tolerance]
-    coincident = [item for item in real_roots if
-        abs(item.radius - horizons.rplus) <= horizon_tolerance]
-    exterior = [item for item in real_roots if item.radius > horizons.rplus + horizon_tolerance]
+    coincident = on_horizon ? [item for item in real_roots if near(item)] : NamedTuple[]
+    exterior = [item for item in real_roots if item.radius > horizons.rplus + horizon_tolerance ||
+        (!on_horizon && near(item))]
     real_degree = sum((item.multiplicity for item in real_roots); init=0)
 
     return (
@@ -172,6 +167,25 @@ function kerr_geo_root_structure(a::Real, energy::Real, lz::Real, q::Real;
         multiplicity_sum=real_degree,
         root_tolerance=(atol=atol, rtol=rtol),
     )
+end
+
+# R(r) = c ∏(r − x_i) from the classified roots (real roots with their multiplicities, complex
+# ones as (r − ρ)² + η²): next to a root the product keeps its digits where the coefficient
+# form cancels; the members' dr/dλ and residuals use it
+function _radial_potential_from_roots(a, energy, lz, q, structure)
+    lead = kerr_radial_coefficients(a, energy, lz, q)[structure.degree + 1]
+    reals = map(item -> (item.radius, item.multiplicity), structure.real_roots)
+    pairs = Tuple{Float64,Float64}[(real(z), imag(z)) for z in _nonreal_roots(structure) if imag(z) > 0]
+    return function (r)
+        value = lead
+        for (x, k) in reals
+            value *= (r - x)^k
+        end
+        for (ρ, η) in pairs
+            value *= (r - ρ)^2 + η^2
+        end
+        return value
+    end
 end
 
 _potential_scale(a, energy, lz, q, r) =
@@ -191,12 +205,15 @@ function _allowed_intervals(a, energy, lz, q, root_structure;
     rplus = kerr_horizons(a).rplus
     exterior = root_structure.exterior
     boundaries = [rplus; [item.radius for item in exterior]; Inf]
+    potential = _radial_potential_from_roots(a, energy, lz, q, root_structure)
     intervals = NamedTuple[]
     for index in 1:(length(boundaries) - 1)
         lower = boundaries[index]
         upper = boundaries[index + 1]
         probe = _interval_probe(lower, upper, rplus)
-        value = kerr_radial_potential(a, energy, lz, q, probe)
+        # Root multiplicities fix the sign between roots, even in a narrow
+        # forbidden gap whose expanded polynomial is below a residual tolerance.
+        value = potential(probe)
         tolerance = atol + rtol * _potential_scale(a, energy, lz, q, probe)
         lower_root = index == 1 ? nothing : exterior[index - 1]
         upper_root = index > length(exterior) ? nothing : exterior[index]
@@ -210,7 +227,7 @@ function _allowed_intervals(a, energy, lz, q, root_structure;
             probe=probe,
             potential=value,
             tolerance=tolerance,
-            allowed=value >= -tolerance,
+            allowed=value >= 0,
         ))
     end
     return Tuple(intervals)
@@ -366,22 +383,39 @@ function _polar_sector(candidates, requested)
     return :polar_initial_data_required
 end
 
-function _base_tags(a, energy, lz, q, structure; atol=1.0e-10)
+# The same classification with the polar sector `requested` (the choice `kerr_geo_classify`
+# would make for it), without solving the roots again: members with a sector rule of their own
+# (Q = 0 scatter, C5) relabel the family's classification instead of classifying twice.
+function _with_polar_sector(classification::KerrGeoClassification, requested)
+    sector = _polar_sector(classification.PolarMetadata.candidates, requested)
+    sector === classification.PolarMetadata.selected && return classification
+    return KerrGeoClassification(classification.Parameters, classification.ConstantsOfMotion,
+        classification.EnergyRegime, classification.MetricLimit, classification.Roots,
+        [_with_polar_sector(component, sector) for component in classification.Components],
+        classification.CaseIds, classification.ExcludedCaseIds,
+        merge(classification.PolarMetadata, (selected=sector,)), classification.Tags,
+        classification.SelectedCase, merge(classification.SelectionHint, (polar_sector=requested,)),
+        classification.Status)
+end
+
+_with_polar_sector(c::KerrGeoRadialComponent, sector) = KerrGeoRadialComponent(c.CaseId,
+    c.BroadClass, c.EnergyRegime, c.LowerEndpoint, c.UpperEndpoint, c.Connectivity,
+    c.RadialOrientation, c.FormulaFamily, c.PairedCaseIds, c.FamilyMemberCaseIds, sector, c.Tags,
+    c.SupportStatus, c.Metadata)
+
+function _base_tags(a, energy, lz, q, structure)
     tags = Symbol[]
     metric = kerr_metric_limit(a)
     metric === :schwarzschild && push!(tags, :schwarzschild_limit)
     metric === :extremal && push!(tags, :extremal_limit)
     metric === :near_extremal && push!(tags, :near_extremal_limit)
-    abs(q) <= atol && push!(tags, :zero_carter_constant)
-    abs(lz) <= atol && push!(tags, :zero_axial_angular_momentum)
+    iszero(q) && push!(tags, :zero_carter_constant)
+    _zero_lz(a, energy, lz, q) && push!(tags, :zero_axial_angular_momentum)
     any(item -> item.multiplicity >= 2, structure.real_roots) &&
         push!(tags, :repeated_radial_root)
     !isempty(structure.horizon_coincident) && push!(tags, :horizon_coincident_root)
     kerr_energy_regime(energy) === :parabolic && push!(tags, :parabolic_root_at_infinity)
-    qaxis = -a^2 * _e2m1(energy)
-    if abs(lz) <= atol && abs(q - qaxis) <= atol * max(1.0, abs(qaxis))
-        push!(tags, :axis_constants_require_axis_initial_condition)
-    end
+    _on_axis(a, energy, lz, q) && push!(tags, :axis_constants_require_axis_initial_condition)
     return Tuple(unique(tags))
 end
 
@@ -418,6 +452,7 @@ function _component_for_case(case_id, structure, rplus, energy_regime, polar_sec
         :classified,
         (
             roots=structure.real_roots,
+            structure=structure,
             raw_roots=structure.raw_roots,
             root_multiplicities=_multiplicities(structure.real_roots),
             complex_root_count=structure.complex_root_count,
@@ -485,6 +520,7 @@ function _unassigned_component(interval, regime, polar_sector, base_tags, struct
         :unassigned,
         (
             roots=structure.real_roots,
+            structure=structure,
             raw_roots=structure.raw_roots,
             root_multiplicities=_multiplicities(structure.real_roots),
             complex_root_count=structure.complex_root_count,
@@ -582,15 +618,14 @@ function _classify(a::Real, energy::Real, lz::Real, q::Real;
         a, energy, lz, q; atol=atol, rtol=rtol)
     intervals = _allowed_intervals(
         a, energy, lz, q, structure; atol=atol, rtol=rtol)
-    polar = kerr_polar_admissibility(a, energy, lz, q; atol=atol, rtol=rtol)
-    polar_candidates = kerr_polar_sector_candidates(a, energy, lz, q; atol=atol)
+    polar = kerr_polar_admissibility(a, energy, lz, q; rtol=rtol)
+    polar_candidates = kerr_polar_sector_candidates(a, energy, lz, q)
     selected_polar = _polar_sector(polar_candidates, polar_sector)
     horizon_momentum = kerr_radial_momentum(a, energy, lz, horizons.rplus)
-    horizon_tolerance = atol + rtol * max(1.0, abs(horizon_momentum))
-    future_horizon = horizon_momentum > horizon_tolerance ? :future_directed :
-        horizon_momentum < -horizon_tolerance ? :past_directed : :horizon_root
+    future_horizon = _horizon_root(a, energy, lz) ? :horizon_root :
+        horizon_momentum > 0 ? :future_directed : :past_directed
     candidate_ids = _case_ids_for_structure(regime, structure)
-    base_tags = _base_tags(a, energy, lz, q, structure; atol=atol)
+    base_tags = _base_tags(a, energy, lz, q, structure)
 
     components = KerrGeoRadialComponent[]
     # E < 0 (Class N) and horizon-root constants have their own constructors (`kerr_geodesic`)

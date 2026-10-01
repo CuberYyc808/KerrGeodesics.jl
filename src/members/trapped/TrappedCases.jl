@@ -1,7 +1,6 @@
 # Class N (Trapped) members N1-N6: classification of E < 0 constants and assembly
 # of the full, outgoing and incoming trapped worldlines.
 
-const _ROOT_TOL = 2.0e-10
 const _CAUSAL_SAMPLES = 257
 
 """
@@ -9,7 +8,8 @@ const _CAUSAL_SAMPLES = 257
 
 The result of `kerr_geo_trapped_classify` for E < 0 constants with |a| < 1: the `CaseId`
 (N1–N6) and its `DispositionId` (NFD01–NFD06), the `EnergyRegime` and `MetricLimit`, the
-radial `Roots`, the `PolarSector`, P(r₊) (`HorizonMomentum`), the `TurningRadius`, the Mino
+radial root structure (`Roots`, as `kerr_geo_root_structure` returns it), the `PolarSector`,
+P(r₊) (`HorizonMomentum`), the `TurningRadius`, the Mino
 `Domain` between the two horizons, and the `Conditions` and `Status` of the classification.
 """
 struct KerrGeoTrappedClassification
@@ -53,25 +53,10 @@ end
 
 function _polar_zmax2(a, energy, lz, q, sector)
     sector === :equatorial && return 0.0
-    if energy == -1.0
-        denominator = q + lz^2
-        denominator > 0.0 || error("Polar motion with E=-1 is degenerate.")
-        return q / denominator
-    elseif abs(energy) < 1.0
-        beta = -a^2 * _e2m1(energy)
-        root_sum = (q + lz^2) / beta + 1.0
-        root_product = q / beta
-        discriminant = root_sum^2 - 4.0 * root_product
-        discriminant >= 0.0 || error("Polar roots with E<0 are not real.")
-        return 0.5 * (root_sum - sqrt(discriminant))
-    end
-    beta = a^2 * _e2m1(energy)
-    root_sum = (beta - q - lz^2) / beta
-    root_product = -q / beta
-    discriminant = root_sum^2 - 4.0 * root_product
-    discriminant >= 0.0 || error("Polar roots with E<0 are not real.")
-    return max(0.5 * (root_sum + sqrt(discriminant)),
-        0.5 * (root_sum - sqrt(discriminant)))
+    roots = _polar_quadratic_roots(a, energy, lz, q)
+    iszero(roots.c) && q + lz^2 <= 0 && error("Polar motion with E=-1 is degenerate.")
+    roots.disc >= 0 || error("Polar roots with E<0 are not real.")
+    return roots.c >= 0 ? roots.u_small : max(roots.u_small, roots.u_big)
 end
 
 """
@@ -116,13 +101,13 @@ function kerr_geo_trapped_classify(a::Real, energy::Real, lz::Real, q::Real)
         "The physical Class N turning endpoint must be a simple root.")
     turn = first_exterior.radius
 
-    sector = q <= 1.0e-13 ? :equatorial : :pendular
+    sector = iszero(q) ? :equatorial : :pendular
     zmax2 = _polar_zmax2(a, energy, lz, q, sector)
-    0.0 <= zmax2 < 1.0 + _ROOT_TOL || error(
+    0.0 <= zmax2 < 1.0 + POLAR_ROOT_SLACK || error(
         "The Class N polar turning value lies outside the physical interval.")
     zmax2 = clamp(zmax2, 0.0, 1.0)
     minimum_stationary_limit = 1.0 + sqrt(max(1.0 - a^2 * zmax2, 0.0))
-    turn < minimum_stationary_limit - _ROOT_TOL || throw(DomainError(
+    turn < minimum_stationary_limit || throw(DomainError(
         turn,
         "The full radial component is not strictly confined to the ergoregion for every admitted polar phase."))
     midpoint = 0.5 * (horizons.rplus + turn)
@@ -134,13 +119,6 @@ function kerr_geo_trapped_classify(a::Real, energy::Real, lz::Real, q::Real)
     radial_outer < 0.0 || error(
         "The first exterior Class N root does not terminate the allowed interval.")
 
-    roots = (
-        real=structure.real_roots,
-        raw=structure.raw_roots,
-        below_horizon=structure.below_horizon,
-        exterior=structure.exterior,
-        complex_root_count=structure.complex_root_count,
-    )
     domain = (
         radial=(horizons.rplus, turn),
         radial_endpoint_closed=(false, true),
@@ -164,7 +142,7 @@ function kerr_geo_trapped_classify(a::Real, energy::Real, lz::Real, q::Real)
         disposition,
         kerr_geo_case(case_id).EnergyRegime,
         metric,
-        roots,
+        structure,
         sector,
         float(pplus),
         float(turn),
@@ -189,35 +167,37 @@ function _build_trapped(a, energy, lz, q, classification;
     component in (:full, :outgoing, :incoming) ||
         error("Select component=:full, :outgoing, or :incoming.")
     selected_component = component
-    radial = _trapped_radial_model(
-        classification.DispositionId, a, energy, lz, q)
+    radial = _trapped_radial_model(classification.DispositionId, energy, classification.Roots)
     residues = _radial_residues(a, energy, lz)
     polar = _polar_solution(
         a, energy, lz, q, classification.PolarSector, float(polar_phase))
-    lambda_horizon = radial.lambda_horizon
+    lambda_horizon = radial.mino(residues.rplus)
     lambda_horizon > 0.0 || error("Class N requires a positive half-duration.")
     # t, φ, τ (zero at the turning event) and the retarded (u, χ) / advanced (v, ψ) charts
     # (zero on the past / future horizon): radial spectral engine + polar primitive
     rplus = residues.rplus
-    radius_of(lambda) = abs(lambda) >= lambda_horizon ? rplus : radial.r(abs(lambda))
+    radial_radius = radial.radius
+    radius_of(lambda) = abs(lambda) >= lambda_horizon ? rplus : radial_radius(abs(lambda))
+    radial_potential = _radial_potential_from_roots(a, energy, lz, q, classification.Roots)
     coords = _engine_coordinates(a, energy, lz, q, radius_of, _polar_primitive(polar);
+        potential=radial_potential,
         domain=(-lambda_horizon, lambda_horizon), ends=(:horizon, :horizon), turn=0.0,
         σ=-1.0, λ_bl=0.0, λ_regular=lambda_horizon, σ_regular=-1.0)
-    retarded = coords.regular_chart(1.0, -lambda_horizon)
+    retarded = _regular_chart(coords, 1.0, -lambda_horizon)
 
     function check_full(lambda)
         lam = float(lambda)
-        abs(lam) <= lambda_horizon + 2.0e-12 || throw(DomainError(
+        abs(lam) <= lambda_horizon + MINO_ENDPOINT_TOL || throw(DomainError(
             lambda, "Mino time lies outside the full trapped interval."))
         return clamp(lam, -lambda_horizon, lambda_horizon)
     end
-    check_full_bl(lambda) = (abs(check_full(lambda)) < lambda_horizon - 2.0e-14 ||
+    check_full_bl(lambda) = (abs(check_full(lambda)) < lambda_horizon ||
         throw(DomainError(lambda, "BL t and phi exclude both exact horizon endpoints."));
         check_full(lambda))
     function selected(lam, lambda)
-        selected_component === :outgoing && lam > 2.0e-12 && throw(DomainError(
+        selected_component === :outgoing && lam > MINO_ENDPOINT_TOL && throw(DomainError(
             lambda, "The outgoing component ends at the radial turning event."))
-        selected_component === :incoming && lam < -2.0e-12 && throw(DomainError(
+        selected_component === :incoming && lam < -MINO_ENDPOINT_TOL && throw(DomainError(
             lambda, "The incoming component starts at the radial turning event."))
         return selected_component === :outgoing ? min(lam, 0.0) :
             selected_component === :incoming ? max(lam, 0.0) : lam
@@ -227,7 +207,7 @@ function _build_trapped(a, energy, lz, q, classification;
     function full_bl(lambda)
         lam = check_full_bl(lambda)
         ps = polar.formula(lam)
-        tpt = coords.tphitau(lam)
+        tpt = _coords_tphitau(coords, lam)
         return (
             lambda=lam,
             t=tpt[1],
@@ -240,49 +220,49 @@ function _build_trapped(a, energy, lz, q, classification;
     end
     function past_regular(lambda)
         lam = check_full(lambda)
-        lam <= 2.0e-12 || throw(DomainError(
+        lam <= MINO_ENDPOINT_TOL || throw(DomainError(
             lambda, "The retarded chart (u, χ) covers only the outgoing half, λ ≤ 0."))
         u, chi = retarded(lam)
         return (u=u, chi=chi)
     end
     function future_regular(lambda)
         lam = check_full(lambda)
-        lam >= -2.0e-12 || throw(DomainError(
+        lam >= -MINO_ENDPOINT_TOL || throw(DomainError(
             lambda, "The advanced chart (v, ψ) covers only the incoming half, λ ≥ 0."))
-        return (v=coords.v(lam), psi=coords.psi(lam))
+        return (v=_coords_v(coords, lam), psi=_coords_psi(coords, lam))
     end
     function outgoing_view(lambda)
         lam = check_full_bl(lambda)
-        lam <= 2.0e-12 || throw(DomainError(
+        lam <= MINO_ENDPOINT_TOL || throw(DomainError(
             lambda, "The outgoing view requires lambda<=0."))
         return merge(full_bl(min(lam, 0.0)), past_regular(min(lam, 0.0)))
     end
     function incoming_view(lambda)
         lam = check_full_bl(lambda)
-        lam >= -2.0e-12 || throw(DomainError(
+        lam >= -MINO_ENDPOINT_TOL || throw(DomainError(
             lambda, "The incoming view requires lambda>=0."))
         return merge(full_bl(max(lam, 0.0)), future_regular(max(lam, 0.0)))
     end
 
     # velocities and residuals on the full worldline (λ < 0 outgoing, λ > 0 incoming)
     position = _polar_position(polar)
-    radial_potential(radius) = kerr_radial_potential(a, energy, lz, q, radius)
-    kin = _kinematics(a, energy, lz, q; r=λ -> radius_of(check_full(λ)),
-        rbl=λ -> radius_of(check_full_bl(λ)), z=λ -> position(check_full(λ))[1],
-        uz=λ -> position(check_full(λ))[2], sin2=λ -> position(check_full(λ))[3],
-        sign_r=λ -> -sign(λ), R=radial_potential)
-    full_velocity(λ) = (ut=kin.ut(λ), ur=kin.ur(λ), uz=kin.uz(λ), utheta=kin.utheta(λ),
-        uphi=kin.uphi(λ), dtau_dlambda=kin.dtau_dlambda(λ))
-    full_residuals(λ) = (radial=kin.radial_residual(λ), polar_z=kin.polar_residual(λ),
-        normalization=kin.normalization_residual(λ))
+    kin = _kinematics(a, energy, lz, q, λ -> radius_of(check_full(λ)),
+        λ -> radius_of(check_full_bl(λ)), λ -> position(check_full(λ)), λ -> -sign(λ),
+        radial_potential)
+    k = kin.state
+    full_velocity(λ) = (ut=_kin_ut(k, λ), ur=_kin_ur(k, λ), uz=_kin_uz(k, λ), utheta=_kin_utheta(k, λ),
+        uphi=_kin_uphi(k, λ), dtau_dlambda=_kin_dtau(k, λ))
+    full_residuals(λ) = (radial=_kin_ur(k, λ)^2 - k.R(k.r(λ)),
+        polar_z=_kin_uz(k, λ)^2 - kerr_polar_z_potential(a, energy, lz, q, _kin_z(k, λ)),
+        normalization=_kin_normalization(k, λ))
 
     # future-directed and co-rotating everywhere (the ergoregion clearance of the
     # classification guarantees it; checked on a grid of the assembled rates)
     causal_margin = max(1.0e-8, 1.0e-7 * lambda_horizon)
     causal_grid = range(-lambda_horizon + causal_margin, lambda_horizon - causal_margin;
         length=_CAUSAL_SAMPLES)
-    minimum_dt = minimum(kin.ut, causal_grid)
-    minimum_corotation = minimum(λ -> a * kin.uphi(λ), causal_grid)
+    minimum_dt = minimum(λ -> _kin_ut(k, λ), causal_grid)
+    minimum_corotation = minimum(λ -> a * _kin_uphi(k, λ), causal_grid)
     minimum_dt > 0.0 || error(
         "The Class N worldline is not future-directed (minimum dt/dλ = $(minimum_dt)).")
     minimum_corotation > 0.0 || error(
@@ -320,34 +300,35 @@ function _build_trapped(a, energy, lz, q, classification;
     )
     z(lambda) = position(check_component(lambda))[1]
     trajectory = (
-        t=lambda -> coords.t(check_component_bl(lambda)),
+        t=lambda -> _coords_t(coords, check_component_bl(lambda)),
         r=lambda -> radius_of(check_component(lambda)),
         theta=lambda -> acos(clamp(z(lambda), -1.0, 1.0)),
         z=z,
-        phi=lambda -> coords.phi(check_component_bl(lambda)),
-        tau=lambda -> coords.tau(check_component_bl(lambda)),
+        phi=lambda -> _coords_phi(coords, check_component_bl(lambda)),
+        tau=lambda -> _coords_tau(coords, check_component_bl(lambda)),
         u=lambda -> (check_component(lambda); past_regular(lambda).u),
         chi=lambda -> (check_component(lambda); past_regular(lambda).chi),
         v=lambda -> (check_component(lambda); future_regular(lambda).v),
         psi=lambda -> (check_component(lambda); future_regular(lambda).psi),
-        lambda_of_radius=radial.lambda_of_r,
+        lambda_of_radius=radial.mino,
         full=full_bl,
         outgoing=outgoing_view,
         incoming=incoming_view,
     )
     velocity = (
-        ut=λ -> kin.ut(check_component_bl(λ)),
-        ur=λ -> kin.ur(check_component_bl(λ)),
-        uz=λ -> kin.uz(check_component_bl(λ)),
-        utheta=λ -> kin.utheta(check_component_bl(λ)),
-        uphi=λ -> kin.uphi(check_component_bl(λ)),
-        dtau_dlambda=λ -> kin.dtau_dlambda(check_component_bl(λ)),
+        ut=λ -> _kin_ut(k, check_component_bl(λ)),
+        ur=λ -> _kin_ur(k, check_component_bl(λ)),
+        uz=λ -> _kin_uz(k, check_component_bl(λ)),
+        utheta=λ -> _kin_utheta(k, check_component_bl(λ)),
+        uphi=λ -> _kin_uphi(k, check_component_bl(λ)),
+        dtau_dlambda=λ -> _kin_dtau(k, check_component_bl(λ)),
         full=full_velocity,
     )
     residuals = (
-        radial=λ -> kin.radial_residual(check_component_bl(λ)),
-        polar_z=λ -> kin.polar_residual(check_component_bl(λ)),
-        normalization=λ -> kin.normalization_residual(check_component_bl(λ)),
+        radial=λ -> (μ = check_component_bl(λ); _kin_ur(k, μ)^2 - k.R(k.r(μ))),
+        polar_z=λ -> (μ = check_component_bl(λ);
+            _kin_uz(k, μ)^2 - kerr_polar_z_potential(a, energy, lz, q, _kin_z(k, μ))),
+        normalization=λ -> _kin_normalization(k, check_component_bl(λ)),
         full=full_residuals,
     )
     status = (
@@ -371,13 +352,11 @@ function _build_trapped(a, energy, lz, q, classification;
         polar=polar.metadata,
         classification=classification,
     )
-    return _member(:trapped, classification.CaseId;
-        constants=(a=float(a), E=float(energy), Lz=float(lz), Q=float(q)),
-        roots=(radial=radial.roots, polar=polar.metadata),
-        reference=reference, domain=domain, trajectory=trajectory, velocity=velocity,
-        potentials=(radial=radial_potential, polar_z=kin.Θ),
-        residuals=residuals, status=status,
-        spectral=SpectralStatus(() -> (coords.spectral(), _polar_spectral(polar))))
+    return _member(:trapped, classification.CaseId, kerr_geo_tier(classification.CaseId),
+        nothing, (a=float(a), E=float(energy), Lz=float(lz), Q=float(q)),
+        (radial=radial.roots, polar=polar.metadata), reference, domain, trajectory, velocity,
+        (radial=radial_potential, polar_z=kin.Θ), residuals, status,
+        SpectralStatus(() -> (_coords_spectral(coords), _polar_spectral(polar))))
 end
 
 """

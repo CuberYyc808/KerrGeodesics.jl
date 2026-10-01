@@ -24,15 +24,9 @@ Return `(zm, zp)`, the roots zm ≤ zp of a²(1 − E²) y² − (Q + L² + a²(
 y = z² = cos²θ; zp = Inf when a²(1 − E²) = 0.
 """
 function polar_roots(a, E, L, Q)
-    # Roots of a^2(1-E^2) z^4 - (Q + L^2 + a^2(1-E^2)) z^2 + Q in z^2, in the cancellation-free
-    # form; zp = Inf at a = 0, where the polar motion is a pure sine (see
-    # _plunge_polar_parameters).
     c = a^2 * (1 - E^2)
-    s = Q + L^2 + c
-    disc = sqrt(max(s^2 - 4 * c * Q, 0.0))
-    zm = s + disc > 0 ? 2 * Q / (s + disc) : 0.0
-    zp = c > 0 ? (s + disc) / (2 * c) : Inf
-    return zm, zp
+    roots = _polar_quadratic_roots(c, L, Q)
+    return roots.u_small, c > 0 ? roots.u_big : Inf
 end
 
 """
@@ -43,11 +37,8 @@ that the a -> 0 limit (ξθ^2 = Q + L^2, kθ = 0) is exact.
 """
 function _plunge_polar_parameters(a, E, L, Q)
     c = a^2 * (1 - E^2)
-    s = Q + L^2 + c
-    disc = sqrt(max(s^2 - 4 * c * Q, 0.0))
-    zm = s + disc > 0 ? 2 * Q / (s + disc) : 0.0
-    ξθ2 = (s + disc) / 2
-    return zm, sqrt(ξθ2), c * zm / ξθ2
+    roots = _polar_quadratic_roots(c, L, Q)
+    return roots.u_small, sqrt(roots.cu_big), roots.cu_small / roots.cu_big
 end
 
 """

@@ -1,5 +1,5 @@
-# KerrGeoStable (APEX record), KerrGeoStableComponent and the constructors `kerr_geo_stable`,
-# `kerr_geo_stable_component`.
+# KerrGeoStable (the APEX record), KerrGeoStableComponent and the constructor `kerr_geo_stable_component`.
+
 
 """
     KerrGeoStable
@@ -21,6 +21,12 @@ struct KerrGeoStable
     DCrossFunctions::NamedTuple
 end
 
+function Base.show(io::IO, kg::KerrGeoStable)
+    print(io, "KerrGeoStable(constants=")
+    show(io, kg.ConstantsOfMotion)
+    print(io, ")")
+end
+
 function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeoStable)
     println(io, "KerrGeoStable(")
     print(io, "    OrbitalParameters = "); show(io, kg.OrbitalParameters); println(io, ",")
@@ -31,73 +37,6 @@ function Base.show(io::IO, ::MIME"text/plain", kg::KerrGeoStable)
     print(io, "    Trajectory = (t = t(λ), r = r(λ), θ = θ(λ), ϕ = ϕ(λ))"); println(io, ",")
     print(io, "    InitialPhases = "); show(io, kg.InitialPhases); println(io, ",")
     print(io, ")")
-end
-
-"""
-    kerr_geo_stable(a, p, e, x; initPhases=(0.0, 0.0, 0.0, 0.0))
-
-The stable orbit with APEX parameters `(a, p, e, x)` as a `KerrGeoStable` record. The
-initial phases `(qt0, qr0, qθ0, qφ0)` shift t, the radial phase, the polar phase and φ at
-λ = 0; with zero phases, λ = 0 is at periapsis and at the northern polar turning point.
-"""
-function kerr_geo_stable(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0.0, 0.0, 0.0))
-    # Orbital Type
-    otype = kerr_geo_orbit_type(a, p, e, x)
-
-    # Constants of Motion
-    com = kerr_geo_constants_of_motion(a, p, e, x)
-    En = com["E"]
-    L = com["Lz"]
-    Q = com["Q"]
-
-    # Trajectory
-    KG = kerr_geo_orbit(a, p, e, x; initPhases = initPhases)
-    t, r, θ, ϕ = KG["Trajectory"]
-    # Frequencies
-    freqs = kerr_geo_frequencies(a, p, e, x; Time="Mino")
-    ϒt = freqs["ϒt"]
-    ϒr = freqs["ϒr"]
-    ϒθ = freqs["ϒθ"]
-    ϒϕ = freqs["ϒϕ"]
-    # Cross functions
-    if KG["CrossFunction"] !== nothing
-        Δtr = KG["CrossFunction"][1]
-        Δtθ = KG["CrossFunction"][2]
-        Δϕr = KG["CrossFunction"][3]
-        Δϕθ = KG["CrossFunction"][4]
-    else
-        Δtr = nothing
-        Δtθ = nothing
-        Δϕr = nothing
-        Δϕθ = nothing
-    end
-    # Derivatives of cross functions
-    if KG["DerivativesCrossFunction"] !== nothing
-        dtr = KG["DerivativesCrossFunction"][1]
-        dtθ = KG["DerivativesCrossFunction"][2]
-        dϕr = KG["DerivativesCrossFunction"][3]
-        dϕθ = KG["DerivativesCrossFunction"][4]
-    else
-        dtr = nothing
-        dtθ = nothing
-        dϕr = nothing
-        dϕθ = nothing
-    end
-    # Four-velocity
-    ut, ur, uθ, uϕ = KG["FourVelocity"]
-    
-    return KerrGeoStable(
-        otype,
-        (a=a, p=p, e=e, x=x),
-        (E=En, Lz=L, Q=Q),
-        "Mino",
-        (t=t, r=r, θ=θ, ϕ=ϕ),
-        (qt0 = initPhases[1], qr0=initPhases[2], qθ0=initPhases[3], qϕ0=initPhases[4]),
-        (ut=ut, ur=ur, uθ=uθ, uϕ=uϕ),
-        (ϒt=ϒt, ϒr=ϒr, ϒθ=ϒθ, ϒϕ=ϒϕ),
-        (Δtr=Δtr, Δtθ=Δtθ, Δϕr=Δϕr, Δϕθ=Δϕθ),
-        (dtr=dtr, dtθ=dtθ, dϕr=dϕr, dϕθ=dϕθ)
-    )
 end
 
 """
@@ -117,40 +56,47 @@ function kerr_geo_stable_component(a::Real, energy::Real, lz::Real, q::Real;
         case_id=nothing,
         initPhases=(0.0, 0.0, 0.0, 0.0))
     classification = kerr_geo_classify(a, energy, lz, q)
+    return _stable_component(a, energy, lz, q, classification, case_id; initPhases=initPhases)
+end
+
+# the Stable member of classified constants
+function _stable_component(a, energy, lz, q, classification, case_id; initPhases)
     component = _stable_radial_component(classification, case_id)
     orbit, info = _class_a_orbit(a, energy, lz, q, component; initPhases=initPhases)
     stability = kerr_geo_stability_metadata(a, energy, lz, q, component)
     apex = info.apex
     residual = try
         _constants_residual((E=float(energy), Lz=float(lz), Q=float(q)),
-            kerr_geo_constants_of_motion(apex.a, apex.p, apex.e, apex.x))
-    catch
+            _apex_constants(apex.a, apex.p, apex.e, apex.x))
+    catch err
+        # The optional APEX reconstruction can leave its domain near E = 1.
+        err isa DomainError || rethrow()
         nothing
     end
     f = info.functions
-    kin = _kinematics(a, energy, lz, q; r=f.r, z=f.z, uz=f.uz, sin2=f.sin2, sign_r=f.sign_r,
-        R=rv -> kerr_radial_potential(a, energy, lz, q, rv))
+    kin = _kinematics(a, energy, lz, q, f.r, f.r, f.position, f.sign_r,
+        _radial_potential_from_roots(a, energy, lz, q, classification.Status.root_structure))
     (; velocity, potentials, residuals) = _kinematic_fields(kin)
-    return _member(:stable, component.CaseId; component=component,
-        constants=(a=float(a), E=float(energy), Lz=float(lz), Q=float(q)),
-        roots=(radial=info.roots, polar=info.polar),
+    return _member(:stable, component.CaseId, kerr_geo_tier(component.CaseId), component,
+        (a=float(a), E=float(energy), Lz=float(lz), Q=float(q)),
+        (radial=info.roots, polar=info.polar),
         # λ = 0 is the event of the initial phases (periapsis and the northern polar turning
         # point for zero phases); t(0) = qt0, φ(0) = qφ0, τ(0) = 0
-        reference=(lambda0_event=:initial_phases, t_phi_zero_event=:initial_phases,
+        (lambda0_event=:initial_phases, t_phi_zero_event=:initial_phases,
             t_phi_zero_lambda=0.0, t_phi_zero_radius=f.r(0.0), tau_zero_event=:initial_phases,
             lambda_regular=nothing, phases=orbit.InitialPhases),
-        domain=(mino=(-Inf, Inf), endpoint_closed=(false, false),
+        (mino=(-Inf, Inf), endpoint_closed=(false, false),
             endpoint_roles=(:infinite_past_worldline, :infinite_future_worldline)),
-        trajectory=(t=f.t, r=f.r, theta=f.theta, z=f.z, phi=f.phi, tau=f.tau),
+        (t=f.t, r=f.r, theta=f.theta, z=f.z, phi=f.phi, tau=f.tau),
         velocity, potentials, residuals,
-        status=(supported=true, formula_family=component.FormulaFamily,
+        (supported=true, formula_family=component.FormulaFamily,
             formula_kind=component.CaseId === :A1 ? :jacobi_libration : :constant_radius,
             shape=stability.shape, stability=stability.stability,
             stability_check_passed=stability.stability_check_passed, limit=stability.limit,
             radial_derivatives=stability.radial_derivatives, apex=apex,
             frequencies=orbit.Frequencies, orbit=orbit, constants_residual=residual,
             polar=info.polar, precision=_stable_precision(orbit.Frequencies)),
-        spectral=info.spectral)
+        info.spectral)
 end
 
 # t grows by ϒt·2π/ϒr per radial period, so after one period t is known to one ulp of that

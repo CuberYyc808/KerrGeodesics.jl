@@ -26,9 +26,23 @@ geodesic equations read
 \end{aligned}
 ```
 
-with ``R`` and ``Θ`` as in [What decides the motion](@ref). Each rate for ``t``, ``φ`` and
-``τ`` is a function of ``r`` plus a function of ``z``, so each coordinate is a radial part
-plus a polar part.
+with ``R`` and ``Θ`` as in [What decides the motion](@ref). The sign of ``dr/dλ`` is that of
+the leg (outgoing or incoming), and ``dθ/dλ = -(dz/dλ)/\sin θ``. Each rate for ``t``, ``φ``
+and ``τ`` is a function of ``r`` plus a function of ``z``, so each coordinate is the integral
+of a radial part plus the integral of a polar part:
+
+```math
+\begin{aligned}
+t(λ) &= t(λ_0) + \int_{λ_0}^{λ}\left[\frac{(r^2+a^2)\,P(r)}{Δ} + aL_z - a^2E\,(1 - z^2)\right]dλ', \\
+φ(λ) &= φ(λ_0) + \int_{λ_0}^{λ}\left[\frac{a\,P(r)}{Δ} - aE + \frac{L_z}{1 - z^2}\right]dλ', \\
+τ(λ) &= τ(λ_0) + \int_{λ_0}^{λ}\bigl[r^2 + a^2 z^2\bigr]\,dλ',
+\end{aligned}
+```
+
+with ``r = r(λ')``, ``z = z(λ')`` along the orbit and ``λ_0`` the reference event of the member
+([Where the coordinates are zero](@ref)). The radial parts are what `radial_t`, `radial_phi`
+and `radial_tau` return; over a monotone leg they equal ``\int f(r)\,dr/\sqrt{R(r)}`` with
+``f = (r^2+a^2)P/Δ``, ``aP/Δ - aE``, ``r^2`` (see [Radius as the variable](@ref)).
 
 ## Constants of motion and APEX parameters
 

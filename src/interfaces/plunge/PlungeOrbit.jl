@@ -1,38 +1,6 @@
 # Plunge reference API: Jacobi r(λ), θ(λ) of an E < 1 plunge; t, φ from the radial engine
 # (one radial period, continued through both horizons) and the polar engine.
 
-function elliptic_pi(h, ψ, k)
-    if h > 1
-        complete = real(Elliptic.F(π/2, k) - Elliptic.Pi(k/h, π/2, k) + log(ComplexF64(-1)) / (2 * sqrt((h-k)*(h-1)/h)))
-    else
-        complete = Elliptic.Pi(h, π/2, k)
-    end
-    period = div(ψ, 1.0pi)
-    remainder = abs(ψ - period * 1.0pi)
-    if remainder <= 0.5pi
-        if h > 1
-            Π = real(Elliptic.F(remainder, k) - Elliptic.Pi(k/h, remainder, k) + log(ComplexF64((sqrt((h-k)*(h-1)/h)
-            *tan(remainder) + sqrt(1-k*sin(remainder)^2))/(sqrt(1-k*sin(remainder)^2) - sqrt((h-k)*(h-1)/h)*tan(remainder)))) / (2 * sqrt((h-k)*(h-1)/h)))
-        else
-            Π = Elliptic.Pi(h, remainder, k)
-        end
-        incomplete = sign(ψ) * Π
-    else
-        remainder = 1.0pi - remainder
-        if h > 1
-            Π = real(Elliptic.F(remainder, k) - Elliptic.Pi(k/h, remainder, k) + log(ComplexF64((sqrt((h-k)*(h-1)/h)
-            *tan(remainder) + sqrt(1-k*sin(remainder)^2))/(sqrt(1-k*sin(remainder)^2) - sqrt((h-k)*(h-1)/h)*tan(remainder)))) / (2 * sqrt((h-k)*(h-1)/h)))
-        else
-            Π = Elliptic.Pi(h, remainder, k)
-        end
-        incomplete = sign(ψ) * (2 * complete - Π)
-    end
-    if abs(period) > 0.0
-        incomplete += period * complete * 2
-    end
-    return incomplete
-end
-
 function real2_radial_position(absλ, E, roots)
     r4, r3, r2, r1 = roots
     ξr = sqrt((1 - E^2) * (r1 - r3) * (r2 - r4)) / 2
@@ -87,16 +55,17 @@ function _generic_plunge_orbit(a, E, L, Q, initPhases, half, radius)
     zm, ξθ, kθ = _plunge_polar_parameters(a, E, L, Q)
     θ(λ) = acos(sqrt(zm) * Elliptic.Jacobi.sn(ξθ * (λ + λθ0), kθ))
     # z = √z₋ sn(ξθ(λ + λθ0)): the polar engine's phase is counted from the northern turning point
-    polar = _polar_solution(a, E, L, Q, abs(Q) <= 1.0e-13 ? :equatorial : :pendular,
+    polar = _polar_solution(a, E, L, Q, iszero(Q) ? :equatorial : :pendular,
         ξθ * λθ0 - Elliptic.K(kθ))
     # one radial period containing λ = 0, starting at an outer turning point (λ = −λr0 mod 2·half)
     period = 2half
     start = -λr0 - period * floor(-λr0 / period)
     start > 0 && (start -= period)
     coords = _engine_coordinates(a, E, L, Q, radius, _polar_primitive(polar);
+        potential=_coefficient_potential(a, E, L, Q),
         domain=(start, start + period), ends=(:turning, :turning), turn=start + half,
         σ=1.0, period=period, λ_bl=0.0)
-    t(λ) = coords.t(λ) + λt0
-    ϕ(λ) = coords.phi(λ) + λϕ0
+    t(λ) = _coords_t(coords, λ) + λt0
+    ϕ(λ) = _coords_phi(coords, λ) + λϕ0
     return [t, radius, θ, ϕ]
 end

@@ -28,8 +28,17 @@ kerr_geo_frequencies(0.9, 10.0, 0.5, 0.8; Time = "Mino")
 The landmarks of bound motion are functions of the inclination: the innermost stable
 spherical orbit [`kerr_geo_isso`](@ref) (the ISCO [`kerr_geo_isco`](@ref) for
 equatorial orbits), the innermost bound spherical orbit [`kerr_geo_ibso`](@ref), and the
-separatrix [`kerr_geo_separatrix`](@ref), below which an orbit of given ``e`` and ``x``
-plunges:
+separatrix [`kerr_geo_separatrix`](@ref) between bound or scattering motion and
+plunge, where the orbital parameters admit real timelike constants.
+
+The separatrix is the semi-latus rectum at which the pericentre ``p/(1+e)`` is a double
+root of the radial potential; it is found from the constants of motion of the trial orbits
+themselves. Not every eccentricity has one: for Schwarzschild scattering both ``p>6+2e`` and
+``p>3+e^2`` are required, and at ``e\ge 3`` the double root would need ``E\to\infty`` or
+``E^2<0`` (at ``e=5`` the root ``p=16`` of the separatrix polynomial has ``E^2=-1/2``), so
+[`kerr_geo_separatrix`](@ref) raises a `DomainError` and every timelike orbit of that
+eccentricity scatters (``p>28`` for ``e=5``). Large eccentricity alone is not a reason to
+reject a scattering orbit.
 
 ```@example apex
 (isco = kerr_geo_isco(0.9, 1.0), isso = kerr_geo_isso(0.9, 0.8),

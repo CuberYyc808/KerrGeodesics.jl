@@ -11,40 +11,103 @@
 #                                 where v = ψ = 0, or `nothing` without a regular chart)
 #   trajectory                    member-specific extras: λ(r), radial increments, …
 
-"""Assemble a member of class `class` from its radial `track` and its `polar` solution."""
-function _engine_member(class, id, a, energy, lz, q, polar, track; component=nothing,
-        tier=kerr_geo_tier(id), roots=(;), status=(;))
-    (; r, check, check_bl, coords) = track
+function _constant_radial_metadata(radius)
+    return (domain=(mino=(-Inf, Inf), endpoint_closed=(false, false),
+            endpoint_roles=(:infinite_past_worldline, :infinite_future_worldline)),
+        reference=(lambda0_event=:polar_phase_reference, t_phi_zero_event=:polar_phase_reference,
+            t_phi_zero_lambda=0.0, t_phi_zero_radius=radius, tau_zero_event=:polar_phase_reference,
+            lambda_regular=nothing))
+end
+
+# Preserve NamedTuple merge order without compiling a merge of nested closure trees.
+Base.@nospecializeinfer @noinline function _merge_member_fields(@nospecialize(parts::Tuple))
+    fields = Symbol[]
+    items = Any[]
+    for part in parts, name in fieldnames(typeof(part))
+        index = findfirst(==(name), fields)
+        value = getfield(part, name)
+        if index === nothing
+            push!(fields, name)
+            push!(items, value)
+        else
+            items[index] = value
+        end
+    end
+    return NamedTuple{Tuple(fields)}(Tuple(items))
+end
+
+# The coordinate functions of a track: an `EngineCoordinates` gives one closure per coordinate,
+# each capturing only that object; a track that overrides coordinates passes a NamedTuple of
+# functions (at least t, phi, tau).
+_coordinate_functions(c::EngineCoordinates) = (t=λ -> _coords_t(c, λ), phi=λ -> _coords_phi(c, λ),
+    tau=λ -> _coords_tau(c, λ), v=λ -> _coords_v(c, λ), psi=λ -> _coords_psi(c, λ),
+    radial=λ -> _coords_radial(c, λ), spectral=() -> _coords_spectral(c))
+_coordinate_functions(c::NamedTuple) = c
+
+"""
+    _engine_member(class, id, a, E, Lz, Q, polar, track, component, structure, potential, tier,
+                   roots, status, chart)
+
+Assemble a member of class `class` from its radial `track` and its `polar` solution;
+`structure` is the root structure (for the product-form potential when `potential` is
+`nothing`), `chart` the unshifted (r_*, φ_H) of members without a regular chart, or `nothing`.
+Compiled once: nothing numerical happens here, and the closures it creates keep the concrete
+types of what they capture.
+"""
+Base.@nospecializeinfer @noinline function _engine_member(class, id, a, energy, lz, q,
+        @nospecialize(polar), @nospecialize(track), @nospecialize(component),
+        @nospecialize(structure), @nospecialize(potential), tier, @nospecialize(roots),
+        @nospecialize(status), @nospecialize(chart))
+    r, check, check_bl = getfield(track, :r), getfield(track, :check), getfield(track, :check_bl)
+    cf = _coordinate_functions(getfield(track, :coords))
+    tf, phif, tauf = getfield(cf, :t), getfield(cf, :phi), getfield(cf, :tau)
     rbl(λ) = r(check_bl(λ))
     position = _polar_position(polar)
     z(λ) = position(check(λ))[1]
-    regular = track.reference.lambda_regular !== nothing
-    trajectory = (
-        t=λ -> coords.t(check_bl(λ)),
+    reference = getfield(track, :reference)
+    regular = reference.lambda_regular !== nothing
+    t(λ) = tf(check_bl(λ))
+    phi(λ) = phif(check_bl(λ))
+    # horizon charts: from the engine when the member reaches a horizon, otherwise the unshifted
+    # v = t + r_*, ψ = φ + φ_H (and u = t − r_*, χ = φ − φ_H) when a `chart` (r_*, φ_H) is given
+    charts = if regular
+        vf, psif = getfield(cf, :v), getfield(cf, :psi)
+        (rstar=λ -> kerr_rstar(a, rbl(λ)), v=λ -> vf(check(λ)), psi=λ -> psif(check(λ)))
+    elseif chart === nothing
+        (;)
+    else
+        rstarf, phihf = chart.rstar, chart.phi_h
+        (rstar=λ -> rstarf(rbl(λ)), v=λ -> t(λ) + rstarf(rbl(λ)),
+            psi=λ -> phi(λ) + phihf(rbl(λ)), u=λ -> t(λ) - rstarf(rbl(λ)),
+            chi=λ -> phi(λ) - phihf(rbl(λ)))
+    end
+    radial = if haskey(cf, :radial)
+        radialf = getfield(cf, :radial)
+        (radial_t=λ -> radialf(check_bl(λ))[1], radial_phi=λ -> radialf(check_bl(λ))[2],
+            radial_tau=λ -> radialf(check(λ))[3])
+    else
+        (;)
+    end
+    trajectory = _merge_member_fields(((
+        t=t,
         r=r,
         theta=λ -> acos(clamp(z(λ), -1.0, 1.0)),
         z=z,
-        phi=λ -> coords.phi(check_bl(λ)),
-        tau=λ -> coords.tau(check(λ)),
-        (regular ? (rstar=λ -> kerr_rstar(a, rbl(λ)), v=λ -> coords.v(check(λ)),
-            psi=λ -> coords.psi(check(λ))) : (;))...,
-        (haskey(coords, :radial) ? (radial_t=λ -> coords.radial(check_bl(λ))[1],
-            radial_phi=λ -> coords.radial(check_bl(λ))[2],
-            radial_tau=λ -> coords.radial(check(λ))[3]) : (;))...,
-        track.trajectory...,
-    )
-    kin = _kinematics(a, energy, lz, q; r=r, rbl=rbl, z=z, uz=λ -> position(check(λ))[2],
-        sin2=λ -> position(check(λ))[3], sign_r=track.sign_r, R=rv -> kerr_radial_potential(a, energy, lz, q, rv))
+        phi=phi,
+        tau=λ -> tauf(check(λ)),
+        ), charts, radial, getfield(track, :trajectory),
+    ))
+    kin = _kinematics(a, energy, lz, q, r, rbl, λ -> position(check(λ)), getfield(track, :sign_r),
+        potential === nothing ? _radial_potential_from_roots(a, energy, lz, q, structure) : potential)
     (; velocity, potentials, residuals) = _kinematic_fields(kin)
-    return _member(class, id; tier=tier, component=component,
-        constants=(a=float(a), E=float(energy), Lz=float(lz), Q=float(q)),
-        roots=merge(component === nothing ? (;) :
+    spectralf = haskey(cf, :spectral) ? getfield(cf, :spectral) : () -> (achieved=0.0, pieces=0)
+    return _member(class, id, tier, component, (a=float(a), E=float(energy), Lz=float(lz),
+            Q=float(q)),
+        merge(component === nothing ? (;) :
             (radial=Tuple(item.radius for item in component.Metadata.roots),),
-            roots, (polar=polar.metadata,)), reference=track.reference,
-        domain=track.domain, trajectory, velocity, potentials, residuals,
-        status=merge((supported=true,), status, (polar=polar.metadata,)),
-        spectral=SpectralStatus(() -> (haskey(coords, :spectral) ? coords.spectral() :
-            (achieved=0.0, pieces=0), _polar_spectral(polar))))
+            roots, (polar=polar.metadata,)), reference, getfield(track, :domain), trajectory,
+        velocity, potentials, residuals, merge((supported=true,), status, (polar=polar.metadata,)),
+        SpectralStatus(() -> (spectralf(), _polar_spectral(polar))))
 end
 
 """The classified component of class `class` of these constants (the case `requested`, if given)."""
@@ -61,10 +124,7 @@ function _class_component(classification, class, requested=nothing)
     return only(candidates)
 end
 
-# the Velocity, Potentials and Residuals fields of a member from its `_kinematics`. Members
-# pass them to `_member` as three keywords, not by splatting: a splatted keyword list is
-# merged into the other keywords, and `merge` of NamedTuples this large (closures capturing the
-# coordinate engine) takes minutes to compile.
+# the Velocity, Potentials and Residuals fields of a member from its `_kinematics`
 _kinematic_fields(kin) = (
     velocity=(ut=kin.ut, ur=kin.ur, uz=kin.uz, utheta=kin.utheta, uphi=kin.uphi,
         dtau_dlambda=kin.dtau_dlambda),
