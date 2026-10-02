@@ -1,0 +1,61 @@
+# Fixed camera and one-line description of each orbit's panel (the README animation and the
+# animated gallery of the catalogue notebook).
+# elev/azim in degrees; empty -> (30, -60). Equatorial orbits are seen from above,
+# spherical shells from near the equator, axis infall edge-on.
+name	elev	azim	description
+A1	35	-65	eccentric libration between r3 and r4
+A2	22	-60	stable spherical orbit at the double root r3 = r4
+K1	22	-60	ISSO: spherical orbit at the triple root
+K3	22	-60	unstable spherical orbit at the double root rc
+K4	35	-60	homoclinic whirl, asymptotic to the spherical orbit rc
+K6	22	-60	E = 1 unstable spherical orbit (with K7, K8)
+K9	22	-60	E > 1 unstable spherical orbit (with K10, K11)
+A-H1	62	-60	libration island with P(r+) = 0
+A-H2	62	-60	stable circular orbit with P(r+) = 0
+A-X1	35	-60	a = 1 libration island off the horizon
+A-X2	22	-60	a = 1 stable spherical orbit
+B1	35	-60	inner member of A1: from r2 into the horizon
+B2	35	-60	inner member of A2: from r2 into the horizon
+K2	35	-60	inner member of K1: from the triple root r2 into the horizon
+B3	62	-60	single exterior root: from r4 into the horizon
+B4	22	35	two real roots and a complex pair: from r2 inward
+K8	25	-60	E = 1, from the unstable spherical orbit inward
+B5	35	-60	E = 1, from the turning point r2 (partner of D1)
+K11	25	-60	E > 1, from the unstable spherical orbit inward
+B6	35	-60	E > 1, from the turning point r3 (partner of D2)
+K5	35	-60	whirl from the unstable spherical orbit into the horizon
+B7	62	-60	double root below r+: from r_o into the horizon
+B8	62	-60	simple then double root below r+: from r_o inward
+B9	12	-60	triple root below r+: axis infall
+B-X1	35	-60	a = 1, P_H = 0: turning point to double horizon root
+B-X2	35	-60	a = 1, P_H = 0: turning point to triple horizon root
+C1	62	-60	E = 1, one real root and a complex pair
+C2	62	-60	E = 1, three real roots below r+
+K7	25	-60	E = 1, from infinity onto the unstable spherical orbit
+C3	62	-60	E > 1, two real roots below r+ and a complex pair
+C4	62	-60	E > 1, four real roots below r+
+K10	25	-60	E > 1, from infinity onto the unstable spherical orbit
+C5	22	97	E > 1, Q < 0 vortical, no real roots
+C6	62	-60	E = 1, double then simple root below r+
+C7	62	-60	E = 1, simple then double root below r+
+C8	12	-60	E = 1, triple root below r+: axis infall
+C9	62	-60	E > 1, simple, double, simple root below r+
+C10	62	-60	E > 1, simple, simple, double root below r+
+C11	22	-87	E > 1, Q < 0: double root below r+, complex pair
+C12	12	-60	E > 1, simple then triple root below r+: axis infall
+C-X1	45	-60	a = 1, E = 1, P_H = 0: double root on the horizon
+C-X2	45	-60	a = 1, E > 1, P_H = 0: double root on the horizon
+C-X3	45	-60	a = 1, E = 1, P_H = 0: triple root on the horizon
+C-X4	45	-60	a = 1, E > 1, P_H = 0: triple root on the horizon
+D1	40	-60	parabolic, turning at r3 (partner of B5)
+D2	40	-60	hyperbolic, turning at r4 (partner of B6)
+D-H1	62	-60	parabolic, P(r+) = 0, turning at the outer root
+D-H2	45	-60	hyperbolic, P(r+) = 0, turning at the outer root
+D-X1	40	-60	a = 1, E = 1, P_H = 0, turning at the outer root
+D-X2	40	-60	a = 1, E > 1, P_H = 0, turning at the outer root
+N1	62	-60	E < 0: past horizon, turning at r2, future horizon
+N2	62	-60	E < 0 with an outer double root
+N3	62	-60	E < 0, single exterior root r4
+N4	35	-60	E < 0, two real roots and a complex pair
+N5	62	-60	E = -1: cubic radial potential
+N6	35	-60	E < -1, four real roots

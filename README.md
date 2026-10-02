@@ -2,16 +2,39 @@
 
 ![license](https://img.shields.io/badge/license-MIT-blue.svg)
 [![GitHub release](https://img.shields.io/github/v/release/CuberYyc808/KerrGeodesics.jl.svg)](https://github.com/CuberYyc808/KerrGeodesics.jl/releases)
-[![Documentation](https://img.shields.io/badge/Documentation-ready)](https://CuberYyc808.github.io/KerrGeodesics.jl)
+[![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://CuberYyc808.github.io/KerrGeodesics.jl)
 
-Julia interfaces for Kerr geodesic trajectories in units with `G = c = M = 1`.
+Timelike geodesics outside a Kerr black hole. Give the spin `a` and the constants of motion
+`(E, Lz, Q)`: KerrGeodesics.jl finds every orbit these constants allow and returns its
+trajectory, four-velocity and frequencies as functions of Mino time `λ`
+(`G = c = M = 1`, Boyer–Lindquist coordinates, `dτ/dλ = Σ = r² + a² cos²θ`).
 
-Current support:
+<p align="center">
+  <img src="example/animations/showcase_all.gif" width="100%" alt="56 Kerr geodesics, one for each kind of radial motion">
+</p>
 
-- stable bound orbits from APEX-like parameters `(a,p,e,x)`;
-- bound plunge orbits from constants `(a,E,Lz,Q)`, with `E < 1`.
+The animation shows 56 orbits, one for each kind of radial motion the package distinguishes,
+row by row in six classes. Each tile draws `(x, y, z) = (r sinθ cosϕ, r sinθ sinϕ, r cosθ)`
+(units of `M`, spin along `z`), with the outer horizon as the black sphere and the ergosphere as
+the wireframe; `ϕ` is the azimuth `φ` (or `ψ = φ + φ_H` for orbits that cross a horizon) and the
+frames show the progression along each trajectory. The constants `(a, E, Lz, Q)` are
+printed on the tiles and recorded in the
+[catalogue notebook](example/KerrGeodesics_56_Orbit_Catalog.ipynb);
+[`example/data/catalogue_registry.tsv`](example/data/catalogue_registry.tsv) lists their
+root structures, allowed intervals and formula families.
 
-Scattering orbits are planned for future development.
+| Class | Motion | Orbits |
+|---|---|---|
+| Stable | bound between two turning points, or on a stable circular or spherical orbit | 6 |
+| Critical | on, or asymptotic to, an unstable or marginally stable circular or spherical orbit (ISCO and ISSO, homoclinic and whirl orbits) | 11 |
+| Plunge | from a turning point into the black hole | 11 |
+| Capture | from infinity into the black hole (`E ≥ 1`) | 16 |
+| Scatter | from infinity through a turning point and back to infinity (`E ≥ 1`) | 6 |
+| Trapped | `E < 0`, inside the ergoregion: out of the past horizon, through a turning point, into the future horizon | 6 |
+
+Within a class, the orbits differ in how the roots of the radial potential are arranged. The
+grid includes the limiting cases in which the horizon is itself a root and those of an
+extremal black hole (`|a| = 1`).
 
 ## Installation
 
@@ -20,89 +43,71 @@ using Pkg
 Pkg.add("KerrGeodesics")
 ```
 
-## Basic Usage
+## Usage
 
 ```julia
 using KerrGeodesics
 
-stable = kerr_geo_stable(0.9, 10.0, 0.5, 0.8)
-plunge = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:turning_point)
-family = kerr_geodesic(0.9, 10.0, 0.5, 0.8)
+kg = kerr_geodesic(0.9, (0.9641, 2.8359, 4.5444))   # spin a, constants (E, Lz, Q)
+kg = kerr_geodesic(0.9, 10.0, 0.5, 0.8)             # or spin a and (p, e, x) of an orbit with a periapsis
 ```
 
-Typical printed outputs are:
+`kg` holds the orbits these constants allow, by class: `kg.Stable`, `kg.Critical`, `kg.Plunge`,
+`kg.Capture`, `kg.Scatter` and `kg.Trapped` (`nothing` when absent; `kg.Critical` is a tuple).
+Here there are two, a stable orbit and the plunge with the same constants, and
+`kerr_geo_members(kg)` lists them. Every orbit is used in the same way.
+
+**Trajectory.** `t`, `r`, `theta`, `phi` and the proper time `tau` as functions of `λ`, on the
+range `Domain.mino`:
 
 ```julia
-KerrGeoStable(
-    OrbitalParameters = (a = 0.9, p = 10.0, e = 0.5, x = 0.8),
-    ConstantsOfMotion = (E = 0.9641204328952226, Lz = 2.8359152778998453, Q = 4.544408272395823),
-    OrbitalType = ["Bound", "Eccentric", "Stable", "Inclined"],
-    Frequencies = (ϒt = 171.0926187383033, ϒr = 2.792721794117058, ϒθ = 3.551489601048812, ϒϕ = 3.7357605214030265),
-    Parametrization = "Mino",
-    Trajectory = (t = t(λ), r = r(λ), θ = θ(λ), ϕ = ϕ(λ)),
-    InitialPhases = (qt0 = 0.0, qr0 = 0.0, qθ0 = 0.0, qϕ0 = 0.0),
-)
+λ = 1.0
+kg.Stable.Trajectory.r(λ)                  # likewise t, theta, phi, tau
+
+λH = kg.Plunge.Domain.mino[2]              # the plunge reaches the horizon at λH
+kg.Plunge.Trajectory.v(λH)                 # the horizon-regular coordinates v and psi stay finite there
 ```
+
+**Four-velocity.** `Velocity` holds the Mino-time rates `dx^μ/dλ` (`ut`, `ur`, `utheta`, `uphi`)
+and `dtau_dlambda = Σ`; the four-velocity `u^μ = dx^μ/dτ` is their ratio. For a stable orbit
+given by `(a, p, e, x)`, `kerr_geo_four_velocity` returns it directly (`Covariant=true` for `u_μ`).
 
 ```julia
-KerrGeoPlunge(
-    ConstantsOfMotion = (E = 0.94, Lz = 0.1, Q = 12.0),
-    OrbitClass = "Complex",
-    Parametrization = "Mino",
-    InitialPosition = (t0 = 0.0, r0 = 3.203955290691315, theta0 = 1.5707963267948966, phi0 = 0.0),
-    Trajectory = (t = t(lambda), r = r(lambda), theta = theta(lambda), phi = phi(lambda), rstar = rstar(lambda), u = u(lambda), v = v(lambda), u_rstar_series = u(rstar), v_rstar_series = v(rstar)),
-    Velocity = (ut = ut(lambda), ur = ur(lambda), uz = dz/dlambda, utheta = dtheta/dlambda, uphi = uphi(lambda)),
-)
+kg.Stable.Velocity.ut(λ) / kg.Stable.Velocity.dtau_dlambda(λ)   # u^t; likewise ur, utheta, uphi
+kerr_geo_four_velocity(0.9, 10.0, 0.5, 0.8)                     # [u^t, u^r, u^θ, u^φ] as functions of λ
 ```
+
+**Orbital parameters.**
 
 ```julia
-KerrGeodesicFamily(
-    InputType = :apex,
-    Parameters = (a = 0.9, p = 10.0, e = 0.5, x = 0.8),
-    ConstantsOfMotion = (E = 0.9641204328952226, Lz = 2.8359152778998453, Q = 4.544408272395823),
-    RootClass = "Real1",
-    HasStable = true,
-    HasPlunge = true,
-    Status = (supported = true, reason = "ok"),
-)
+kg.Stable.ConstantsOfMotion                # (a, E, Lz, Q)
+kg.Stable.Status.apex                      # (a, p, e, x)
+kg.Stable.Roots.radial                     # roots of the radial potential, largest first: apoapsis, periapsis, …
 ```
 
-The family object stores the two compatible orbit objects directly:
+**Frequencies.**
 
 ```julia
-family.Stable
-family.Plunge
+kg.Stable.Status.frequencies                                        # Mino frequencies (ϒt, ϒr, ϒθ, ϒϕ)
+kerr_geo_frequencies(0.9, 10.0, 0.5, 0.8; Time="BoyerLindquist")    # Ωr, Ωθ, Ωϕ, each ϒ/ϒt
 ```
 
-For example:
+`Time="Mino"` and `Time="Proper"` give the Mino-time and proper-time frequencies.
+
+**Many points at once.**
 
 ```julia
-family.Stable.Trajectory.r(0.0)
-# 6.666666666666667
-
-family.Plunge.OrbitClass
-# "Real1"
-
-family.Plunge.Status.duration.mino_time_to_horizon
-# 0.05426602766253312
+kerr_geo_sample(kg.Stable, range(0, 20; length=10_000))   # vectors t, r, theta, phi, tau and the rates ut, ur, utheta, uphi
 ```
-
-For a stable eccentric orbit, `initPhases=(0,0,0,0)` starts the radial motion at
-periapsis, `r(0)=p/(1+e)`. For a bound plunge, `radial_start=:turning_point`
-starts at the exterior turning point.
 
 ## Examples
 
-The example notebook builds both stable and bound-plunge trajectory animations:
-
-- [`example/Test_KerrGeodesics.ipynb`](example/Test_KerrGeodesics.ipynb)
-- [`example/generate_example_gifs.jl`](example/generate_example_gifs.jl)
-
-Generated example images:
-
-![Stable bound Kerr geodesic](example/Trajectory_stable.gif)
-
-![Bound plunge Kerr geodesic](example/Trajectory_plunge.gif)
+[`example/KerrGeodesics_Tutorial.ipynb`](example/KerrGeodesics_Tutorial.ipynb) walks through
+the conventions, the classification, one example per class (Stable, Critical, Plunge,
+Capture, Scatter, and Trapped with `E < 0`), polar options, the horizon-regular coordinates,
+the four-velocity and self-checks (`kerr_geo_diagnose`), the APEX interface and the accuracy
+limits. The 56 orbits above, with their constants, are in
+[`example/KerrGeodesics_56_Orbit_Catalog.ipynb`](example/KerrGeodesics_56_Orbit_Catalog.ipynb).
 
 ## Citation
 

@@ -1,0 +1,155 @@
+# The member type: one geodesic of a KerrGeodesicFamily, whatever its class. The class is the
+# type parameter; the six class names below are the types users see.
+
+"""
+    KerrGeoComponent{C}
+
+One member of a `KerrGeodesicFamily`, a single timelike geodesic in Mino time λ. `C` is its
+broad class (`:stable`, `:critical`, `:plunge`, `:capture`, `:scatter`, `:trapped`);
+`KerrGeoStableComponent`, `KerrGeoCriticalComponent`, … name the six types.
+
+- `CaseId`: the case, such as `:A1`, `:K3` or `:B5`, or the tier member, such as `:A_H1` or
+  `:B_X1`.
+- `Tier`: `:primary`, `:horizon` (P(r₊) = 0) or `:extremal` (|a| = 1).
+- `Role`: for Critical members `:on_root`, `:outer` or `:inner` (the side of the repeated root
+  the member lies on); `:none` otherwise.
+- `Component`: the classified radial component (`KerrGeoRadialComponent`), or `nothing` for
+  horizon- and extremal-tier members and Trapped members.
+- `ConstantsOfMotion`: `(a, E, Lz, Q)`.
+- `Roots`: the radial and polar roots.
+- `ReferenceZero`: the origins of the coordinates: the events of λ = 0 (`lambda0_event`), of
+  t = φ = 0 (`t_phi_zero_event`, at `t_phi_zero_lambda` and radius `t_phi_zero_radius`) and
+  of τ = 0 (`tau_zero_event`, always at λ = 0); `lambda_regular`, the λ where v = ψ = 0
+  (`nothing` without a horizon-regular chart); the polar phase (`polar_phase`, or `phases`
+  for Stable members).
+- `Domain`: the Mino-time domain `mino` with `endpoint_closed` and `endpoint_roles`, and
+  `horizon_lambda` for members that end on the future horizon.
+- `Trajectory`: functions of λ: `t, r, theta, z, phi, tau` (``z = \\cos θ``); `rstar, v, psi`
+  (``r_*``, ``v = t + r_*``, ``ψ = φ + φ_H``) where a horizon-regular chart exists (`v, psi` for Trapped members); `u, chi` for Trapped and
+  |a| = 1 members; member-specific extras such as `lambda_of_radius` and radial increments.
+- `Velocity`: the Mino-time rates, functions of λ: `ut` ``= dt/dλ``, `ur` ``= dr/dλ = ±\\sqrt{R(r)}``,
+  `uz` ``= dz/dλ = ±\\sqrt{Θ(z)}``, `utheta` ``= dθ/dλ = -(dz/dλ)/\\sin θ``, `uphi` ``= dφ/dλ`` and
+  `dtau_dlambda` ``= dτ/dλ = Σ = r^2 + a^2 z^2``; the four-velocity is ``u^μ = (dx^μ/dλ)/Σ``.
+- `Potentials`: ``R(r)`` (`radial`) and ``Θ(z)`` (`polar_z`) as functions of their variable.
+- `Residuals`: functions of λ: ``(dr/dλ)^2 - R``, ``(dz/dλ)^2 - Θ`` and ``g_{μν}u^μu^ν + 1``.
+- `Status`: `supported`, `spectral` (a `SpectralStatus`: the accuracy `achieved` by the
+  member's Chebyshev tables and their number of `pieces`) and member-specific metadata
+  (polar solution, formula family, stability; `apex`, `frequencies` and `precision` for
+  Stable members).
+"""
+struct KerrGeoComponent{C}
+    CaseId::Symbol
+    Tier::Symbol
+    Role::Symbol
+    Component::Union{Nothing,KerrGeoRadialComponent}
+    ConstantsOfMotion::NamedTuple
+    Roots::NamedTuple
+    ReferenceZero::NamedTuple
+    Domain::NamedTuple
+    Trajectory::NamedTuple
+    Velocity::NamedTuple
+    Potentials::NamedTuple
+    Residuals::NamedTuple
+    Status::NamedTuple
+    # the record fields are abstract: one constructor for every argument type (the default one
+    # would be compiled for each member's closure types)
+    Base.@nospecializeinfer function KerrGeoComponent{C}(case_id, tier, role, @nospecialize(component),
+            @nospecialize(constants), @nospecialize(roots), @nospecialize(reference),
+            @nospecialize(domain), @nospecialize(trajectory), @nospecialize(velocity),
+            @nospecialize(potentials), @nospecialize(residuals), @nospecialize(status)) where {C}
+        return new{C}(case_id, tier, role, component, constants, roots, reference, domain,
+            trajectory, velocity, potentials, residuals, status)
+    end
+end
+
+const KerrGeoStableComponent = KerrGeoComponent{:stable}
+const KerrGeoCriticalComponent = KerrGeoComponent{:critical}
+const KerrGeoPlungeComponent = KerrGeoComponent{:plunge}
+const KerrGeoCaptureComponent = KerrGeoComponent{:capture}
+const KerrGeoScatterComponent = KerrGeoComponent{:scatter}
+const KerrGeoTrappedComponent = KerrGeoComponent{:trapped}
+
+"""
+    kerr_geo_member_class(m)
+
+Broad class of member `m`, the type parameter `C` of `KerrGeoComponent{C}`: `:stable`,
+`:critical`, `:plunge`, `:capture`, `:scatter` or `:trapped`.
+"""
+kerr_geo_member_class(::KerrGeoComponent{C}) where {C} = C
+
+"""
+    kerr_geo_sample(m, λs)
+
+The trajectory and Mino-time four-velocity of member `m` at the Mino times `λs`: a NamedTuple
+of vectors `lambda, t, r, theta, phi, tau, ut, ur, utheta, uphi`, where `ut` ``= dt/dλ``,
+`ur` ``= dr/dλ``, `utheta` ``= dθ/dλ`` and `uphi` ``= dφ/dλ`` (divide by
+``Σ = r^2 + a^2\\cos^2θ`` for ``dx^μ/dτ``). Faster than calling the
+member's functions point by point from untyped code: the loop runs behind a function barrier
+on the member's concrete closures.
+"""
+function kerr_geo_sample(m::KerrGeoComponent, λs)
+    tr, u = m.Trajectory, m.Velocity
+    return _sample(collect(Float64, λs), tr.t, tr.r, tr.theta, tr.phi, tr.tau, u.ut, u.ur,
+        u.utheta, u.uphi)
+end
+
+# (the barrier is specialized on the nine functions it calls, not on the whole records)
+function _sample(λs::Vector{Float64}, t, r, theta, phi, tau, ut, ur, utheta, uphi)
+    out = (lambda=λs, t=similar(λs), r=similar(λs), theta=similar(λs), phi=similar(λs),
+        tau=similar(λs), ut=similar(λs), ur=similar(λs), utheta=similar(λs), uphi=similar(λs))
+    for (i, λ) in pairs(λs)
+        out.t[i] = t(λ); out.r[i] = r(λ); out.theta[i] = theta(λ)
+        out.phi[i] = phi(λ); out.tau[i] = tau(λ)
+        out.ut[i] = ut(λ); out.ur[i] = ur(λ); out.utheta[i] = utheta(λ)
+        out.uphi[i] = uphi(λ)
+    end
+    return out
+end
+
+# Build a member of class `class` (positional, compiled once: the record fields of
+# KerrGeoComponent are abstract, so nothing is gained by specializing on the closures). `tier`
+# follows the ID unless the builder knows better (the |a| = 1 limits of the primary cases carry
+# primary IDs on the extremal tier); `spectral` is the member's `SpectralStatus`.
+Base.@nospecializeinfer @noinline function _member(class::Symbol, case_id::Symbol, tier::Symbol,
+        @nospecialize(component), @nospecialize(constants), @nospecialize(roots),
+        @nospecialize(reference), @nospecialize(domain), @nospecialize(trajectory),
+        @nospecialize(velocity), @nospecialize(potentials), @nospecialize(residuals),
+        @nospecialize(status), @nospecialize(spectral))
+    role = class === :critical ? kerr_geo_critical_role(case_id) : :none
+    return KerrGeoComponent{class}(case_id, tier, role, component, constants, roots,
+        reference, domain, trajectory, velocity, potentials, residuals,
+        _merge_member_fields((status, (spectral=spectral,))))
+end
+
+function Base.show(io::IO, m::KerrGeoComponent{C}) where {C}
+    print(io, "KerrGeo", kerr_geo_class(C).name, "Component(", m.CaseId,
+        ", tier=", m.Tier, ", constants=")
+    show(io, m.ConstantsOfMotion)
+    print(io, ")")
+end
+
+function _show_summary_field(io::IO, label, value)
+    print(io, "  ", rpad(label, 10), " = ")
+    show(IOContext(io, :compact => true, :limit => true), value)
+    println(io)
+end
+
+function _show_summary_status(io::IO, status)
+    supported = get(status, :supported, nothing)
+    print(io, "  Status     = ", supported === nothing ? "not recorded" :
+        supported ? "supported" : "unsupported")
+    errors = get(status, :member_errors, ())
+    isempty(errors) || print(io, "; ", length(errors), " member error(s)")
+    reason = get(status, :reason, nothing)
+    supported === false && reason !== nothing && print(io, "; ", reason)
+end
+
+function Base.show(io::IO, ::MIME"text/plain", m::KerrGeoComponent{C}) where {C}
+    println(io, "KerrGeo", kerr_geo_class(C).name, "Component (", m.CaseId, ")")
+    _show_summary_field(io, "Constants", m.ConstantsOfMotion)
+    _show_summary_field(io, "Tier", m.Tier)
+    C === :critical && _show_summary_field(io, "Role", m.Role)
+    _show_summary_field(io, "Mino time", get(m.Domain, :mino, nothing))
+    println(io, "  Trajectory = (t(lambda), r(lambda), theta(lambda), phi(lambda))")
+    _show_summary_status(io, m.Status)
+end

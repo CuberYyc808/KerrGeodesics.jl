@@ -4,17 +4,24 @@ on:
   push:
     branches:
       - main
+      - TimelikeReconstruction
   pull_request:
   workflow_dispatch:
 
 jobs:
-  test:
+  load:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        julia-version: ['1.10', '1']
     steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
         with:
-          version: 'lts'
-      - uses: julia-actions/cache@v2
-      - name: Test package
-        run: julia --project=. -e 'using Pkg; Pkg.test()'
+          version: ${{ matrix.julia-version }}
+      - uses: julia-actions/cache@v3
+      - name: Load package
+        run: julia --project=. -e 'using Pkg; Pkg.instantiate(); using KerrGeodesics'

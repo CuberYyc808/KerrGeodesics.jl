@@ -1,17 +1,27 @@
 # KerrGeodesics.jl
 
-KerrGeodesics.jl provides Julia interfaces for Kerr geodesic trajectories in
-units with $G=c=M=1$.
+KerrGeodesics.jl computes timelike geodesics of the Kerr spacetime. Give it the spin ``a``
+and the constants of motion, energy ``E``, axial angular momentum ``L_z`` and Carter
+constant ``Q``, and it returns every orbit these constants allow outside the black hole.
+Each orbit is a set of functions of Mino time ``λ``: the Boyer–Lindquist coordinates
+``t, r, θ, φ``, the proper time ``τ``, the four-velocity and, for orbits that reach a
+horizon, coordinates that stay finite there. Units are ``G = c = M = 1``.
 
-The package contains two project-facing layers:
+```@raw html
+<img src="assets/showcase_all.gif" width="100%" alt="56 Kerr geodesics, one for each kind of radial motion">
+```
 
-- stable bound geodesics from APEX-like parameters `(a,p,e,x)`;
-- bound plunge geodesics from constants of motion `(a,E,Lz,Q)`.
-
-The unified constructor is [`kerr_geodesic`](@ref). Its combined return type is
-[`KerrGeodesicFamily`](@ref), which can carry stable and plunge branches where
-the corresponding branch is available. The older names `KerrGeodesicS` and
-`KerrGeodesicSet` remain compatibility aliases.
+The animation shows the 56 orbits of the example catalogue, one for each kind of radial
+motion the package distinguishes, in class order: Stable, Critical, Plunge, Capture, Scatter
+and Trapped. The label on each tile is its case; [Orbit classes](@ref) explains the names, and
+the spin and constants ``(a, E, L_z, Q)`` are printed on the tiles and recorded in the
+[catalogue notebook](https://github.com/CuberYyc808/KerrGeodesics.jl/blob/TimelikeReconstruction/example/KerrGeodesics_56_Orbit_Catalog.ipynb).
+`example/data/catalogue_registry.tsv` lists their root structures, allowed intervals and
+formula families. Each tile draws ``(x, y, z) = (r\sin θ\cos ϕ,\ r\sin θ\sin ϕ,\ r\cos θ)`` in units of
+``M``, with the spin along ``z``, the outer horizon ``r_+`` as the black sphere and the
+ergosphere as the wireframe. The azimuth ``ϕ`` is ``φ``, or ``ψ = φ + φ_H`` for orbits that
+cross a horizon. The frames show the progression along each trajectory, not a shared
+physical-time interval between panels (see [Coordinates regular at the horizon](@ref)).
 
 ## Installation
 
@@ -20,73 +30,78 @@ using Pkg
 Pkg.add("KerrGeodesics")
 ```
 
-## Parameter Conventions
+## A first orbit
 
-Stable bound orbit calls use APEX-like parameters:
+The spin and the three constants go into [`kerr_geodesic`](@ref):
 
-```julia
-geo = kerr_geodesic(0.9, 10.0, 0.5, 0.8)
+```@example home
+using KerrGeodesics
+
+kg = kerr_geodesic(0.9, (0.9641204328952226, 2.8359152778998453, 4.544408272395823))
+map(kerr_geo_member_class, kerr_geo_members(kg))
 ```
 
-Bound plunge calls use constants of motion:
+These constants allow two orbits. One is stable: it oscillates between periapsis and
+apoapsis forever. The other starts at a turning point just outside the horizon and plunges
+into the black hole. Each is a *member* of the family `kg`, kept in the slot of its class.
+Their coordinates are functions of ``λ``:
 
-```julia
-plunge_family = kerr_geodesic(0.9, (0.94, 0.1, 12.0); radial_start=:turning_point)
-plunge = kerr_geo_plunge(0.9, 0.94, 0.1, 12.0; radial_start=:turning_point)
+```@example home
+λ = 1.0
+(t = kg.Stable.Trajectory.t(λ), r = kg.Stable.Trajectory.r(λ),
+ θ = kg.Stable.Trajectory.theta(λ), φ = kg.Stable.Trajectory.phi(λ))
 ```
 
-Do not mix the APEX-like parameter tuple `(a,p,e,x)` with the constants tuple
-`(a,E,Lz,Q)`.
+A stable orbit also carries its APEX parameters, the semi-latus rectum ``p``, eccentricity
+``e`` and inclination ``x``, and its Mino-time frequencies:
 
-## Branch Metadata
-
-Plunge trajectories expose the radial-root class through `OrbitClass` on
-[`KerrGeoPlunge`](@ref), and through `RootClass` on [`KerrGeodesicFamily`](@ref).
-The implementation labels include `Complex`, `Real1`, and `Real2`. Downstream
-code should keep these branch labels in trajectory, source, and waveform
-metadata.
-
-Stable-orbit classification metadata is available through
-[`kerr_geo_orbit_type_metadata`](@ref). Near the separatrix, inputs within the current
-roundoff guard are evaluated at the separatrix radius and labeled `Separatrix`.
-Legacy labels do not use `MarginallyStable` or `Unstable`; the structured
-metadata still carries machine-facing stability fields.
-
-## Time Coordinates
-
-Bound plunge trajectories expose callable fields:
-
-```julia
-t = plunge.Trajectory.t
-r = plunge.Trajectory.r
-theta = plunge.Trajectory.theta
-phi = plunge.Trajectory.phi
-rstar = plunge.Trajectory.rstar
-u = plunge.Trajectory.u
-v = plunge.Trajectory.v
+```@example home
+kg.Stable.Status.apex
 ```
 
-The null coordinates follow $u=t-r_*$ and $v=t+r_*$. The optional
-`time_origin=:future_horizon_v_zero` policy shifts the coordinate-time origin so
-the future-horizon advanced-time anchor is zero for supported bound plunge
-plunge trajectories. The retarded time $u$ diverges linearly for an ingoing
-future-horizon trajectory; finite plotting coordinates must use an explicitly
-recorded cutoff or shifted-display convention.
+```@example home
+kg.Stable.Status.frequencies
+```
 
-Bound plunge outputs also include `plunge.Status.duration`, with the
-finite Mino-time duration to the event horizon and explicit status fields
-recording that Boyer-Lindquist coordinate time and retarded time diverge at the
-future horizon.
+The same orbit can be requested by its APEX parameters instead of its constants:
 
-The near-horizon `u(rstar)` and `v(rstar)` series callables are exposed on the
-trajectory object when supported by the branch. The Mino-time trajectory path
-remains the owner of `lambda -> r -> rstar`; the near-horizon series is only a
-regular advanced-time evaluator and retarded-time proxy at fixed `rstar`.
+```@example home
+kerr_geodesic(0.9, 10.0, 0.5, 0.8).Stable.ConstantsOfMotion
+```
 
-## Internal Layout
+## Contents
 
-The top-level module keeps the public constructors and structured output types.
-Internal plunge helpers are split into `KerrGeoPlunge/NearHorizonTime.jl` for
-the tortoise coordinate, near-horizon null-time series, and horizon-anchor
-estimation, and `KerrGeoPlunge/InitialConditions.jl` for radial and polar
-initial-condition conversion.
+- [Orbit classes](@ref): how the constants decide the motion, the six classes and the 56
+  cases.
+- [Working with an orbit](@ref): what a member carries and how to evaluate it.
+- [Conventions](@ref): coordinates, parameters, and where each coordinate is zero.
+- [Numerics and accuracy](@ref): how the coordinates are computed and how accurate they are.
+- [Examples](@ref): worked examples for every class.
+- [APEX and finite-window interfaces](@ref): functions of `(a, p, e, x)` for bound orbits,
+  and the finite-window constructors for plunges, captures and scattering.
+- [API reference](@ref): every exported function, type and constant.
+
+The two notebooks in `example/` show the same material with plots:
+`KerrGeodesics_Tutorial.ipynb` walks through the package, and
+`KerrGeodesics_56_Orbit_Catalog.ipynb` builds and animates the 56 orbits above.
+
+## Citation
+
+If you use this code to compute Kerr geodesics, please cite:
+
+```bibtex
+@article{Yin:2025kls,
+    author = "Yin, Yucheng and Lo, Rico K. L. and Chen, Xian",
+    title = "{Gravitational radiation from Kerr black holes using the Sasaki-Nakamura formalism: waveforms and fluxes at infinity}",
+    eprint = "2511.08673",
+    archivePrefix = "arXiv",
+    primaryClass = "gr-qc",
+    doi = "10.1103/9ngz-k1lr",
+    journal = "Phys. Rev. D",
+    volume = "113",
+    pages = "124007",
+    year = "2026"
+}
+```
+
+KerrGeodesics.jl is released under the MIT License.
