@@ -29,22 +29,65 @@ kerr_geo_classification_pipeline() = CLASSIFICATION_PIPELINE
 _root_close(x, y; atol=ROOT_ATOL, rtol=ROOT_RTOL) =
     abs(x - y) <= atol + rtol * max(1.0, abs(x), abs(y))
 
-function _repeated_root_candidates(a, energy, lz, q, polynomial;
+# Whether a repeated root of multiplicity m sits at r, and where. Exterior (r ≥ r₊, or a
+# cluster on the horizon itself when P(r₊) = 0): the roots bound the motion, so the constants
+# decide (`_repeated_radial_zero`: within one ulp per component of the repeated-root
+# manifold) and the root stays at r. Interior (r < r₊): the roots only enter the closed form
+# of r(λ), evaluated at r ≥ r₊. Replacing the m estimates nearest r by one root x changes R
+# there by the factor Π(r₊ − zᵢ)/(r₊ − x)^m, largest at r₊; with x the cluster mean the change
+# is O(δ²/(r₊ − x)²) for a cluster of size δ. The cluster is merged when the change of
+# R(r₊) is within the one-ulp input reach at r₊. Returns the
+# radius and how the repeated root was read, or `nothing`:
+#   :exact                  the constants have this repeated root (R, …, R^(m−1) vanish);
+#   :within_input_ulp       nonexact repeated reading within the input reach.
+function _accept_repeated(a, energy, lz, q, r, m, raw_roots, rplus, located)
+    ordered = sort(raw_roots; by=z -> abs(z - r))
+    k = min(m, length(ordered))
+    nearest, rest = ordered[1:k], ordered[k+1:end]
+    on_horizon = _horizon_root(a, energy, lz) && all(z -> abs(rplus - r) < abs(z - r), rest)
+    if r >= rplus || on_horizon
+        _repeated_radial_zero(a, energy, lz, q, r; multiplicity=m, located=located) || return nothing
+        exact = _InputArithmetic.repeated_at(a, energy, lz, q, r, m)
+        return (r, exact ? :exact : :within_input_ulp)
+    end
+    all(z -> real(z) < rplus, nearest) || return nothing
+    # the located radius r (exact for an exact repeated root) or the mean, whichever is closer
+    change(x) = abs(prod(rplus .- nearest) / (rplus - x)^m - 1)
+    c = real(sum(nearest) / k)
+    x = change(r) <= change(c) ? r : c
+    edge = abs(first(_radial_root_evaluator(a, energy, lz, q)(rplus)))
+    change(x) * edge <= _radial_input_reach(a, energy, lz, q, rplus, 0) || return nothing
+    exact = _InputArithmetic.repeated_at(a, energy, lz, q, x, m)
+    return (x, exact ? :exact : :within_input_ulp)
+end
+
+function _repeated_root_candidates(a, energy, lz, q, polynomial, raw_roots, rplus;
         atol=ROOT_ATOL, rtol=ROOT_RTOL)
     candidates = NamedTuple[]
+    diagnostics = NamedTuple[]
     derivative_polynomial = derivative(polynomial)
     for derivative_order in 1:max(0, degree(polynomial) - 1)
         for value in roots(derivative_polynomial)
             imag_tolerance = atol + rtol * max(1.0, abs(real(value)))
             abs(imag(value)) <= imag_tolerance || continue
             radius = float(real(value))
+            # the residual test bounds the multiplicity; `_accept_repeated` decides it (the
+            # largest m it accepts)
             multiplicity = kerr_root_multiplicity_at(
                 a, energy, lz, q, radius; atol=atol, rtol=rtol)
-            multiplicity >= derivative_order + 1 || continue
-            _repeated_radial_zero(a,energy,lz,q,radius) || continue
+            accepted = nothing
+            while multiplicity >= 2
+                accepted = _accept_repeated(a, energy, lz, q, radius, multiplicity,
+                    raw_roots, rplus, derivative_order)
+                accepted === nothing || break
+                multiplicity -= 1
+            end
+            multiplicity >= max(2, derivative_order + 1) || continue
+            radius, reading = accepted
             push!(candidates, (
                 radius=radius,
                 multiplicity=multiplicity,
+                reading=reading,
                 source=Symbol("derivative_order_$(derivative_order)"),
                 order=derivative_order,
             ))
@@ -76,10 +119,10 @@ function _repeated_root_candidates(a, energy, lz, q, polynomial;
                 item -> item.multiplicity == maximum_multiplicity,
                 unique_candidates,
             ))
-            return [best]
+            return [best], diagnostics
         end
     end
-    return unique_candidates
+    return unique_candidates, diagnostics
 end
 
 """
@@ -89,8 +132,12 @@ Roots of the radial potential R(r): the raw complex roots, the real roots with t
 multiplicities and R, R′, R″, R‴ residuals, and their split into roots below, on and
 outside the outer horizon r₊. A root has multiplicity m > 1 when R and its first m − 1
 derivatives vanish there to the scaled tolerance (`kerr_root_multiplicity_at`); it is then
-located as a simple root of R^(m−1). Simple roots are Newton-polished. Raw roots are not
-merged into a repeated root on proximity alone.
+located as a simple root of R^(m−1). Each root records its `reading`: `:exact`,
+`:within_input_ulp` (outside the horizon, constants within one ulp per component of the
+repeated-root manifold; inside, a cluster whose replacement changes R(r₊) by less than
+the input reach). Nonexact repeated readings describe the repeated-root model, not a
+strict solution of the exact supplied constants. All roots are refined
+together in double-double; distinct roots are not merged on proximity.
 """
 function kerr_geo_root_structure(a::Real, energy::Real, lz::Real, q::Real;
         atol::Real=ROOT_ATOL,
@@ -100,41 +147,49 @@ function kerr_geo_root_structure(a::Real, energy::Real, lz::Real, q::Real;
     polynomial = kerr_radial_polynomial(a, energy, lz, q)
     shifted=_radial_shifted_coefficients(a,energy,lz,q)
     evaluator=_radial_root_evaluator(a,energy,lz,q)
-    raw_roots = ComplexF64[_polish_root(coefficients,1+z;evaluator=evaluator)
-        for z in roots(Polynomial(collect(shifted)))]
-    repeated = _repeated_root_candidates(
-        a, energy, lz, q, polynomial; atol=atol, rtol=rtol)
+    # starts rotated off the real axis: from real starts the iteration on a real polynomial
+    # stays real and cannot reach a complex pair that the companion matrix returned as two
+    # close real roots; real roots return to the axis
+    raw_roots = _refine_roots(evaluator,
+        ComplexF64[(1 + z) * complex(1, 2.0^-26) for z in roots(Polynomial(collect(shifted)))])
+    repeated, near_repeated = _repeated_root_candidates(
+        a, energy, lz, q, polynomial, raw_roots, horizons.rplus; atol=atol, rtol=rtol)
 
     candidates = NamedTuple[]
     consumed_raw_roots = falses(length(raw_roots))
-    for item in repeated
+    # each repeated root takes the m estimates nearest it; one whose nearest estimates were
+    # already taken by another repeated root describes the same cluster and is not kept
+    for item in sort(repeated; by=item -> -item.multiplicity)
+        nearest = sort(eachindex(raw_roots); by=index -> abs(raw_roots[index] - item.radius))
+        own = nearest[1:min(item.multiplicity, length(nearest))]
+        any(index -> consumed_raw_roots[index], own) && continue
         push!(candidates, item)
-        available = findall(!, consumed_raw_roots)
-        ordered = sort(available; by=index -> abs(raw_roots[index] - item.radius))
-        for index in Iterators.take(ordered, item.multiplicity)
-            consumed_raw_roots[index] = true
-        end
+        consumed_raw_roots[own] .= true
     end
+    # Non-real roots of the real polynomial come in conjugate pairs: when the unconsumed
+    # non-real estimates are odd in number, the one nearest the real axis is real.
+    leftover = [i for i in eachindex(raw_roots) if !consumed_raw_roots[i]]
+    nonreal(i) = abs(imag(raw_roots[i])) > atol + rtol * max(1.0, abs(real(raw_roots[i])))
+    unpaired = isodd(count(nonreal, leftover)) ?
+        argmin(i -> abs(imag(raw_roots[i])), filter(nonreal, leftover)) : 0
     for (index, value) in pairs(raw_roots)
         consumed_raw_roots[index] && continue
-        imag_tolerance = atol + rtol * max(1.0, abs(real(value)))
-        abs(imag(value)) <= imag_tolerance || continue
+        (!nonreal(index) || index == unpaired) || continue
         radius = _polish_root(coefficients,real(value);evaluator=evaluator)
-        push!(candidates, (radius=radius, multiplicity=1, source=:raw_root))
+        push!(candidates, (radius=radius, multiplicity=1, source=:raw_root, reading=:exact))
     end
 
+    # every repeated root consumed its own estimates, so the remaining ones are distinct
+    # roots however close they lie; none is merged by proximity
     sort!(candidates; by=item -> item.radius)
     real_roots = NamedTuple[]
     for candidate in candidates
-        if !isempty(real_roots) && _root_close(
-                real_roots[end].radius, candidate.radius; atol=atol, rtol=rtol)
-            continue
-        end
         derivatives = kerr_radial_derivatives(a, energy, lz, q, candidate.radius)
         push!(real_roots, (
             radius=candidate.radius,
             multiplicity=candidate.multiplicity,
             source=candidate.source,
+            reading=candidate.reading,
             residuals=(
                 R=derivatives.R,
                 R1=derivatives.R1,
@@ -166,13 +221,22 @@ function kerr_geo_root_structure(a::Real, energy::Real, lz::Real, q::Real;
         complex_root_count=max(0, degree(polynomial) - real_degree),
         multiplicity_sum=real_degree,
         root_tolerance=(atol=atol, rtol=rtol),
+        near_repeated=Tuple(near_repeated),
     )
 end
 
-# R(r) = c ∏(r − x_i) from the classified roots (real roots with their multiplicities, complex
-# ones as (r − ρ)² + η²): next to a root the product keeps its digits where the coefficient
-# form cancels; the members' dr/dλ and residuals use it
+# R(r) of a member. When every root is read exactly, R of the given constants evaluated in
+# double-double: it keeps its digits next to a turning point, where the factored form loses
+# them to the rounding of r − root. A repeated root read from the constants (within one input
+# ulp, or an interior cluster merged below rounding) defines the member's model, so then
+# R = c ∏(r − xᵢ) over the classified roots (complex ones as (r − ρ)² + η²). Members' dr/dλ,
+# residuals and radial tables use it.
 function _radial_potential_from_roots(a, energy, lz, q, structure)
+    # all roots read exactly: R of the given constants, in double-double
+    if all(item -> get(item, :reading, :exact) === :exact, structure.real_roots)
+        evaluator = _radial_root_evaluator(a, energy, lz, q)
+        return r -> first(evaluator(r))
+    end
     lead = kerr_radial_coefficients(a, energy, lz, q)[structure.degree + 1]
     reals = map(item -> (item.radius, item.multiplicity), structure.real_roots)
     pairs = Tuple{Float64,Float64}[(real(z), imag(z)) for z in _nonreal_roots(structure) if imag(z) > 0]
@@ -618,7 +682,7 @@ function _classify(a::Real, energy::Real, lz::Real, q::Real;
         a, energy, lz, q; atol=atol, rtol=rtol)
     intervals = _allowed_intervals(
         a, energy, lz, q, structure; atol=atol, rtol=rtol)
-    polar = kerr_polar_admissibility(a, energy, lz, q; rtol=rtol)
+    polar = kerr_polar_admissibility(a, energy, lz, q)
     polar_candidates = kerr_polar_sector_candidates(a, energy, lz, q)
     selected_polar = _polar_sector(polar_candidates, polar_sector)
     horizon_momentum = kerr_radial_momentum(a, energy, lz, horizons.rplus)
@@ -703,6 +767,8 @@ function _classify(a::Real, energy::Real, lz::Real, q::Real;
             future_horizon_condition=future_horizon,
             horizon_momentum=horizon_momentum,
             root_structure=structure,
+            repeated_root_reading=any(x -> x.multiplicity > 1 && x.reading !== :exact,
+                structure.real_roots) ? :within_input_ulp : :exact,
             allowed_intervals=intervals,
             unassigned_component_count=unassigned_count,
             selected_component=selected,

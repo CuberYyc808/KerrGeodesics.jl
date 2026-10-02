@@ -85,12 +85,12 @@ function _horizon_root_scales(h2, h1, h0)
     return D, (h1 >= 0 ? D + h1 : -4h2 * h0 / (D - h1))
 end
 
-function _horizon_root_primitives(h2, h1, h0, z; root=false)
+function _horizon_root_primitives(h2, h1, h0, z; root=false, sqrt_h=nothing)
     h = (h2 * z + h1) * z + h0
     # a negative h beyond the rounding of its own terms lies outside the allowed interval
     root || h >= -32 * eps(Float64) * (abs(h2 * z^2) + abs(h1 * z) + abs(h0)) || throw(DomainError(h,
         "The horizon-root quadratic lies outside its allowed radial interval."))
-    w = root ? 0.0 : sqrt(max(h, 0.0))
+    w = root ? 0.0 : sqrt_h === nothing ? sqrt(max(h, 0.0)) : sqrt_h
     D, ρ = _horizon_root_scales(h2, h1, h0)
     position = root ? sign(2h2 * z + h1) : (2h2 * z + h1) / D
     if position > 1 / sqrt(2.0)
@@ -136,10 +136,11 @@ function _horizon_root_model(energy,q; turns=())
 end
 
 # (1/z is a root of the reversed quadratic exactly when z is a root of h)
-function _hr_basis_z(m::_HorizonRootModel,z; root=false, mino=nothing)
+function _hr_basis_z(m::_HorizonRootModel,z; root=false, mino=nothing, sqrt_h=nothing)
     h2,h1,h0=m.h2,m.h1,m.h0
-    k0,k1,k2=_horizon_root_primitives(h2,h1,h0,z;root=root)
-    km0,km1,_=_horizon_root_primitives(h0,h1,h2,inv(z);root=root)
+    k0,k1,k2=_horizon_root_primitives(h2,h1,h0,z;root=root,sqrt_h=sqrt_h)
+    km0,km1,_=_horizon_root_primitives(h0,h1,h2,inv(z);root=root,
+        sqrt_h=sqrt_h === nothing ? nothing : sqrt_h / abs(z))
     # On a Mino-time trajectory k0 is already known; reconstructing it from
     # the rounded inverse coordinate loses digits in a thin island.
     mino===nothing || (k0=-mino)
@@ -160,7 +161,9 @@ end
 _hr_inverse_from(m::_HorizonRootModel,left,delta)=1+inv(_hr_z_of_target(m,_hr_basis(m,left).I0+delta))
 function _hr_basis_from(m::_HorizonRootModel,left,delta)
     target=_hr_basis(m,left).I0+delta
-    return _hr_basis_z(m,_hr_z_of_target(m,target);mino=target)
+    # From a turning point sqrt(h) is analytic in phase, not a cancelled quadratic residual.
+    w = left in m.turns ? abs(m.D * delta * _horizon_root_Sh(m.h2 * delta^2)) / 2 : nothing
+    return _hr_basis_z(m,_hr_z_of_target(m,target);mino=target,sqrt_h=w)
 end
 # Mino time from the infinity endpoint (orbits that reach infinity, h0 >= 0)
 function _hr_mino(m::_HorizonRootModel,r)
@@ -202,7 +205,8 @@ end
 _rstar(r)=r+2log((r-1)/2)-2/(r-1)
 _phi_h(a,r)=-a/(r-1)
 
-function _extremal_polar_engine(a,energy,lz,q,sector,phase;axis=nothing)
+function _extremal_polar_engine(a,energy,lz,q,sector,phase;
+        axis=nothing,polar_hemisphere::Symbol=:north)
     if axis!==nothing
         z0=axis===:north ? 1.0 : axis===:south ? -1.0 :
             throw(ArgumentError("axis must be :north or :south"))
@@ -213,7 +217,8 @@ function _extremal_polar_engine(a,energy,lz,q,sector,phase;axis=nothing)
     selected=sector!==nothing ? sector :
         _axis_crossing(a,energy,lz,q) ? :axis_crossing :
         iszero(q) ? :equatorial : q>0 ? :pendular : :vortical
-    solution=_polar_solution(a,energy,lz,q,selected,float(phase);hemisphere=:north)
+    solution=_polar_solution(a,energy,lz,q,selected,float(phase);
+        hemisphere=polar_hemisphere)
     return (formula=solution.formula,sector=selected,phase=float(phase),metadata=solution.metadata,
         solution=solution)
 end
@@ -405,8 +410,8 @@ function _extremal_periodic_branch(kind, spec, model, a, energy, lz, q, polar, r
     duration=_radial_increment(model,lower,upper).I0
     period=2duration
     folded = function (lambda)
-        n=floor(Int,lambda/period); rem=lambda-n*period
-        outward=rem<=duration; phase=outward ? rem : 2duration-rem
+        n=round(Int,lambda/period); rem=lambda-n*period
+        outward=rem>=0; phase=abs(rem)
         radius=_hr_inverse_from(model,lower,phase)
         return (cycle=n,outward=outward,radius=radius,phase=phase)
     end
@@ -418,8 +423,7 @@ function _extremal_periodic_branch(kind, spec, model, a, energy, lz, q, polar, r
         part=_coordinate_increment_from(model,a,energy,lz,q,lower,
             folded_value.phase,folded_value.radius)
         values=folded_value.outward ? part :
-            (t=2half.t-part.t,phi=2half.phi-part.phi,
-             tau=2half.tau-part.tau,mino=2half.mino-part.mino)
+            (t=-part.t,phi=-part.phi,tau=-part.tau,mino=-part.mino)
         return (t=2folded_value.cycle*half.t+values.t,
             phi=2folded_value.cycle*half.phi+values.phi,
             tau=2folded_value.cycle*half.tau+values.tau)
@@ -549,18 +553,21 @@ function _extremal_endpoint_metadata(kind,endpoint,model,a,energy)
 end
 
 function _make_trajectory(a,energy,lz,q,spec,structure;
-        polar_sector=nothing,polar_phase=0.0,axis=nothing,reference_radius=nothing)
+        polar_sector=nothing,polar_phase=0.0,polar_hemisphere::Symbol=:north,
+        axis=nothing,reference_radius=nothing)
     kind=spec.kind
     if kerr_geo_tier(spec.id)!==:extremal && kind!==:scatter
         return _extremal_engine_member(a,energy,lz,q,spec,structure;
-            polar_sector=polar_sector,polar_phase=polar_phase,axis=axis,
+            polar_sector=polar_sector,polar_phase=polar_phase,
+            polar_hemisphere=polar_hemisphere,axis=axis,
             reference_radius=reference_radius)
     end
     # D1 and D2 never reach the horizon: their coordinates come from the radial engine, as at
     # |a| < 1 (the engine keeps t, φ, τ at rounding up to E → 1⁺ and far from the hole)
     if kind===:scatter
         axis===nothing || error("Axis trajectories use the axis-infall constructors; there is no scatter member on the axis.")
-        polar=_extremal_polar_engine(a,energy,lz,q,polar_sector,polar_phase)
+        polar=_extremal_polar_engine(a,energy,lz,q,polar_sector,polar_phase;
+            polar_hemisphere=polar_hemisphere)
         return _scatter_member(a,energy,lz,q,spec.id,polar.solution,
             Tuple(item.radius for item in structure.real_roots);component=spec.component,
             structure=structure,
@@ -573,7 +580,8 @@ function _make_trajectory(a,energy,lz,q,spec,structure;
     end
     model=kind===:constant ? nothing : _horizon_root_model(energy,q;
         turns=Tuple(x for x in (spec.lower,spec.upper) if isfinite(x) && x!=1))
-    pol=_extremal_polar_engine(a,energy,lz,q,polar_sector,polar_phase;axis=axis)
+    pol=_extremal_polar_engine(a,energy,lz,q,polar_sector,polar_phase;
+        axis=axis,polar_hemisphere=polar_hemisphere)
     polar=hasproperty(pol,:solution) ? pol.solution : pol
     builder=kind===:constant ? _extremal_constant_branch :
         kind===:horizon_root_island ? _extremal_periodic_branch :
@@ -604,18 +612,21 @@ end
 
 """
     kerr_geo_extremal_family(a, E, Lz, Q; polar_sector=nothing, polar_phase=0.0,
-                             axis=nothing, reference_radius=nothing)
+                             polar_hemisphere=:north, axis=nothing, reference_radius=nothing)
 
 Classify `(E, Lz, Q)` at exact `a = +1` or `a = -1` and construct every admitted member.
 With `P_H = 2E − aLz = 0` the members are the horizon-root cases A-X1, A-X2, B-X1, B-X2,
 C-X1…C-X4, D-X1, D-X2; otherwise they keep their primary case IDs. `polar_sector` selects the
-polar sector, `polar_phase` is the polar phase at `λ = 0`, `axis = :north` or `:south` puts
+polar sector, `polar_phase` is the polar phase at `λ = 0`, and `polar_hemisphere`
+selects `:north` or `:south` for motion confined to one hemisphere.
+`axis = :north` or `:south` puts
 the motion on the spin axis (`Lz = 0`, `Q = a²(1 − E²)`), and `reference_radius` is the
 radius at `λ = 0` for members that come in from infinity to a repeated or horizon root
 (K7, K10, C-X1…C-X4).
 """
 function kerr_geo_extremal_family(a::Real,energy::Real,lz::Real,q::Real;
-        polar_sector=nothing,polar_phase=0.0,axis=nothing,reference_radius=nothing)
+        polar_sector=nothing,polar_phase=0.0,polar_hemisphere::Symbol=:north,
+        axis=nothing,reference_radius=nothing)
     (a==1 || a==-1) || throw(DomainError(a,
         "Exact-extremal family dispatch requires exact a=+1 or a=-1."))
     if axis!==nothing
@@ -624,7 +635,8 @@ function kerr_geo_extremal_family(a::Real,energy::Real,lz::Real,q::Real;
     classification=_classification(a,float(energy),float(lz),float(q))
     members=Tuple(_make_trajectory(float(a),float(energy),float(lz),float(q),
         spec,classification.structure;polar_sector=polar_sector,
-        polar_phase=polar_phase,axis=axis,reference_radius=reference_radius)
+        polar_phase=polar_phase,polar_hemisphere=polar_hemisphere,
+        axis=axis,reference_radius=reference_radius)
         for spec in classification.specs)
     metric_limit=a==1 ? :extremal_plus : :extremal_minus
     metric_dispatch=a==1 ? :exact_positive : :exact_negative

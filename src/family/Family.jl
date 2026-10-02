@@ -128,6 +128,11 @@ end
 # Plunge (E < 1) or Capture (E ≥ 1) axis-infall member. (The classification was made with
 # `polar_sector = :axis_constant`, which holds only for axis constants.)
 function _family_axis_member(a, energy, classification, kwargs)
+    classification.PolarMetadata.selected === :axis_constant || error(
+        "Axis initial data requires the axis_constant polar sector.")
+    constants = classification.ConstantsOfMotion
+    iszero(constants.Lz) && constants.Q == kerr_axis_carter_q(a, energy) || error(
+        "Axis construction must preserve the supplied Lz and Q.")
     component = _axis_component(classification, energy < 1 ? :plunge : :capture)
     return _axis_infall_member(a, energy, component; axis=kwargs[:axis],
         phi0=get(kwargs, :phi0, 0.0), reference_radius=get(kwargs, :reference_radius, nothing))
@@ -197,11 +202,18 @@ function _exact_extremal_family(a, energy, lz, q, kwargs)
     polar_sector = get(kwargs, :polar_sector, nothing)
     polar_phase = get(kwargs, :polar_phase, 0.0)
     axis = get(kwargs, :axis, nothing)
+    if axis !== nothing
+        polar_sector in (nothing, :axis_constant) || error(
+            "Axis initial data conflicts with the requested polar sector $(polar_sector).")
+        iszero(lz) && q == kerr_axis_carter_q(a, energy) || error(
+            "Axis construction must preserve the supplied Lz and Q.")
+    end
     reference_radius = get(kwargs, :reference_radius, nothing)
     exact = kerr_geo_extremal_family(
         a, energy, lz, q;
         polar_sector=polar_sector,
         polar_phase=polar_phase,
+        polar_hemisphere=get(kwargs, :polar_hemisphere, :north),
         axis=axis,
         reference_radius=reference_radius,
     )
@@ -254,6 +266,15 @@ end
 # APEX conversion rounds a spin within a few ulps of |a| = 1 to exactly ±1 (below).
 function kerr_geodesic(a::Real, constants::Tuple{<:Real,<:Real,<:Real}; kwargs...)
     energy, lz, q = constants
+    if haskey(kwargs, :axis)
+        requested = get(kwargs, :polar_sector, nothing)
+        sector = _polar_sector(kerr_polar_sector_candidates(a, energy, lz, q),
+            requested === nothing ? :axis_constant : requested)
+        sector === :axis_constant || error(
+            "Axis initial data conflicts with the requested polar sector $(sector).")
+        iszero(lz) && q == kerr_axis_carter_q(a, energy) || error(
+            "Axis construction must preserve the supplied Lz and Q.")
+    end
     family = abs(a) == 1 ? _exact_extremal_family(a, energy, lz, q, kwargs) :
         energy < 0 ? _trapped_family(a, energy, lz, q, kwargs) :
         _horizon_root_family(a, energy, lz, q, kwargs)
@@ -366,7 +387,7 @@ end
 # horizon-root stable or scatter member. Returns `nothing` otherwise.
 function _horizon_root_family(a, energy, lz, q, kwargs)
     metric_limit = kerr_metric_limit(a)
-    if metric_limit in (:subextremal, :near_extremal) && energy > 0 &&
+    if 0 < abs(a) < 1 && energy > 0 &&
             _horizon_root(a, energy, lz)
         horizons = kerr_horizons(a)
         pplus = kerr_radial_momentum(a, energy, lz, horizons.rplus)
@@ -448,17 +469,21 @@ end
 function _classified_family(a, energy, lz, q, kwargs)
     member_errors = NamedTuple[]
     # Motion exactly along the spin axis (Lz = 0, Q = a²(1 - E²); for a = 0 purely radial
-    # motion) defaults to the northern axis.
-    if !haskey(kwargs, :axis) &&
+    # motion) defaults to the northern axis. A defaulted axis member that cannot be built is
+    # recorded like any other member; a requested one (`axis` given) raises.
+    axis_requested = haskey(kwargs, :axis)
+    if !axis_requested &&
             kerr_polar_sector_candidates(a, energy, lz, q) == (:axis_constant,)
         kwargs = pairs(merge(NamedTuple(kwargs), (axis=:north,)))
     end
-    requested_polar = haskey(kwargs, :axis) ? :axis_constant :
-        (get(kwargs, :polar_sector, nothing))
+    # a requested sector is checked against the constants even where the axis is the default
+    requested_polar = get(kwargs, :polar_sector, haskey(kwargs, :axis) ? :axis_constant : nothing)
     classification = kerr_geo_classify(
         a, energy, lz, q; polar_sector=requested_polar)
-    axis_member = haskey(kwargs, :axis) ?
-        _family_axis_member(a, energy, classification, kwargs) : nothing
+    axis_member = !haskey(kwargs, :axis) ? nothing : axis_requested ?
+        _family_axis_member(a, energy, classification, kwargs) :
+        _isolated_member(() -> _family_axis_member(a, energy, classification, kwargs),
+            energy < 1 ? :plunge : :capture, member_errors, kwargs)
     critical = _family_critical_members(a, energy, lz, q, classification, kwargs, member_errors)
     plunge = axis_member !== nothing && energy < 1 ? axis_member :
         _isolated_member(() -> _family_member(:plunge, a, energy, lz, q, classification, kwargs),

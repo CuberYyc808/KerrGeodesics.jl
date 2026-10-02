@@ -7,7 +7,7 @@ function _constant_latitude_polar_solution(a, energy, lz, q, polar_phase;
         "Constant-latitude motion requires hemisphere=:north or :south.")
     beta = a^2 * _e2m1(energy)
     beta > 0 || error("Non-equatorial constant latitude requires E>1 and a!=0.")
-    geometry = _polar_vortical_geometry(beta, lz, q)
+    geometry = _polar_vortical_geometry(a, energy, lz, q)
     geometry.repeated || error(
         "Constants do not satisfy the constant-latitude double-root condition.")
     u0 = 0.5 * geometry.root_sum
@@ -20,13 +20,14 @@ function _constant_latitude_polar_solution(a, energy, lz, q, polar_phase;
         z=z0,
         uz=0.0,
         sin2=1 - u0,
-        theta=acos(z0),
+        theta=atan(sqrt(1 - u0), z0),
         phi=phi_rate * float(lambda),
         t=time_rate * float(lambda),
         tau=a^2 * u0 * float(lambda),
     )
     return (formula=formula, metadata=(
         sector=:constant_latitude,
+        reading=geometry.reading,
         hemisphere=hemisphere,
         u0=u0,
         phase=polar_phase,
@@ -91,8 +92,9 @@ function _equator_attractive_polar_solution(a, energy, lz, q, polar_phase;
         z = signz * sqrt(amplitude2) * sech
         uz = -signz * sqrt(amplitude2) * omega * sech * tanh(u)
         p = primitive(u)
-        return (z=z, uz=uz, sin2=complement + amplitude2 * tanh(u)^2,
-            theta=acos(clamp(z, -1.0, 1.0)), phi=p.phi - p0.phi, t=p.t - p0.t,
+        sin2=complement + amplitude2 * tanh(u)^2
+        return (z=z, uz=uz, sin2=sin2,
+            theta=atan(sqrt(sin2), z), phi=p.phi - p0.phi, t=p.t - p0.t,
             tau=p.tau - p0.tau)
     end
     return (formula=formula, metadata=(
@@ -137,6 +139,7 @@ function _axis_crossing_polar_solution(a, energy, lz, q, polar_phase;
     if q > 0
         return _elliptic_polar_solution(a, energy, 0.0, q; kind=:cn, A=1.0,
             one_minus_A=0.0, m=beta / (beta + q), m1=q / (beta + q), omega=sqrt(beta + q),
+            complementary_modulus=sqrt(q)/sqrt(beta+q),
             u0=float(polar_phase), metadata=meta)
     elseif q < 0
         return _elliptic_polar_solution(a, energy, 0.0, q; kind=:dn, A=1.0,
@@ -155,8 +158,9 @@ function _axis_crossing_polar_solution(a, energy, lz, q, polar_phase;
         sech = inv(cosh(u))
         z = signz * sech
         p = primitive(u)
-        return (z=z, uz=-signz * omega * sech * tanh(u), sin2=tanh(u)^2,
-            theta=acos(clamp(z, -1.0, 1.0)), phi=0.0,
+        sin2=tanh(u)^2
+        return (z=z, uz=-signz * omega * sech * tanh(u), sin2=sin2,
+            theta=atan(sqrt(sin2), z), phi=0.0,
             t=p.t - p0.t, tau=p.tau - p0.tau)
     end
     return (formula=formula, metadata=merge(meta, (modulus=1.0, omega=omega,
@@ -192,7 +196,7 @@ function _polar_solution(a, energy, lz, q, sector, polar_phase;
         a, energy, lz, q, polar_phase; hemisphere=hemisphere)
     if sector === :vortical
         beta = a^2 * _e2m1(energy)
-        geometry = _polar_vortical_geometry(beta, lz, q)
+        geometry = _polar_vortical_geometry(a, energy, lz, q)
         return geometry.repeated ?
             _constant_latitude_polar_solution(
                 a, energy, lz, q, polar_phase; hemisphere=hemisphere) :
@@ -209,10 +213,13 @@ function _polar_solution(a, energy, lz, q, sector, polar_phase;
         roots.disc >= 0 || error("Polar roots with E<=1 are not real.")
         # (z₋ = 1 up to rounding when Lz² ≪ Q; 1 − z₋ is formed separately)
         zminus = roots.u_small
-        0 < zminus <= 1 + POLAR_ROOT_SLACK || error("Polar turning root with E<=1 lies outside (0,1].")
+        # The amplitude remains representable when its square underflows.
+        amplitude = sqrt(q) / sqrt(roots.cu_big)
+        0 < amplitude <= sqrt(1 + POLAR_ROOT_SLACK) || error("Polar turning root with E<=1 lies outside (0,1].")
         zminus = min(zminus, 1.0)
         # m = z₋/z₊ and 1 − m = (z₊ − z₋)/z₊ = √disc/(c z₊)
         return _elliptic_polar_solution(a, energy, lz, q; kind=:cd, A=zminus,
+            amplitude=min(amplitude, 1.0),
             one_minus_A=_polar_one_minus_root(a, energy, lz, q, zminus),
             m=roots.cu_small / roots.cu_big, m1=sqrt(roots.disc) / roots.cu_big,
             omega=sqrt(roots.cu_big), u0=float(polar_phase),
@@ -220,8 +227,10 @@ function _polar_solution(a, energy, lz, q, sector, polar_phase;
                 phase_convention=:northern_turning_point_at_zero_phase))
     end
     # z = √z₊ cn(u|m): E > 1
-    (; zplus, zminus, m, m1, omega) = _hyperbolic_polar_roots(a, energy, lz, q)
+    (; zplus, zminus, m, m1, omega, amplitude, complementary_modulus) =
+        _hyperbolic_polar_roots(a, energy, lz, q)
     return _elliptic_polar_solution(a, energy, lz, q; kind=:cn, A=zplus,
+        amplitude, complementary_modulus,
         one_minus_A=_polar_one_minus_root(a, energy, lz, q, zplus), m=m, m1=m1,
         omega=omega, u0=float(polar_phase),
         metadata=(sector=:pendular, zminus=zminus, zplus=zplus,

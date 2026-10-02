@@ -206,24 +206,31 @@ function _inward_track(a, energy, lz, q, model, polar, rplus, reference_radius, 
     rref = reference_radius !== nothing ? float(reference_radius) :
         id === :K5 ? 0.5 * (rplus + rc) : rplus + 0.55 * (rc - rplus)
     rplus < rref < rc || error("The reference radius lies outside (r+, r_c).")
-    c = model.mino(rplus)                      # Mino time from the model's anchor to the horizon
+    relative=model.kind===:k8_parabolic_outer_double ?
+        _parabolic_critical_horizon_model(a,energy,lz,q,model) : nothing
+    c = relative===nothing ? model.mino(rplus) : relative.angle/relative.frequency
     λ_h = 0.0
     check(λ) = (_finite_mino(λ) <= λ_h || throw(DomainError(λ,
         "Mino time lies beyond the future-horizon endpoint λ = $(λ_h).")); float(λ))
     check_bl(λ) = (check(λ) < λ_h || throw(DomainError(λ,
         "BL t and phi exclude the exact future-horizon endpoint.")); float(λ))
     model_radius, model_mino = model.radius, model.mino
-    radius(λ) = (λ = check(λ); λ == λ_h ? rplus : clamp(model_radius(c - λ), rplus, rc))
+    radius(λ) = (λ = check(λ); λ == λ_h ? rplus :
+        relative===nothing ? clamp(model_radius(c-λ),rplus,rc) : relative(λ))
     function lambda_of_radius(r)
         rplus <= r <= rc || throw(DomainError(r, "The radius lies outside [r+, r_c]."))
-        return r == rplus ? λ_h : c - model_mino(r)
+        r==rplus && return λ_h
+        return relative===nothing ? c-model_mino(r) :
+            _parabolic_critical_lambda_of_radius(relative,r)
     end
-    λ_ref = c - model.mino(rref)
+    λ_ref = lambda_of_radius(rref)
     polar = id === :K5 ? polar : _polar_delayed(polar, λ_ref)
-    coords = _engine_coordinates(a, energy, lz, q, radius, _polar_primitive(polar);
+    radial_track=relative===nothing ? radius : relative
+    coords = _engine_coordinates(a, energy, lz, q, radial_track, _polar_primitive(polar);
         potential=potential, domain=(-Inf, λ_h), ends=(:asymptote, :horizon), σ=-1.0, rd=rc,
         multiplicity=id === :K2 ? 3 : 2, λ_bl=λ_ref, λ_regular=λ_h, σ_regular=-1.0)
-    return (r=radius, check=check, check_bl=check_bl, coords=coords, potential=potential, sign_r=λ -> -1.0,
+    return (r=radius, check=check, check_bl=check_bl, coords=coords, potential=potential,
+        radial_track=radial_track,sign_r=λ -> -1.0,
         polar=polar,
         domain=(mino=(-Inf, λ_h), endpoint_closed=(false, true),
             endpoint_roles=(:past_repeated_root_asymptote, :future_horizon),

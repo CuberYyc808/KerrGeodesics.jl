@@ -43,6 +43,12 @@ _coordinate_functions(c::EngineCoordinates) = (t=λ -> _coords_t(c, λ), phi=λ 
     tau=λ -> _coords_tau(c, λ), v=λ -> _coords_v(c, λ), psi=λ -> _coords_psi(c, λ),
     radial=λ -> _coords_radial(c, λ), spectral=() -> _coords_spectral(c))
 _coordinate_functions(c::NamedTuple) = c
+_coordinate_rstar(c::NamedTuple,a,rbl,lambda) = kerr_rstar(a,rbl(lambda))
+function _coordinate_rstar(c::EngineCoordinates,a,rbl,lambda)
+    radius=rbl(lambda)
+    state=_radial_state(c.r_of,lambda)
+    return state === nothing ? kerr_rstar(a,radius) : _relative_rstar(state)
+end
 
 """
     _engine_member(class, id, a, E, Lz, Q, polar, track, component, structure, potential, tier,
@@ -72,7 +78,8 @@ Base.@nospecializeinfer @noinline function _engine_member(class, id, a, energy, 
     # v = t + r_*, ψ = φ + φ_H (and u = t − r_*, χ = φ − φ_H) when a `chart` (r_*, φ_H) is given
     charts = if regular
         vf, psif = getfield(cf, :v), getfield(cf, :psi)
-        (rstar=λ -> kerr_rstar(a, rbl(λ)), v=λ -> vf(check(λ)), psi=λ -> psif(check(λ)))
+        coords=getfield(track,:coords)
+        (rstar=λ -> _coordinate_rstar(coords,a,rbl,λ), v=λ -> vf(check(λ)), psi=λ -> psif(check(λ)))
     elseif chart === nothing
         (;)
     else
@@ -91,14 +98,15 @@ Base.@nospecializeinfer @noinline function _engine_member(class, id, a, energy, 
     trajectory = _merge_member_fields(((
         t=t,
         r=r,
-        theta=λ -> acos(clamp(z(λ), -1.0, 1.0)),
+        theta=λ -> (p=position(check(λ)); atan(sqrt(p[3]), p[1])),
         z=z,
         phi=phi,
         tau=λ -> tauf(check(λ)),
         ), charts, radial, getfield(track, :trajectory),
     ))
     kin = _kinematics(a, energy, lz, q, r, rbl, λ -> position(check(λ)), getfield(track, :sign_r),
-        potential === nothing ? _radial_potential_from_roots(a, energy, lz, q, structure) : potential)
+        potential === nothing ? _radial_potential_from_roots(a, energy, lz, q, structure) : potential;
+        radial_track=haskey(track,:radial_track) ? getfield(track,:radial_track) : nothing)
     (; velocity, potentials, residuals) = _kinematic_fields(kin)
     spectralf = haskey(cf, :spectral) ? getfield(cf, :spectral) : () -> (achieved=0.0, pieces=0)
     return _member(class, id, tier, component, (a=float(a), E=float(energy), Lz=float(lz),

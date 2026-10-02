@@ -143,6 +143,38 @@ function _axis_schwarzschild_parts(evalue)
 end
 
 function _axis_kerr_parts(model, evalue, rplus)
+    if model.m > 1
+        # Complementary Jacobi amplitude: no pi/2 subtraction as spin tends to zero.
+        spin, k = model.spin, model.k
+        mt, mt1 = inv(model.m), -model.m1 / model.m
+        L = _landen(mt, mt1)
+        scale = sqrt(2 * spin)
+        if evalue >= 1
+            return _axis_infinity_parts(spin, k, rplus, mt, mt1, L, scale)
+        end
+        function tail(r)
+            inverse = inv(r)
+            ratio = spin * inverse
+            numerator = sqrt(max(spin * (k * (1 + ratio^2) + 2 * inverse), 0.0))
+            angle = atan(numerator, sqrt(mt1) * (1 - ratio))
+            return _ellip_f(angle, mt1) / scale
+        end
+        horizon_tail = tail(rplus)
+        deficit = -k
+        start_radius = evalue < 1 ? (1 + sqrt(1 - deficit^2 * spin^2)) / deficit : Inf
+        start_tail = evalue < 1 ? 0.0 : tail(Inf)
+        lambda_start = start_tail - horizon_tail
+        function radius(delta)
+            delta <= 0 && return rplus
+            evalue < 1 && delta >= -lambda_start && return start_radius
+            sn, _, dn = _ellipj_reduced(scale * (horizon_tail - delta), L)
+            coefficient = (mt * sn^2 - spin * k) / dn^2
+            value = spin * (1 + sqrt(max((1 - coefficient) * (1 + coefficient), 0.0))) / coefficient
+            return clamp(value, rplus, start_radius)
+        end
+        mino = r -> horizon_tail - tail(r)
+        return (; lambda_start, radius, mino, start_radius, formula_kind=:axis_legendre)
+    end
     lambda_horizon_primitive = model.lambda_primitive(rplus)
     deficit = -_e2m1(evalue)
     start_radius = evalue < 1 ? (1 + sqrt(1 - deficit^2 * model.spin^2)) / deficit : Inf
@@ -156,6 +188,47 @@ function _axis_kerr_parts(model, evalue, rplus)
     end
     mino(r) = model.lambda_primitive(r) - lambda_horizon_primitive
     return (; lambda_start, radius, mino, start_radius, formula_kind=:axis_legendre)
+end
+
+function _axis_infinity_parts(spin, k, rplus, mt, mt1, L, scale)
+    si = sqrt(spin * k / mt)
+    ci = sqrt(mt1 / mt)
+    di = sqrt(1 - spin * k)
+    function distance(r)
+        isinf(r) && return 0.0
+        inverse = inv(r)
+        ratio = spin * inverse
+        sigma = 1 + ratio^2
+        sn = sqrt(spin * (k * sigma + 2inverse)) / (sqrt(mt) * (1 + ratio))
+        cn = sqrt(mt1) * (1 - ratio) / (sqrt(mt) * (1 + ratio))
+        dn = sqrt(2mt1 * sigma) / (1 + ratio)
+        x = sqrt(k * sigma + 2inverse)
+        y = sqrt(k) * (1 - ratio) * sqrt(sigma) / (1 + ratio)
+        difference = 2inverse * (1 + 2spin * k * sigma / (1 + ratio)^2) / (x + y)
+        denominator = 1 - mt * sn^2 * si^2
+        sd = scale * mt1 * difference / (mt * (1 + ratio) * denominator)
+        cd = (cn * ci + sn * si * dn * di) / denominator
+        return _ellip_f(atan(sd, cd), mt1) / scale
+    end
+    horizon_distance = distance(rplus)
+    function radius(delta)
+        delta <= 0 && return rplus
+        sn, cn, dn = _ellipj_reduced(scale * (horizon_distance - delta) / 2, L)
+        denominator = 1 - mt * si^2 * sn^2
+        sm = (si * cn * dn + sn * ci * di) / denominator
+        cm = (ci * cn - si * sn * di * dn) / denominator
+        dm = (di * dn - mt * si * sn * ci * cn) / denominator
+        denominator2 = 1 - mt * sm^2 * sn^2
+        sp = (sm * cn * dn + sn * cm * dm) / denominator2
+        dp = (dm * dn - mt * sm * sn * cm * cn) / denominator2
+        difference = 2sn * cm * dm / denominator2
+        # sn(u)^2 - sn(u_infinity)^2 without subtracting close squares.
+        coefficient = mt * (sp + si) * difference / dp^2
+        value = spin * (1 + sqrt(max((1 - coefficient) * (1 + coefficient), 0.0))) / coefficient
+        return max(value, rplus)
+    end
+    return (lambda_start=-horizon_distance, radius=radius,
+        mino=r -> distance(r) - horizon_distance, start_radius=Inf, formula_kind=:axis_legendre)
 end
 
 # The classified component of class `broad_class` of axis constants (Lz = 0, Q = a²(1 − E²)):
@@ -238,7 +311,13 @@ function _axis_infall_member(a::Real, energy::Real, component;
 
     radial_potential(rvalue) = kerr_axis_radial_potential(spin, evalue, rvalue)
     polar_potential(zvalue) = kerr_polar_z_potential(spin, evalue, 0.0, qaxis, zvalue)
-    ur(lambda) = -sqrt(max(radial_potential(r(lambda)), 0.0))
+    function ur(lambda)
+        lam = check_regular(lambda)
+        rv = r_of(lam)
+        # Differentiate the elementary trajectory without taking sqrt(R) at its turning point.
+        formula_kind === :schwarzschild_axis_elementary && return -(evalue + lam) * rv^2
+        return -sqrt(max(radial_potential(rv), 0.0))
+    end
     vanishing(lambda) = (check_regular(lambda); 0.0)
     # dt/dλ = E Σ²/Δ on the axis (Σ = r² + a²), and the proper-time velocity for the norm
     ut(lambda) = (rv = r(check_bl(lambda)); evalue * (rv^2 + spin^2)^2 / kerr_delta(spin, rv))

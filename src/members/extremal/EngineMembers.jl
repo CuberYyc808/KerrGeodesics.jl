@@ -26,8 +26,10 @@ function _extremal_radial_model(a,E,L,Q,spec,structure;axis=nothing)
 end
 
 function _extremal_engine_member(a,E,L,Q,spec,structure;
-        polar_sector=nothing,polar_phase=0.0,axis=nothing,reference_radius=nothing)
-    pol=_extremal_polar_engine(a,E,L,Q,polar_sector,polar_phase;axis=axis)
+        polar_sector=nothing,polar_phase=0.0,polar_hemisphere::Symbol=:north,
+        axis=nothing,reference_radius=nothing)
+    pol=_extremal_polar_engine(a,E,L,Q,polar_sector,polar_phase;
+        axis=axis,polar_hemisphere=polar_hemisphere)
     polar=hasproperty(pol,:solution) ? pol.solution : pol
     potential=_radial_potential_from_roots(a,E,L,Q,structure)
     kind=spec.kind
@@ -82,7 +84,9 @@ function _extremal_engine_member(a,E,L,Q,spec,structure;
 end
 
 function _extremal_horizon_track(a,E,L,Q,spec,model,polar,potential)
-    c=model.mino(1.0)
+    relative=model.kind===:k8_parabolic_outer_double ?
+        _parabolic_critical_horizon_model(a,E,L,Q,model) : nothing
+    c=relative===nothing ? model.mino(1.0) : relative.angle/relative.frequency
     orientation=model.inward ? 1.0 : -1.0
     kind=spec.kind
     lo=kind===:horizon_to_repeated ? -Inf :
@@ -97,27 +101,35 @@ function _extremal_horizon_track(a,E,L,Q,spec,model,polar,potential)
         lambda=check(lambda)
         iszero(lambda) && return 1.0
         lambda==lo && isfinite(upper) && return upper
-        return model_radius(c+orientation*lambda)
+        return relative===nothing ? model_radius(c+orientation*lambda) : relative(lambda)
     end
-    lambda_of(r)=(model_mino(r)-c)/orientation
+    lambda_of(r)=r==1.0 ? 0.0 : relative===nothing ? (model_mino(r)-c)/orientation :
+        _parabolic_critical_lambda_of_radius(relative,r)
     ref=lambda_of(1.0+min(1.0,(spec.upper-1.0)/2))
     ends=(kind===:horizon_to_repeated ? :asymptote :
         kind===:direct_capture ? :infinity : :turning,:horizon)
     multiplicity=spec.component===nothing ? 2 : spec.component.UpperEndpoint.Multiplicity
-    coords=_engine_coordinates(a,E,L,Q,radius,_polar_primitive(polar);
+    radial_track=relative===nothing ? radius : relative
+    coords=_engine_coordinates(a,E,L,Q,radial_track,_polar_primitive(polar);
         potential=potential,domain=domain.mino,ends=ends,σ=-1.0,
         rd=spec.upper,multiplicity=multiplicity,λ_bl=ref,λ_tau=0.0,
         λ_regular=0.0,σ_regular=-1.0)
     # The strict convention fixes t and phi through the horizon-anchored ingoing
     # chart, rather than setting them to zero at an exterior event.
-    t(lambda)=iszero(lambda) ? Inf : _coords_v(coords,lambda)-_rstar(radius(lambda))
-    phi(lambda)=iszero(lambda) ? a*Inf : _coords_psi(coords,lambda)-_phi_h(a,radius(lambda))
+    rstar(lambda)=relative===nothing ? _rstar(radius(lambda)) :
+        _relative_rstar(_radial_state(relative,lambda))
+    phi_h(lambda)=relative===nothing ? _phi_h(a,radius(lambda)) :
+        _relative_azimuth(a,_radial_state(relative,lambda))
+    t(lambda)=iszero(lambda) ? Inf : _coords_v(coords,lambda)-rstar(lambda)
+    phi(lambda)=iszero(lambda) ? a*Inf : _coords_psi(coords,lambda)-phi_h(lambda)
     exactcoords=merge(_coordinate_functions(coords),(t=t,phi=phi))
     extras=merge((lambda_of_radius=lambda_of,
-        u=lambda->t(check(lambda))-_rstar(radius(lambda)),
-        chi=lambda->phi(check(lambda))-_phi_h(a,radius(lambda))),
+        u=lambda->t(check(lambda))-rstar(lambda),
+        chi=lambda->phi(check(lambda))-phi_h(lambda)),
         _radius_increments(coords,lambda_of,-1.0))
+    relative===nothing || (extras=merge(extras,(rstar=lambda->rstar(check(lambda)),)))
     return (r=radius,check=check,check_bl=check,coords=exactcoords,sign_r=lambda->-1.0,
+        radial_track=radial_track,
         domain=domain,
         reference=(lambda0_event=:future_horizon,t_phi_zero_event=:regular_chart_at_future_horizon,
             t_phi_zero_lambda=NaN,t_phi_zero_radius=NaN,tau_zero_event=:future_horizon,

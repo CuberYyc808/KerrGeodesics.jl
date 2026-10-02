@@ -33,9 +33,12 @@ g = c − q − lz² (Vieta with p(1) = −lz²), so they come from a stable qua
 the one belonging to `u` is returned.
 """
 function _polar_one_minus_root(a, energy, lz, q, u)
-    c = -a^2 * _e2m1(energy)
+    roots = _polar_quadratic_roots(a, energy, lz, q)
+    c = roots.c
     g = c - q - lz^2
-    Y = g + copysign(sqrt(g^2 + 4c * lz^2), g)
+    # The complementary quadratic has the same discriminant as the original one.
+    square_root = abs(roots.cu_big-roots.cu_small)
+    Y = g + copysign(square_root, g)
     iszero(Y) && return 1 - u
     y_near = -2lz^2 / Y                      # the root nearer 1
     iszero(c) && return y_near
@@ -72,6 +75,53 @@ end
     return dn, -L.m * sn * cn
 end
 
+function _polar_spike_increment(kind, L, left, delta, A, B, epsilon, lz_over_omega)
+    iszero(lz_over_omega) && return 0.0
+    right = left + delta
+    jl = _ellipj_reduced(left, L); jr = _ellipj_reduced(right, L)
+    mid = _ellipj_reduced(left + delta / 2, L)
+    step = _ellipj_reduced(delta / 2, L)
+    denominator = 1 - L.m * mid[1]^2 * step[1]^2
+    difference = kind === :cd ?
+        2step[1] * mid[2] * step[3] / (denominator * jl[3] * jr[3]) :
+        2step[1] * mid[2] * mid[3] / denominator
+    B > 0 || return lz_over_omega * difference / epsilon
+    yl = _polar_spike(kind, jl, A, L)[1][1]
+    yr = _polar_spike(kind, jr, A, L)[1][1]
+    scale = sqrt(epsilon * B)
+    angle = atan(scale * difference, epsilon + B * yl * yr)
+    return lz_over_omega * angle / scale
+end
+
+function _polar_rates_increment(prim, totals, kind, L, initial, delta, A, B, epsilon,
+        lz_over_omega)
+    iszero(delta) && return (0.0, 0.0, 0.0)
+    K = L.K; period = 2K
+    cycles = round(delta / period)
+    remainder = delta - cycles * period
+    phase = initial - round(initial / period) * period
+    value = cycles .* totals
+    direction = remainder > 0 ? 1 : -1
+    remaining = abs(remainder)
+    # A residual interval spans at most two quarter-period boundaries.
+    while remaining > 0
+        quarter = direction > 0 ? floor(Int, phase / K) : ceil(Int, phase / K) - 1
+        offset = phase - quarter * K
+        orientation = iseven(quarter) ? 1 : -1
+        local_phase = orientation > 0 ? offset : K - offset
+        room = direction > 0 ? K - offset : offset
+        width = min(remaining, max(room, 0.0))
+        local_delta = orientation * direction * width
+        part = ntuple(k -> _cheb_increment_delta(prim, local_phase, local_delta, k), 3)
+        spike = _polar_spike_increment(kind, L, local_phase, local_delta, A, B, epsilon,
+            lz_over_omega)
+        value = value .+ orientation .* (part[1], part[2] + spike, part[3])
+        remaining -= width
+        remaining > 0 && (phase = direction > 0 ? (quarter + 1) * K : quarter * K)
+    end
+    return value
+end
+
 """
     _equatorial_polar_solution(a, energy, lz)
 
@@ -90,17 +140,20 @@ end
 
 """
     _elliptic_polar_solution(a, energy, lz, q; kind, A, one_minus_A, m, m1, omega, u0,
-                             sign=1.0, metadata)
+                             sign=1.0, amplitude=sqrt(A),
+                             complementary_modulus=sqrt(m1), metadata)
 
 Polar motion z = sign·√A·J(u0 + ωλ | m) with t, φ, τ primitives from one Chebyshev period;
-`m1` is 1 − m formed from the polar roots.
+`m1` is 1 − m formed from the polar roots. `amplitude` carries sqrt(A) separately
+when its square underflows. `complementary_modulus` similarly retains sqrt(m1).
 Returns `(formula, primitive, position, metadata)`: `formula(λ)` gives
 `(z, uz = dz/dλ, sin2 = 1 − z², theta, phi, t, tau)`, `primitive(λ)` the polar `(t, φ, τ)`
 and `position(λ)` `(z, dz/dλ, 1 − z²)`; the primitives vanish at λ = 0.
 """
 function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A, m, m1,
-        omega, u0, sign=1.0, metadata::NamedTuple)
-    L = _landen(m, m1)
+        omega, u0, sign=1.0, amplitude=sqrt(A), complementary_modulus=sqrt(m1),
+        metadata::NamedTuple)
+    L = _landen(m, m1; complementary_modulus)
     K = L.K
     period = 2K
     ε = one_minus_A
@@ -110,44 +163,38 @@ function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A
     spike_denom = !iszero(lz) && B > 0 ? sqrt(ε * B) : 1.0
     @inline spike_of_y(y) = iszero(lz) ? 0.0 : lz_over_omega *
         (B > 0 ? atan(spike_scale * y) / spike_denom : y / ε)
-    # the closed-form part of the φ primitive, zero at u = 0
-    # primitive() has already folded u to [0, K].
-    @inline spike_primitive(u) = iszero(lz) ? 0.0 :
-        spike_of_y(_polar_spike(kind, _ellipj_reduced(u, L), A, L)[1][1])
     # its values at the ends of [0, K] are exact (y = 0 and 1/k' for cd, 1 for cn, dn): an
     # evaluated y at u = K would carry the rounding of K
     y_ends = kind === :cd ? (0.0, 1 / sqrt(m1)) : (0.0, 1.0)
     S0 = spike_of_y(y_ends[1])
     spike_half = iszero(lz) ? 0.0 : spike_of_y(y_ends[2]) - S0
-    @inline spike(u) = spike_primitive(u) - S0
     # z² is even about u = 0 and about u = K: fit the rates on [0, K] only and unfold by
     # symmetry. The φ component is the bounded rest
     # of Lz/(1 − z²) after the closed-form spike.
     rates = function (u)
         jac = _ellipj_reduced(u, L)
         z2, omz2 = _polar_z2(kind, jac, A, one_minus_A, L)
+        J = _polar_j(kind, jac, L)[1]
         (y, yp), _ = _polar_spike(kind, jac, A, L)
         rest = iszero(lz) ? 0.0 : lz * y^2 * (ps + qs * y^2) / ((1 + yp) * omz2 * omega)
-        return ((a * lz - a^2 * energy * omz2) / omega, rest, a^2 * z2 / omega)
+        return ((a * lz - a^2 * energy * omz2) / omega, rest, J^2)
     end
     scale_t = abs(a * lz) + a^2 * abs(energy) + 1.0e-300
     # the φ rest only needs the accuracy of the whole φ rate (mean |spike| rate over [0, K])
     fit = chebfit(rates, 0.0, K; ncomp=3,
-        absfloor=(scale_t / omega, abs(spike_half) / K + 1.0e-300, a^2 / omega + 1.0e-300))
+        absfloor=(scale_t / omega, abs(spike_half) / K + 1.0e-300, 1.0))
     prim = chebintegrate(fit)
     half = (chebtotal(prim, 1), chebtotal(prim, 2) + spike_half, chebtotal(prim, 3))
     totals = 2 .* half
-    @inline F(y) = (P = _eval3(prim, y); (P[1], P[2] + spike(y), P[3]))
-    @inline function primitive(u)
-        n = floor(u / period)
-        y = u - n * period
-        Fy = y <= K ? F(y) : 2 .* half .- F(period - y)
-        return n .* totals .+ Fy
-    end
-    p0 = primitive(float(u0))
-    amp = sign * sqrt(A)
+    amp = sign * amplitude
+    # Fit the dimensionless proper-time integrand before restoring its small amplitude.
+    tau_scale = a^2 * amplitude * (amplitude / omega)
     # (t, φ, τ) polar primitives, and (z, dz/dλ, sin²θ = 1 − z² without cancellation)
-    @inline rates_primitive(lambda) = primitive(u0 + omega * float(lambda)) .- p0
+    @inline function rates_primitive(lambda)
+        value = _polar_rates_increment(prim, totals, kind, L, float(u0),
+            omega * float(lambda), A, B, ε, lz_over_omega)
+        return (value[1], value[2], tau_scale * value[3])
+    end
     function position(lambda)
         jac = _ellipj_reduced(u0 + omega * float(lambda), L)
         J, dJ = _polar_j(kind, jac, L)
@@ -156,7 +203,7 @@ function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A
     formula = function (lambda)
         z, uz, s2 = position(lambda)
         tφτ = rates_primitive(lambda)
-        return (z=z, uz=uz, sin2=s2, theta=acos(clamp(z, -1.0, 1.0)),
+        return (z=z, uz=uz, sin2=s2, theta=atan(sqrt(s2), z),
             phi=tφτ[2], t=tφτ[1], tau=tφτ[3])
     end
     return (formula=formula, primitive=rates_primitive, position=position,
@@ -164,7 +211,7 @@ function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A
         (modulus=m, omega=omega, formula_kind=Symbol(:spectral_jacobi_, kind),
          spectral=_spectral_summary((prim,)),
          period_u=period, mean_rates=(t=totals[1] / period * omega,
-             phi=totals[2] / period * omega, tau=totals[3] / period * omega))))
+             phi=totals[2] / period * omega, tau=tau_scale * totals[3] / period * omega))))
 end
 
 """

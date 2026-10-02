@@ -22,22 +22,53 @@ const DEFAULT_ENERGY_RTOL = 0.0
 const ROOT_ATOL = 1.0e-12
 const ROOT_RTOL = 1.0e-12
 
-# A small residual of the expanded polynomial need not be a repeated root:
-# near the extremal horizon its O(1) terms can hide a nonzero P_H^2.
-# Require the metric form to vanish within its arithmetic/input rounding scale.
-function _repeated_radial_zero(a,E,L,Q,r)
-    P=kerr_radial_momentum(a,E,L,r)
-    D=(r-1)^2+(a-1)*(a+1)
-    K=r^2+(L-a*E)^2+Q
-    value=muladd(P,P,-D*K)
-    pscale=abs(E)*(r^2+a^2)+abs(a*L)
-    dscale=abs((r-1)^2)+abs((a-1)*(a+1))
-    kscale=r^2+(abs(L)+abs(a*E))^2+abs(Q)
-    scale=2abs(P)*pscale+P^2+dscale*kscale+abs(D*K)
-    # Eight rounded operations bound the longest path through P, Delta and K.
-    # A classification-wide tolerance would merge resolved nearly circular roots.
-    gamma=8eps(Float64)/(1-8eps(Float64))
-    return abs(value)<=gamma*scale
+# A root of multiplicity m at r: the Float64 constants must lie within one ulp per component
+# of the manifold where R, R′, …, R^(m−1) vanish at r. To first order that is
+#     |R^(k)(r)| ≤ Σ_θ |∂R^(k)/∂θ (r)| ulp(θ),   θ = (a, E, Lz, Q),   k = 0, …, m − 1,
+# except k = `located`, the derivative whose zero placed r (it vanishes up to the rounding of
+# r, which is not a property of the constants);
+# with ∂R^(k)/∂θ from the coefficients cⱼ(θ) of R; an exactly zero constant carries no
+# rounding. Distinct roots of the given constants (a resolved gap, a complex pair, a simple
+# root next to a double one) are therefore not merged, while constants rounded from a point
+# of the manifold are. R and R′ are evaluated in double-double, so their own rounding does
+# not enter.
+function _repeated_radial_zero(a,E,L,Q,r; multiplicity=2, located=multiplicity-1)
+    value, slope = _radial_root_evaluator(a,E,L,Q)(r)
+    higher = kerr_radial_derivatives(a,E,L,Q,r)
+    values = (value, slope, higher.R2, higher.R3, higher.R4)
+    for k in 0:min(multiplicity-1, 4)
+        k == located && continue
+        abs(values[k+1]) <= _radial_input_reach(a,E,L,Q,r,k) || return false
+    end
+    return true
+end
+
+function _radial_input_reach(a,E,L,Q,r,k)
+    w = a*E-L
+    # ∂(c₀, …, c₄)/∂θ for c = (−a²Q, 2(aE − Lz)² + 2Q, −(Q + Lz² − a²(E² − 1)), 2, E² − 1)
+    partials = ((-2a*Q, 4E*w, 2a*_e2m1(E), 0.0, 0.0), (0.0, 4a*w, 2a^2*E, 0.0, 2E),
+                (0.0, -4w, -2L, 0.0, 0.0), (-a^2, 2.0, -1.0, 0.0, 0.0))
+    ulps = map(x -> iszero(x) ? 0.0 : eps(abs(float(x))), (a, E, L, Q))
+    reach = 0.0
+    for (dc, u) in zip(partials, ulps)
+        reach += abs(sum(dc[j+1]*factorial(j)/factorial(j-k)*r^(j-k) for j in k:4)) * u
+    end
+    return reach
+end
+
+# A conservative exact-zero certificate at the represented radius, after locating
+# R^(m-1)=0. An uncertifiable radius may still have the explicit A reading.
+function _exact_repeated_radial_zero(a,E,L,Q,r,m)
+    c = _wide_radial_coefficients(a,E,L,Q)
+    coefficients = ntuple(k -> _wide_derivative_coefficients(c,k), 4)
+    value(k, x) = k == 0 ? _wide_evalpoly(x, c) : _wide_evalpoly(x, coefficients[k])
+    for _ in 1:8
+        step = value(m-1, r) / value(m, r)
+        isfinite(step) || break
+        r -= step
+        abs(step) <= eps(r) && break
+    end
+    return _InputArithmetic.repeated_at(a,E,L,Q,r,m), r
 end
 
 # P(r₊) = 0: r₊ itself is a root of R (the H tier and, at |a| = 1, the X tier). P(r₊) is a sum

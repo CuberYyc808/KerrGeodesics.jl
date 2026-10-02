@@ -20,12 +20,20 @@ function _hyperbolic_polar_roots(a, energy, lz, q)
     # (z_+ = 1 on the axis, Lz = 0; Θ(1) = −Lz² puts z_+ ≤ 1, and when Lz² ≪ Q the rounded
     # root can land an ulp above 1; the polar engine forms 1 − z_+ separately with
     # _polar_one_minus_root)
-    0 < zplus <= 1 + POLAR_ROOT_SLACK || error("Generic inclined hyperbolic polar root z_+ is outside (0,1].")
+    # sqrt(u) remains representable when the small root u=Q/(c*u_big) does not.
+    beta = -roots.c
+    positive_large = roots.cu_big > 0
+    amplitude = positive_large ? sqrt(q)/sqrt(roots.cu_big) :
+        sqrt(-roots.cu_big)/sqrt(beta)
+    negative_amplitude = positive_large ? sqrt(roots.cu_big)/sqrt(beta) :
+        sqrt(q)/sqrt(-roots.cu_big)
+    0 < amplitude <= sqrt(1 + POLAR_ROOT_SLACK) || error("Generic inclined hyperbolic polar root z_+ is outside (0,1].")
     zplus = min(zplus, 1.0)
-    zminus < 0 || error("Generic inclined hyperbolic polar root z_- must be negative.")
+    negative_amplitude > 0 || error("Generic inclined hyperbolic polar root z_- must be negative.")
     spread = cminus - cplus                  # beta (z_+ - z_-) = -c z_+ + c z_-
     return (zplus=zplus, zminus=zminus, m=-cplus / spread, m1=cminus / spread,
-        omega=sqrt(spread))
+        omega=sqrt(spread), amplitude=min(amplitude,1.0),
+        complementary_modulus=negative_amplitude*sqrt(beta)/sqrt(spread))
 end
 
 """

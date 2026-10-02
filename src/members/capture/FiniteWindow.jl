@@ -60,6 +60,7 @@ function _c3_complex_parameters(a, energy, lz, q; atol=1e-10, structure=nothing)
     lead = _e2m1(energy)
     lead > 0 || return nothing
     return (
+        energy=float(energy),
         lead=lead,
         r1=real_roots[1],
         r2=real_roots[2],
@@ -71,17 +72,145 @@ function _c3_complex_parameters(a, energy, lz, q; atol=1e-10, structure=nothing)
     )
 end
 
-function _c3_shape(c)
-    b = sqrt((c.r2 - c.rho)^2 + c.eta^2)
-    d = sqrt((c.r1 - c.rho)^2 + c.eta^2)
-    n = ((c.r2 - c.rho) * (c.rho - c.r1) - c.eta^2) / (b * d)
-    return (B=b, C=d, n=n, m=(1 - n) / 2, m1=(1 + n) / 2)
+function _c3_wide_shape(c)
+    square(x)=_wide_mul(x,x)
+    eta2=square(_wide(c.eta))
+    d2=_wide_sub(_wide(c.r2),_wide(c.rho))
+    d1=_wide_sub(_wide(c.r1),_wide(c.rho))
+    b=_wide_sqrt(_wide_add(square(d2),eta2))
+    d=_wide_sqrt(_wide_add(square(d1),eta2))
+    numerator=_wide_sub(_wide_mul(d2,_wide_neg(d1)),eta2)
+    product=_wide_mul(b,d)
+    n=_wide_div(numerator,product)
+    # (BC)^2 - numerator^2 = eta^2 (r2-r1)^2 retains the small modulus complement.
+    magnitude=numerator[1]<0 ? _wide_neg(numerator) : numerator
+    small=_wide_div(_wide_mul(eta2,square(_wide_sub(_wide(c.r2),_wide(c.r1)))),
+        _wide_mul(_wide(2.0),_wide_mul(product,_wide_add(product,magnitude))))
+    m,m1=numerator[1]<0 ?
+        (_wide_mul(_wide(.5),_wide_sub(_wide(1.0),n)),small) :
+        (small,_wide_mul(_wide(.5),_wide_add(_wide(1.0),n)))
+    return (B=b,C=d,n=n,m=m,m1=m1)
+end
+_c3_shape(c)=map(x->x[1]+x[2],_c3_wide_shape(c))
+_c3_scale(c,shape)=begin
+    E=_wide(c.energy)
+    lead=_wide_mul(_wide_sub(E,_wide(1.0)),_wide_add(E,_wide(1.0)))
+    scale=_wide_sqrt(_wide_mul(lead,_wide_mul(shape.B,shape.C)))
+    scale
 end
 
 # λ(r) of C3 measured from infinity (λ(∞) = 0): minus the Mino time from r to infinity, in
-# Carlson's form with the complex pair ρ ± iη (`_mino_to_infinity`)
-_c3_lambda_of_r(c, r) = -_mino_to_infinity(c.lead,
-    (c.r1, c.r2, complex(c.rho, c.eta), complex(c.rho, -c.eta)), r)
+# Carlson's form with the complex pair ρ ± iη (`_mino_to_infinity`). At the horizon,
+# real Legendre amplitudes avoid cancellation inside the complex Carlson arguments.
+function _c3_lambda_of_r(c, r)
+    r == c.rplus || return -_mino_to_infinity(c.lead,
+        (c.r1, c.r2, complex(c.rho, c.eta), complex(c.rho, -c.eta)), r)
+    return _c3_horizon_lambda(c,_wide(r))
+end
+
+# Jacobi addition evaluates the phase difference from the horizon directly.
+function _c3_horizon_lambda(c,horizon,radius=Inf)
+    shape = _c3_wide_shape(c)
+    B,C,m,m1 = shape.B,shape.C,shape.m,shape.m1
+    square(x)=_wide_mul(x,x)
+    times(n,x)=_wide_mul(_wide(float(n)),x)
+    value(x)=x[1]+x[2]
+    h1=_wide_sub(horizon,_wide(c.r1)); h2=_wide_sub(horizon,_wide(c.r2))
+    ratio=_wide_div(h2,h1)
+    br=_wide_mul(C,ratio); den=_wide_add(B,br)
+    bc=_wide_mul(B,C)
+    sh=_wide_div(times(2,_wide_sqrt(_wide_mul(bc,ratio))),den)
+    ch=_wide_div(_wide_sub(B,br),den)
+    source_ratio,ratio_difference=if isinf(radius)
+        (_wide(1.0),_wide_div(_wide_sub(_wide(c.r2),_wide(c.r1)),h1))
+    else
+        x=_wide(float(radius)); x1=_wide_sub(x,_wide(c.r1))
+        (_wide_div(_wide_sub(x,_wide(c.r2)),x1),
+            _wide_div(_wide_mul(_wide_sub(_wide(c.r2),_wide(c.r1)),
+                _wide_sub(x,horizon)),_wide_mul(x1,h1)))
+    end
+    source_br=_wide_mul(C,source_ratio); source_den=_wide_add(B,source_br)
+    si=_wide_div(times(2,_wide_sqrt(_wide_mul(bc,source_ratio))),source_den)
+    ci=_wide_div(_wide_sub(B,source_br),source_den)
+    di=_wide_sqrt(_wide_add(m1,_wide_mul(m,square(ci))))
+    dh=_wide_sqrt(_wide_add(m1,_wide_mul(m,square(ch))))
+    ti=_wide_sqrt(_wide_div(C,B)); root_ratio=_wide_sqrt(ratio)
+    source_root=_wide_sqrt(source_ratio)
+    tangent=_wide_div(_wide_mul(ti,ratio_difference),
+        _wide_mul(_wide_add(source_root,root_ratio),
+            _wide_add(_wide(1.0),_wide_mul(square(ti),_wide_mul(source_root,root_ratio)))))
+    sin_difference=_wide_div(times(2,tangent),_wide_add(_wide(1.0),square(tangent)))
+    denominator=_wide_add(square(di),_wide_mul(m,_wide_mul(square(si),square(ch))))
+    product=_wide_mul(m,_wide_mul(_wide_mul(si,sh),_wide_mul(ci,ch)))
+    dd=_wide_mul(di,dh)
+    dn_numerator=product[1]>=0 ? _wide_add(dd,product) :
+        _wide_div(_wide_mul(denominator,
+            _wide_add(m1,_wide_mul(m,_wide_mul(square(ci),square(ch))))),_wide_sub(dd,product))
+    sn_difference=_wide_div(_wide_mul(sin_difference,_wide_add(denominator,dn_numerator)),
+        _wide_mul(_wide_add(di,dh),denominator))
+    cn_difference=_wide_div(_wide_add(_wide_mul(ci,ch),
+        _wide_mul(_wide_mul(si,sh),dd)),denominator)
+    finite=_ellip_f(value(sn_difference),abs(value(cn_difference)),value(m1))
+    difference=cn_difference[1]>=0 ? finite : 2*_ellip_k(value(m1))-finite
+    result=_wide_div(_wide(-difference),_c3_scale(c,shape))
+    return value(result)
+end
+
+struct _C3HorizonRadius{P,J}
+    params::P
+    landen::J
+    B::Float64; C::Float64; m::Float64; m1::Float64
+    scale::Float64
+    sh::Float64; ch::Float64; dh::Float64
+    si::Float64; ci::Float64; di::Float64
+    base::Float64
+    lambda_infinity::Float64
+    horizon::Tuple{Float64,Float64}
+    separation::Float64
+    momentum::Float64
+    shifted::NTuple{5,Tuple{Float64,Float64}}
+end
+
+function _c3_horizon_track(a,E,L,Q,c)
+    h,d,p,co=_horizon_shifted_polynomial(a,E,L,Q)
+    shape=_c3_shape(c)
+    B,C,m,m1=shape.B,shape.C,shape.m,shape.m1
+    h1=_wide_sub(h,_wide(c.r1)); h2=_wide_sub(h,_wide(c.r2))
+    ratio=(h2[1]+h2[2])/(h1[1]+h1[2]); den=B+C*ratio
+    sh=2sqrt(B*C*ratio)/den; ch=(B-C*ratio)/den
+    dh=sqrt(m1+m*ch^2)
+    si=2sqrt(B*C)/(B+C); ci=(B-C)/(B+C); di=sqrt(m1+m*ci^2)
+    base=2B*C*(c.r2-c.r1)/((h1[1]+h1[2])*den)
+    scale=_c3_scale(c,_c3_wide_shape(c))
+    return _C3HorizonRadius(c,_landen(m,m1),B,C,m,m1,scale[1]+scale[2],
+        sh,ch,dh,si,ci,di,base,_c3_horizon_lambda(c,h),h,d,p[1]+p[2],co)
+end
+
+function _radial_state(r::_C3HorizonRadius,lambda)
+    iszero(lambda) && return (gap=0.0,velocity=-r.momentum,chart=r)
+    L=r.landen; m=r.m
+    s,cn,dn=_ellipj_reduced(-lambda*r.scale/2,L)
+    w=r.dh^2+m*r.sh^2*cn^2
+    sp=(r.sh*cn*dn+s*r.ch*r.dh)/w
+    dp=(r.dh*dn-m*r.sh*r.ch*s*cn)/w
+    difference=-2sp*s*dp*dn/(dp^2+m*sp^2*cn^2)
+    si,ci,di=_ellipj_reduced((lambda-r.lambda_infinity)*r.scale/2,L)
+    wi=r.di^2+m*r.si^2*ci^2
+    spi=(r.si*ci*di-si*r.ci*r.di)/wi
+    dpi=(r.di*di+m*r.si*r.ci*si*ci)/wi
+    infinity_difference=2spi*si*dpi*di/(dpi^2+m*spi^2*ci^2)
+    den=(r.B+r.C)*infinity_difference
+    weight=2r.B*r.C*(r.params.r1-r.params.r2)
+    gap=weight*difference/(r.base*den)
+    sj,cj,dj=_ellipj_reduced(-lambda*r.scale,L)
+    wd=r.dh^2+m*r.sh^2*cj^2
+    snu=(r.sh*cj*dj+sj*r.ch*r.dh)/wd
+    dnu=(r.dh*dj-m*r.sh*r.ch*sj*cj)/wd
+    velocity=weight*r.scale*snu*dnu/den^2
+    return (gap=gap,velocity=velocity,chart=r)
+end
+(r::_C3HorizonRadius)(lambda)=
+    r.horizon[1]+(r.horizon[2]+_radial_state(r,lambda).gap)
 
 function _capture_positive_radial_interval(r_left, r_right)
     r_left == r_right && return (r_left, r_right, 1)
@@ -109,7 +238,7 @@ function _c3_radius_from_infinity(c)
     k = sqrt(c.lead * B * C)
     s∞ = 2 * sqrt(B * C) / (B + C)
     c∞ = (B - C) / (B + C)
-    d∞ = sqrt(1 - m * s∞^2)
+    d∞ = sqrt(shape.m1 + m * c∞^2)
     return function (δ)
         s, cq, dq = _ellipj_reduced(δ * k / 2, L)
         # 1 − m s∞² s² = d∞² + m s∞² cn²u and 1 − m sn²P s² = dn²P + m sn²P cn²u: sums of positive
@@ -125,13 +254,49 @@ function _c3_radius_from_infinity(c)
     end
 end
 
+# The numerator is a Jacobi difference from the horizon; the denominator is a
+# difference from infinity. Both small endpoint differences are retained directly.
+function _c3_radius_from_horizon(c)
+    shape = _c3_shape(c)
+    B, C, m, m1 = shape.B, shape.C, shape.m, shape.m1
+    L = _landen(m, m1)
+    scale = sqrt(c.lead * B * C)
+    ratio = (c.rplus - c.r2) / (c.rplus - c.r1)
+    denominator = B + C * ratio
+    sh = 2 * sqrt(B * C * ratio) / denominator
+    ch = (B - C * ratio) / denominator
+    dh = sqrt(m1 + m * ch^2)
+    gap = (c.r2 - c.r1) / (c.rplus - c.r1)
+    base = 2 * B * C * gap / denominator
+    si = 2sqrt(B*C)/(B+C)
+    ci = (B-C)/(B+C)
+    di = sqrt(m1+m*ci^2)
+    lambda_infinity = _c3_lambda_of_r(c,c.rplus)
+    return function (lambda)
+        iszero(lambda) && return c.rplus
+        s, cn, dn = _ellipj_reduced(-lambda * scale / 2, L)
+        w = dh^2 + m * sh^2 * cn^2
+        sp = (sh * cn * dn + s * ch * dh) / w
+        dp = (dh * dn - m * sh * ch * s * cn) / w
+        difference = -2 * sp * s * dp * dn / (dp^2 + m * sp^2 * cn^2)
+        sinf,cinf,dinf = _ellipj_reduced((lambda-lambda_infinity)*scale/2,L)
+        winf = di^2+m*si^2*cinf^2
+        spinf = (si*cinf*dinf-sinf*ci*di)/winf
+        dpinf = (di*dinf+m*si*ci*sinf*cinf)/winf
+        infinity_difference = 2spinf*sinf*dpinf*dinf/(dpinf^2+m*spinf^2*cinf^2)
+        return c.rplus + 2 * B * C * (c.r1 - c.r2) * difference /
+            (base * (B + C) * infinity_difference)
+    end
+end
+
 # The radial model of C3: `radius(δ)` at Mino time δ after the infinity endpoint and its
 # inverse `mino(r)`, with the parameters and root data of the finite-window API
 function _c3_radial_model(a, energy, lz, q; structure=nothing)
     c = _c3_complex_parameters(a, energy, lz, q;structure=structure)
     c === nothing && return nothing
     return (kind=:c3_hyperbolic_two_real_complex, params=c, rplus=c.rplus,
-        radius=_c3_radius_from_infinity(c), mino=r -> -_c3_lambda_of_r(c, r), inward=true,
+        radius=_c3_radius_from_infinity(c), horizon_radius=_c3_radius_from_horizon(c),
+        mino=r -> -_c3_lambda_of_r(c, r), inward=true,
         roots=(real=c.real_roots, complex=(rho=c.rho, eta=c.eta)),
         rootdata=(radial=c.real_roots, complex=(rho=c.rho, eta=c.eta), lead=c.lead,
             shape=_c3_shape(c)))
@@ -176,8 +341,11 @@ end
 
 function _c1_shape(c)
     d = c.x0 - c.rho
-    B = sqrt(d^2 + c.eta^2)
-    return (d=d, B=B, m=(B - d) / (2 * B), m1=(B + d) / (2 * B))
+    B = hypot(d, c.eta)
+    # (B-d)(B+d)=eta^2 retains the smaller parameter next to a repeated root.
+    m = d > 0 ? c.eta^2 / (2B * (B+d)) : (B-d) / (2B)
+    m1 = d < 0 ? c.eta^2 / (2B * (B-d)) : (B+d) / (2B)
+    return (d=d, B=B, m=m, m1=m1)
 end
 
 function _c1_lambda_of_r(c, r)
@@ -306,15 +474,18 @@ function _capture_finite_window(parameters, constants, outcome; polar_phase=0.0)
     polar = _window_polar_motion(a, energy, lz, q, polar_phase)
 
     # λ = 0 on the horizon; the infinity endpoint precedes it by the Mino time from infinity
-    lambda_infinity = -radial.mino(radial.rplus)
+    relative=formula===:hyperbolic_capture ? _c3_horizon_track(a,energy,lz,q,radial.params) : nothing
+    lambda_infinity = relative===nothing ? -radial.mino(radial.rplus) : relative.lambda_infinity
     R(r) = kerr_radial_potential(a, energy, lz, q, r)
     Θ(z) = kerr_polar_z_potential(a, energy, lz, q, z)
-    r_of_lambda(λ) = λ == 0 ? radial.rplus : radial.radius(λ - lambda_infinity)
-    rdot(λ) = -sqrt(max(R(r_of_lambda(λ)), 0.0))
+    r_of_lambda=relative===nothing ? (λ->λ==0 ? radial.rplus : radial.radius(λ-lambda_infinity)) : relative
+    rdot(λ)=relative===nothing ? -sqrt(max(R(r_of_lambda(λ)),0.0)) : _radial_state(relative,λ).velocity
     # Mino time of radius r (λ = 0 on the horizon) and the polar increments between radii.
     function λ_of(r)
         r >= radial.rplus || throw(DomainError(r, "Capture radius must lie outside the future horizon."))
-        return lambda_infinity + radial.mino(r)
+        r==radial.rplus && return 0.0
+        return relative===nothing ? lambda_infinity+radial.mino(r) :
+            _c3_horizon_lambda(radial.params,relative.horizon,r)
     end
     polar_phi(r1, r2) = polar.phi(λ_of(r1)) - polar.phi(λ_of(r2))
     polar_t(r1, r2) = polar.t(λ_of(r1)) - polar.t(λ_of(r2))

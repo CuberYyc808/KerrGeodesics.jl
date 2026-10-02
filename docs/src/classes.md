@@ -228,6 +228,12 @@ stay in one hemisphere.
 | `:axis_crossing` | ``L_z = 0``, ``Q > a^2(1 - E^2)``, ``Q ≠ 0`` | passes over the poles |
 | `:axis_constant` | ``L_z = 0``, ``Q = a^2(1 - E^2)`` | moves along the spin axis |
 
+With ``L_z = Q = 0`` and ``E > 1`` the sector follows the spin. For ``a ≠ 0`` the default is
+`:equatorial` and `polar_sector = :axis_crossing` selects motion over the poles (at ``L_z = 0``
+the equator-attractive motion is that same axis-crossing motion). For ``a = 0`` the only sector
+is `:axis_constant` (radial infall along a fixed direction, case C12), the default with
+`axis = :north`. A `polar_sector` the constants do not allow raises an error in both cases.
+
 [`kerr_polar_sector_candidates`](@ref) lists the sectors a set of constants allows, and
 `member.Roots.polar.sector` records the one a member uses. Motion confined to one hemisphere
 takes `polar_hemisphere = :north` (the default) or `:south`, and motion along the axis takes

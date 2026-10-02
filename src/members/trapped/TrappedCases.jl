@@ -69,9 +69,9 @@ function kerr_geo_trapped_classify(a::Real, energy::Real, lz::Real, q::Real)
     all(isfinite, (a, energy, lz, q)) || throw(DomainError(
         (a, energy, lz, q), "Trapped constants must be finite."))
     metric = kerr_metric_limit(a)
-    metric !== :schwarzschild || throw(DomainError(
+    !iszero(a) || throw(DomainError(
         a, "Exterior E<0 timelike motion is absent in Schwarzschild."))
-    metric !== :extremal || throw(DomainError(
+    abs(a) != 1 || throw(DomainError(
         a, "Class N at extremal spin |a| = 1 is built by `kerr_geo_extremal`."))
     energy < 0.0 || throw(DomainError(
         energy, "Class N requires E<0."))
@@ -81,7 +81,8 @@ function kerr_geo_trapped_classify(a::Real, energy::Real, lz::Real, q::Real)
         lz, "Class N requires angular momentum opposite to the signed spin."))
 
     horizons = kerr_horizons(a)
-    pplus = kerr_radial_momentum(a, energy, lz, horizons.rplus)
+    # P(r₊) from the exact inputs: it decides R(r₊) = P(r₊)² > 0 even when it is tiny
+    pplus = _wide_horizon_momentum(a, energy, lz)
     pplus > 0.0 || throw(DomainError(
         pplus, "A future event-horizon crossing requires Pplus>0."))
     polar = kerr_polar_admissibility(a, energy, lz, q)
@@ -110,14 +111,8 @@ function kerr_geo_trapped_classify(a::Real, energy::Real, lz::Real, q::Real)
     turn < minimum_stationary_limit || throw(DomainError(
         turn,
         "The full radial component is not strictly confined to the ergoregion for every admitted polar phase."))
-    midpoint = 0.5 * (horizons.rplus + turn)
-    radial_midpoint = kerr_radial_potential(a, energy, lz, q, midpoint)
-    radial_midpoint > 0.0 || error(
-        "The horizon-to-turn Class N radial interval is not allowed.")
-    outer_probe = turn + max(1.0e-7, 1.0e-5 * max(1.0, abs(turn)))
-    radial_outer = kerr_radial_potential(a, energy, lz, q, outer_probe)
-    radial_outer < 0.0 || error(
-        "The first exterior Class N root does not terminate the allowed interval.")
+    # R > 0 on (r₊, turn): R(r₊) = P(r₊)² > 0 and no root lies between; R changes sign at the
+    # simple root `turn`. (Probing R at a midpoint fails when turn is within ulps of r₊.)
 
     domain = (
         radial=(horizons.rplus, turn),
@@ -158,6 +153,18 @@ function kerr_geo_trapped_classify(a::Real, energy::Real, lz::Real, q::Real)
 end
 
 
+# r(λ) = r(|λ|) about the turning event (λ < 0 outgoing from the past horizon, λ > 0 incoming),
+# carried as the horizon-relative state of the incoming half with dr/dλ reversed for λ < 0
+struct _TrappedRadius{H}
+    relative::H
+    lambda_horizon::Float64
+end
+(r::_TrappedRadius)(λ) = r.relative(min(abs(float(λ)), r.lambda_horizon))
+function _radial_state(r::_TrappedRadius, λ)
+    state = _radial_state(r.relative, min(abs(float(λ)), r.lambda_horizon))
+    return λ < 0 ? merge(state, (velocity=-state.velocity,)) : state
+end
+
 function _build_trapped(a, energy, lz, q, classification;
         component=:full,
         polar_phase::Real=0.0,
@@ -171,13 +178,23 @@ function _build_trapped(a, energy, lz, q, classification;
     residues = _radial_residues(a, energy, lz)
     polar = _polar_solution(
         a, energy, lz, q, classification.PolarSector, float(polar_phase))
-    lambda_horizon = radial.mino(residues.rplus)
+    # r(λ) as a gap from r₊ (`_horizon_relative_model`): the turning point can lie far less
+    # than ulp(r₊) outside the horizon when P(r₊) → 0
+    relative = _horizon_relative_model(a, energy, lz, q, radial)
+    lambda_horizon = relative.horizon_time
     lambda_horizon > 0.0 || error("Class N requires a positive half-duration.")
     # t, φ, τ (zero at the turning event) and the retarded (u, χ) / advanced (v, ψ) charts
     # (zero on the past / future horizon): radial spectral engine + polar primitive
     rplus = residues.rplus
-    radial_radius = radial.radius
-    radius_of(lambda) = abs(lambda) >= lambda_horizon ? rplus : radial_radius(abs(lambda))
+    radius_of = _TrappedRadius(relative, lambda_horizon)
+    # incoming half, λ ≥ 0: Mino time of a radius from its gap above r₊
+    function lambda_of_radius(r)
+        rplus <= r <= radial.turn || throw(DomainError(r, "The radius lies outside [r+, r_turn]."))
+        r == rplus && return lambda_horizon
+        r == radial.turn && return 0.0
+        gap = _wide_sub(_wide(float(r)), relative.horizon)
+        return _horizon_lambda_of_gap(relative, gap[1] + gap[2])
+    end
     radial_potential = _radial_potential_from_roots(a, energy, lz, q, classification.Roots)
     coords = _engine_coordinates(a, energy, lz, q, radius_of, _polar_primitive(polar);
         potential=radial_potential,
@@ -248,7 +265,7 @@ function _build_trapped(a, energy, lz, q, classification;
     position = _polar_position(polar)
     kin = _kinematics(a, energy, lz, q, λ -> radius_of(check_full(λ)),
         λ -> radius_of(check_full_bl(λ)), λ -> position(check_full(λ)), λ -> -sign(λ),
-        radial_potential)
+        radial_potential; radial_track=radius_of)
     k = kin.state
     full_velocity(λ) = (ut=_kin_ut(k, λ), ur=_kin_ur(k, λ), uz=_kin_uz(k, λ), utheta=_kin_utheta(k, λ),
         uphi=_kin_uphi(k, λ), dtau_dlambda=_kin_dtau(k, λ))
@@ -258,7 +275,9 @@ function _build_trapped(a, energy, lz, q, classification;
 
     # future-directed and co-rotating everywhere (the ergoregion clearance of the
     # classification guarantees it; checked on a grid of the assembled rates)
-    causal_margin = max(1.0e-8, 1.0e-7 * lambda_horizon)
+    # the margin keeps the grid off the two horizon events; it scales with the domain, which
+    # can be far shorter than any fixed Mino time (turning point just outside r₊)
+    causal_margin = 1.0e-7 * lambda_horizon
     causal_grid = range(-lambda_horizon + causal_margin, lambda_horizon - causal_margin;
         length=_CAUSAL_SAMPLES)
     minimum_dt = minimum(λ -> _kin_ut(k, λ), causal_grid)
@@ -310,7 +329,7 @@ function _build_trapped(a, energy, lz, q, classification;
         chi=lambda -> (check_component(lambda); past_regular(lambda).chi),
         v=lambda -> (check_component(lambda); future_regular(lambda).v),
         psi=lambda -> (check_component(lambda); future_regular(lambda).psi),
-        lambda_of_radius=radial.mino,
+        lambda_of_radius=lambda_of_radius,
         full=full_bl,
         outgoing=outgoing_view,
         incoming=incoming_view,

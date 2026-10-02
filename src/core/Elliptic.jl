@@ -208,14 +208,15 @@ function _mino_to_infinity(lead, roots, r)
 end
 
 """
-    _landen(m, m1)
+    _landen(m, m1; complementary_modulus=sqrt(m1))
 
 The descending Landen (arithmetic–geometric mean) sequence of the parameter `m`, started
 from its complement `m1` = 1 − m as the caller formed it: a₀ = 1, b₀ = √m1. Returns
-`(m, m1, a, b, K)` with K(m) = π/(2 AGM(1, √m1)).
+`(m, m1, a, b, K)` with K(m) = π/(2 AGM(1, √m1)). The caller can retain
+`complementary_modulus` before its square underflows.
 """
-function _landen(m, m1)
-    a, b = 1.0, sqrt(m1)
+function _landen(m, m1; complementary_modulus=sqrt(m1))
+    a, b = 1.0, float(complementary_modulus)
     as, bs = Float64[], Float64[]
     for _ in 1:64
         push!(as, a); push!(bs, b)

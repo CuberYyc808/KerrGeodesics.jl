@@ -48,27 +48,35 @@ Return `(roots, class)` for an E < 1 plunge: `"Real1"` (four real roots, three o
 `"Real2"` (four real roots, one outside r₊) with `roots` ascending, r4 ≤ r3 ≤ r2 ≤ r1;
 `"Complex"` (two real roots r2 < r1 and a complex pair ρ, ρ̄) with `roots = [r1, r2, A, B]`,
 A = |r1 − ρ|, B = |r2 − ρ|. Any other root structure is an error.
+The keyword `atol` is retained for call compatibility; root reality is determined by
+conjugate pairing of the refined roots.
 """
 function classify_orbit(a, E, L, Q; atol=1e-15)
-    # Compute radial roots
-    roots = radial_roots(a, E, L, Q)
+    iszero(_wide_horizon_momentum(a, E, L)) && error(
+        "classify_orbit: a plunge with zero horizon momentum requires a horizon-root formula.")
+    # the four roots refined together in double-double (`kerr_geo_root_structure`); these
+    # closed forms need four distinct roots, so no repeated-root reading is applied. A root is
+    # real when the estimate nearest its conjugate is itself, nonreal when it is another one.
+    raw = collect(kerr_geo_root_structure(a, E, L, Q).raw_roots)
     rp = _rplus(a)
-
-    real_roots = Float64[]
-    complex_roots = ComplexF64[]
-
-    for r in roots
-        if abs(imag(r)) < atol
-            push!(real_roots, real(r))
-        else
-            push!(complex_roots, r)
-        end
+    paired = [argmin(w -> abs(w - conj(z)), raw) != z for z in raw]
+    # nonreal roots of a real polynomial come in pairs: with an odd count (a cluster of three
+    # nearly equal roots), the one nearest the axis is real
+    if isodd(count(paired))
+        paired[argmin(i -> paired[i] ? abs(imag(raw[i])) : Inf, eachindex(raw))] = false
     end
+    real_roots = Float64[real(raw[i]) for i in eachindex(raw) if !paired[i]]
+    complex_roots = ComplexF64[raw[i] for i in eachindex(raw) if paired[i]]
 
     if length(real_roots) == 4
         sort!(real_roots)
 
+        # R(r₊) = P(r₊)² > 0 puts r₊ inside an allowed interval, so an odd number of roots lie
+        # outside it; an even count means the root nearest r₊ rounded across it (P(r₊) → 0)
         n_outside = count(r -> r > rp, real_roots)
+        if iseven(n_outside) && !iszero(_wide_horizon_momentum(a, E, L))
+            n_outside += argmin(r -> abs(r - rp), real_roots) > rp ? -1 : 1
+        end
 
         if n_outside == 3
             return real_roots, "Real1"

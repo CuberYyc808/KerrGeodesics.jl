@@ -71,8 +71,7 @@ double root. t, φ and τ vanish at λ = 0, where `polar_phase` is the polar pha
 """
 function kerr_geo_horizon_stable(a::Real,energy::Real,lz::Real,q::Real;
         polar_sector=nothing,polar_phase::Real=0.0)
-    metric=kerr_metric_limit(a)
-    metric in (:subextremal,:near_extremal) || throw(DomainError(
+    0<abs(a)<1 || throw(DomainError(
         a,"A subextremal horizon-root stable orbit requires 0<|a|<1."))
     0<energy<1 || throw(DomainError(
         energy,"A horizon-root stable orbit requires 0<E<1."))

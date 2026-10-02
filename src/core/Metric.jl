@@ -229,6 +229,15 @@ function _wide_add(a,b)
     return _two_sum(s,e+a[2]+b[2])
 end
 _wide_neg(a)=(-a[1],-a[2])
+function _wide_sqrt(x)
+    root = sqrt(x[1])
+    return _two_sum(root, (fma(-root, root, x[1]) + x[2]) / (2root))
+end
+function _wide_div(a,b)
+    quotient = a[1] / b[1]
+    rest = _wide_sub(a, _wide_mul(_wide(quotient), b))
+    return _two_sum(quotient, (rest[1] + rest[2]) / b[1])
+end
 _wide_sub(a,b)=_wide_add(a,_wide_neg(b))
 function _wide_mul(a,b)
     p,e=_two_product(a[1],b[1])
@@ -242,17 +251,105 @@ function _wide_evalpoly(x,c)
     return v[1]+v[2]
 end
 
-function _radial_root_evaluator(a,E,L,Q)
+# The coefficients of R in double-double, from the exact inputs.
+function _wide_radial_coefficients(a,E,L,Q)
     aa,ee,ll,qq=_wide.(float.((a,E,L,Q)))
     a2=_wide_mul(aa,aa)
     lead=_wide_mul(_wide_sub(ee,_wide(1.0)),_wide_add(ee,_wide(1.0)))
     u=_wide_sub(ll,_wide_mul(aa,ee))
-    c=(_wide_neg(_wide_mul(a2,qq)),
+    return (_wide_neg(_wide_mul(a2,qq)),
        _wide_mul(_wide(2.0),_wide_add(_wide_mul(u,u),qq)),
        _wide_sub(_wide_mul(a2,lead),_wide_add(_wide_mul(ll,ll),qq)),
        _wide(2.0),lead)
-    dc=ntuple(i->_wide_mul(_wide(float(i)),c[i+1]),4)
+end
+
+# coefficients of R^(k): j!/(j − k)! c_j
+_wide_derivative_coefficients(c,k) =
+    ntuple(i->_wide_mul(_wide(float(factorial(i+k-1)÷factorial(i-1))),c[i+k]),length(c)-k)
+
+function _radial_root_evaluator(a,E,L,Q)
+    c=_wide_radial_coefficients(a,E,L,Q)
+    dc=_wide_derivative_coefficients(c,1)
     return r->(_wide_evalpoly(r,c),_wide_evalpoly(r,dc))
+end
+
+# r₊ = 1 + √(1 − a²) as a double-double pair, and P(r₊) = 2E r₊ − aLz (r₊² + a² = 2r₊)
+# from it: P(r₊) cancels when the horizon is nearly a root, and the rounding of r₊ alone would
+# leave ~eps·E of it.
+function _wide_rplus(a)
+    x = _wide_mul(_two_sum(1.0, -float(a)), _two_sum(1.0, float(a)))      # 1 − a², exactly paired
+    root = sqrt(x[1])
+    root_low = iszero(root) ? 0.0 : (fma(-root, root, x[1]) + x[2]) / (2root)   # |a| = 1: r₊ = 1
+    return _wide_add(_wide(1.0), _two_sum(root, root_low)), 2 * (root + root_low)
+end
+
+function _wide_horizon_momentum(a, E, L)
+    rplus, _ = _wide_rplus(a)
+    p = _wide_sub(_wide_mul(_wide(2.0 * E), rplus), _wide_mul(_wide(float(a)), _wide(float(L))))
+    return p[1] + p[2]
+end
+
+"""
+    _horizon_gap(a, E, Lz, Q, r)
+
+r − r₊ for a simple root r of R, to relative rounding even when the gap is far below ulp(r₊)
+(a turning point next to a nearly-root horizon, P(r₊) → 0). Newton, from the rounded root on
+either side of r₊, on R about the horizon in double-double,
+    R(r₊ + δ) = P₊² + (4E r₊P₊ − dK₊) δ + (2EP₊ + 4E²r₊² − K₊ − 2d r₊) δ² + (4E²r₊ − 2r₊ − d) δ³
+                + (E² − 1) δ⁴,   d = r₊ − r₋,
+which uses Δ(r₊) = 0 and r₊² + a² = 2r₊ exactly; the coefficients are formed from the exact
+inputs, so a root far from r₊ is as accurate as the double-double root refinement.
+"""
+function _horizon_gap(a, E, L, Q, r)
+    h, _ = _wide_rplus(a)
+    d = _wide_mul(_wide(2.0), _wide_sub(h, _wide(1.0)))          # r₊ − r₋ = 2(r₊ − 1)
+    ee = _wide(float(E))
+    p = _wide_sub(_wide_mul(_wide(2.0), _wide_mul(ee, h)), _wide_mul(_wide(float(a)), _wide(float(L))))
+    u = _wide_sub(_wide(float(L)), _wide_mul(_wide(float(a)), ee))
+    k = _wide_add(_wide_add(_wide_mul(h, h), _wide_mul(u, u)), _wide(float(Q)))
+    times(n, x) = _wide_mul(_wide(float(n)), x)
+    eh = _wide_mul(ee, h); e2 = _wide_mul(ee, ee)
+    c = (_wide_mul(p, p),
+         _wide_sub(times(4, _wide_mul(eh, p)), _wide_mul(d, k)),
+         _wide_sub(_wide_add(times(4, _wide_mul(eh, eh)), times(2, _wide_mul(ee, p))),
+                   _wide_add(k, times(2, _wide_mul(d, h)))),
+         _wide_sub(times(4, _wide_mul(eh, ee)), _wide_add(times(2, h), d)),
+         _wide_mul(_wide_sub(ee, _wide(1.0)), _wide_add(ee, _wide(1.0))))
+    dc = (c[2], times(2, c[3]), times(3, c[4]), times(4, c[5]))
+    delta = r - (h[1] + h[2])
+    for _ in 1:64
+        step = _wide_evalpoly(delta, c) / _wide_evalpoly(delta, dc)
+        delta -= step
+        abs(step) <= 4eps(delta) && break
+    end
+    return delta
+end
+
+# All roots of R refined together (Aberth–Ehrlich) with the double-double residual of
+# `evaluator`. The correction N/(1 − N Σ_{j≠i} 1/(z_i − z_j)), N = R/R′, keeps the estimates
+# apart, so roots that cluster (near r = 0 for small spin and small Q + (Lz − aE)², near r = 1
+# close to extremality) converge to the roots of the exact-coefficient polynomial; Newton on
+# one root at a time slides into the cluster instead. Started from the companion roots of
+# R(1 + x); a double root is approached by two estimates, which the repeated-root
+# classification then takes together.
+function _refine_roots(evaluator, z::Vector{ComplexF64})
+    n = length(z)
+    # Nearly equal roots can need more than 64 sweeps to separate.
+    for _ in 1:1000
+        largest = 0.0
+        for i in 1:n
+            value, slope = evaluator(z[i])
+            iszero(value) && continue
+            newton = value / slope
+            pull = sum((inv(z[i] - z[j]) for j in 1:n if j != i); init=zero(ComplexF64))
+            step = newton / (1 - newton * pull)
+            isfinite(step) || continue
+            z[i] -= step
+            largest = max(largest, abs(step) / max(abs(z[i]), floatmin()))
+        end
+        largest <= 4eps(Float64) && break
+    end
+    return z
 end
 
 function _derivative_scales(coefficients, r)
@@ -325,25 +422,35 @@ function kerr_polar_z_potential(a::Real, energy::Real, lz::Real, q::Real, z::Rea
 end
 
 """
-    kerr_polar_admissibility(a, E, Lz, Q; rtol=1e-10)
+    kerr_polar_admissibility(a, E, Lz, Q; rtol=4eps())
 
-Maximize (dz/dλ)² = Q + (β − Q − Lz²)u − βu², u = cos²θ, β = a²(E² − 1), over u ∈ [0, 1] in
-closed form (regular at E = 1 and a = 0). The constants admit polar motion (`admissible`)
-when the value at one of the examined points is at least −`rtol` times the size of its
-terms, |Q| + |β − Q − Lz²|u + |β|u² (so a small Q keeps its sign; at u = 0 the value is Q
-itself). The axis u = 1 is examined when Lz = 0 and the motion reaches it. The result also
-carries `max_value`, `max_cosine_squared`, the `tolerance` of that maximum and the examined
+Maximize (dz/dλ)² = Θ(u) = Q(1 − u) − Lz²u + βu(1 − u), u = cos²θ, β = a²(E² − 1), over
+u ∈ [0, 1] in closed form (regular at E = 1 and a = 0). The constants admit polar motion
+(`admissible`) when Θ at one of the examined points is non-negative to within what the
+constants themselves resolve: Σ_θ |∂Θ/∂θ| ulp(θ) over θ = (a, E, Lz, Q), plus `rtol` times
+the size of the terms for the rounding of Θ. A negative Q, or a turning point short of the
+axis, is therefore not admitted because its scale is small next to other terms. The axis
+u = 1 (Θ = −Lz²) is examined when Lz = 0 and the motion reaches it. The result also carries
+`max_value`, `max_cosine_squared`, the `tolerance` of that maximum and the examined
 `candidates`.
 """
 function kerr_polar_admissibility(a::Real, energy::Real, lz::Real, q::Real;
-        rtol::Real=1.0e-10)
+        rtol::Real=4eps(Float64))
     beta = a^2 * _e2m1(energy)
     slope = beta - q - lz^2
-    candidate(u) = (u=float(u), value=q + slope * u - beta * u^2,
-        tolerance=rtol * (abs(q) + abs(slope) * u + abs(beta) * u^2))
+    ulp(x) = iszero(x) ? 0.0 : eps(abs(float(x)))
+    function candidate(u)
+        w = u * (1 - u)
+        value = q * (1 - u) - lz^2 * u + beta * w
+        reach = abs(1 - u) * ulp(q) + 2abs(lz) * u * ulp(lz) +
+            2abs(a) * abs(_e2m1(energy)) * w * ulp(a) + 2a^2 * abs(energy) * w * ulp(energy)
+        terms = abs(q) * (1 - u) + lz^2 * u + abs(beta) * w
+        return (u=float(u), value=value, tolerance=reach + rtol * terms)
+    end
     candidates = [candidate(0.0)]
     # the axis u = 1 (value −Lz²) counts when Lz = 0 and motion reaches it: Q + β ≥ 0
-    if !_zero_lz(a, energy, lz, q) || q + beta >= -rtol * (abs(q) + abs(beta))
+    if !_zero_lz(a, energy, lz, q) || q + beta >= -(ulp(q) + 2abs(a * _e2m1(energy)) * ulp(a) +
+            2a^2 * abs(energy) * ulp(energy) + rtol * (abs(q) + abs(beta)))
         push!(candidates, candidate(1.0))
     end
     if !iszero(beta)
@@ -351,12 +458,23 @@ function kerr_polar_admissibility(a::Real, energy::Real, lz::Real, q::Real;
         0 < stationary < 1 && push!(candidates, candidate(stationary))
     end
     best = candidates[argmax(getfield.(candidates, :value))]
+    geometry = q < 0 && beta > 0 ? _polar_vortical_geometry(a, energy, lz, q) : nothing
+    admissible = if geometry === nothing
+        any(c -> c.value >= -c.tolerance, candidates)
+    else
+        # The reachable axis is an exact zero for Lz=0 even when the repeated
+        # root's rounded center lies one ulp above u=1.
+        (iszero(lz) && any(c -> c.u == 1.0 && iszero(c.value), candidates)) ||
+            (0 < geometry.root_sum / 2 <= 1 &&
+                (geometry.repeated || geometry.discriminant > 0))
+    end
     return (
-        admissible=any(c -> c.value >= -c.tolerance, candidates),
+        admissible=admissible,
         max_value=best.value,
         max_cosine_squared=best.u,
         tolerance=best.tolerance,
         candidates=Tuple(candidates),
+        reading=geometry === nothing ? :exact : geometry.reading,
     )
 end
 
@@ -389,7 +507,8 @@ function kerr_polar_sector_candidates(a::Real, energy::Real, lz::Real, q::Real)
     elseif q > 0
         push!(sectors, :pendular)
     elseif beta > 0
-        geometry = _polar_vortical_geometry(beta, lz, q)
+        geometry = _polar_vortical_geometry(a, energy, lz, q)
+        geometry.repeated || geometry.discriminant >= 0 || return (:unclassified_polar,)
         push!(sectors, geometry.repeated ? :constant_latitude : :vortical)
     end
 
@@ -437,14 +556,39 @@ cancellation-free form (the textbook formula loses every digit of the small root
 c = 0), so moduli and frequencies can be formed without dividing by c.
 """
 function _polar_quadratic_roots(a, energy, lz, q)
-    return _polar_quadratic_roots(-a^2 * _e2m1(energy), lz, q)
+    aa, ee, ll, qq = _wide.(float.((a, energy, lz, q)))
+    beta = _wide_mul(_wide_mul(aa, aa), _wide_mul(_wide_sub(ee, _wide(1.0)), _wide_add(ee, _wide(1.0))))
+    c = _wide_neg(beta)
+    # s = Q + Lz² − β cancels when Lz² ≈ a²(E² − 1). The quadratic is solved in double-double
+    # from the exact inputs and only the results are rounded, so identities of the exact
+    # coefficients (Θ(1) = −Lz²) survive in the rounded roots.
+    s = _wide_add(_wide_sub(_wide_mul(ll, ll), beta), qq)
+    c1, s1, q1 = c[1] + c[2], s[1] + s[2], float(q)
+    if c1 < 0 < q1 || q1 < 0 < c1
+        # disc = s² + 4|c q| has no cancellation; hypot keeps √disc when c q is subnormal
+        sq = _wide(hypot(s1, 2 * sqrt(abs(c1)) * sqrt(abs(q1))))
+        disc = s1^2 - 4 * c1 * q1
+    else
+        d = _wide_sub(_wide_mul(s, s), _wide_mul(_wide(4.0), _wide_mul(c, qq)))
+        disc = d[1] + d[2]
+        sq = disc > 0 ? _wide_sqrt(d) : _wide(0.0)
+    end
+    big = _wide_mul(_wide(0.5), _wide_add(s, signbit(s1) ? _wide_neg(sq) : sq))   # |big| ≥ |s|/2
+    big1 = big[1] + big[2]
+    u_small = iszero(big1) ? 0.0 : q1 / big1
+    u_big = iszero(c1) ? copysign(Inf, big1) : (u = _wide_div(big, c); u[1] + u[2])
+    return (c=c1, disc=disc, u_small=u_small, u_big=u_big, cu_small=c1 * u_small, cu_big=big1)
 end
 
 # Coefficient form also serves interfaces that supply c directly.
-function _polar_quadratic_roots(c, lz, q)
-    s = q + lz^2 + c
+_polar_quadratic_roots(c, lz, q) = _polar_quadratic_roots_from_sum(c, q + lz^2 + c, q)
+
+function _polar_quadratic_roots_from_sum(c, s, q)
     disc = s^2 - 4 * c * q
-    sq = sqrt(max(disc, 0.0))
+    # c and q of opposite signs: disc = s² + 4|c q| has no cancellation, and hypot keeps its
+    # square root when s² or c q falls below the normal range (q down to the subnormals)
+    sq = c < 0 < q || q < 0 < c ? hypot(s, 2 * sqrt(abs(c)) * sqrt(abs(q))) :
+        sqrt(max(disc, 0.0))
     big = (s + copysign(sq, s)) / 2               # |big| >= |s|/2, no cancellation
     u_small = iszero(big) ? 0.0 : q / big
     u_big = iszero(c) ? copysign(Inf, big) : big / c
@@ -452,15 +596,39 @@ function _polar_quadratic_roots(c, lz, q)
         cu_small=c * u_small, cu_big=big)
 end
 
-# Repeated-root test in the normalized vortical polynomial, relative to the two terms of
-# its discriminant (a vortical band close to the equator is not a repeated root).
+# The A reading uses the one-ulp input reach of D=(beta-Q-Lz^2)^2+4beta*Q,
+# not a relative tolerance on its cancelling terms.
+function _polar_vortical_geometry(a, energy, lz, q)
+    roots = _polar_quadratic_roots(a, energy, lz, q)
+    beta = -roots.c
+    b = beta - q - lz^2
+    ulp(x) = iszero(x) ? 0.0 : eps(abs(float(x)))
+    dbeta = 2abs(a * _e2m1(energy)) * ulp(a) + 2a^2 * abs(energy) * ulp(energy)
+    reach = abs(2b + 4q) * dbeta + abs(4beta - 2b) * ulp(q) +
+        abs(4lz * b) * ulp(lz)
+    exact = try
+        isempty(_InputArithmetic.polar_discriminant(a, energy, lz, q))
+    catch err
+        err isa _InputArithmetic.Uncertified || rethrow()
+        false
+    end
+    repeated = exact || abs(roots.disc) <= reach
+    return (root_sum=b / beta, discriminant=roots.disc / beta^2,
+        repeated=repeated, tolerance=reach / beta^2,
+        reading=exact ? :exact : repeated ? :within_input_ulp : :exact)
+end
+
 function _polar_vortical_geometry(beta, lz, q; rtol=CONSTANT_LATITUDE_RTOL)
-    root_sum = (beta - q - lz^2) / beta
-    root_product = -q / beta
-    discriminant = root_sum^2 - 4 * root_product
-    tolerance = rtol * max(root_sum^2, 4 * abs(root_product))
-    return (root_sum=root_sum, discriminant=discriminant,
-        repeated=abs(discriminant) <= tolerance)
+    bb, ll, qq = _wide.(float.((beta, lz, q)))
+    b = _wide_sub(_wide_sub(bb, qq), _wide_mul(ll, ll))
+    d = _wide_add(_wide_mul(b, b), _wide_mul(_wide(4.0), _wide_mul(bb, qq)))
+    slope, disc = b[1] + b[2], d[1] + d[2]
+    ulp(x) = iszero(x) ? 0.0 : eps(abs(float(x)))
+    reach = abs(2slope + 4q) * ulp(beta) + abs(4beta - 2slope) * ulp(q) +
+        abs(4lz * slope) * ulp(lz)
+    return (root_sum=slope / beta, discriminant=disc / beta^2,
+        repeated=abs(disc) <= reach, tolerance=reach / beta^2,
+        reading=iszero(disc) ? :uncertified_zero : abs(disc) <= reach ? :within_input_ulp : :exact)
 end
 
 # ---- tortoise coordinate ------------------------------------------------------------

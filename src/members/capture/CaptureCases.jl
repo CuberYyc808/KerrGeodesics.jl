@@ -109,15 +109,21 @@ end
 function _direct_component(a, energy, lz, q, component, model, polar, reference_radius;
         roots=model.roots, status=(;))
     rplus = kerr_horizons(a).rplus
-    λ_inf = -model.mino(rplus)
+    relative=model.kind === :c3_hyperbolic_two_real_complex ?
+        _c3_horizon_track(a,energy,lz,q,model.params) : nothing
+    λ_inf = relative === nothing ? -model.mino(rplus) : relative.lambda_infinity
     λ_inf < 0 || error("The infinity endpoint must precede the future horizon.")
     check, check_bl = _infinity_to_horizon_checks(λ_inf)
     # r from the Mino time after the infinity endpoint, where the models keep their digits
     radius, mino = model.radius, model.mino
-    r_of(λ) = λ == 0 ? rplus : radius(λ - λ_inf)
+    r_of = relative === nothing ?
+        (λ -> hasproperty(model,:horizon_radius) ? model.horizon_radius(λ) :
+            λ == 0 ? rplus : radius(λ-λ_inf)) : relative
     function lambda_of_radius(r)
         r >= rplus || throw(DomainError(r, "The radius must lie outside the future horizon."))
-        return λ_inf + mino(r)
+        r==rplus && return 0.0
+        return relative===nothing ? λ_inf+mino(r) :
+            _c3_horizon_lambda(model.params,relative.horizon,r)
     end
     λ_ref = reference_radius === nothing ? 0.5 * λ_inf : lambda_of_radius(float(reference_radius))
     λ_inf < λ_ref < 0 || error("The reference radius must be a finite exterior point.")
@@ -127,6 +133,7 @@ function _direct_component(a, energy, lz, q, component, model, polar, reference_
         λ_regular=0.0, σ_regular=-1.0)
     engine = _radius_increments(coords, lambda_of_radius, -1.0)
     track = (r=λ -> r_of(check(λ)), check=check, check_bl=check_bl, coords=coords,
+        radial_track=r_of,
         sign_r=λ -> -1.0,
         domain=(mino=(λ_inf, 0.0), endpoint_closed=(false, true),
             endpoint_roles=(:past_infinity, :future_horizon), horizon_lambda=0.0),

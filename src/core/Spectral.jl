@@ -217,6 +217,32 @@ function _cheb_increment(p::ChebPieces, left, right, k)
     return value
 end
 
+function _cheb_increment_delta(p::ChebPieces, left, delta, k)
+    iszero(delta) && return 0.0
+    right = left + delta
+    lo, hi = minmax(left, right)
+    first = _piece_index(p, lo); last = _piece_index(p, hi)
+    value = 0.0
+    for i in first:last
+        a = p.breaks[i]; b = p.breaks[i + 1]
+        if first == last
+            x = (2left - a - b) / (b - a)
+            dx = 2delta / (b - a)
+            value += dx * _clenshaw_divided(p.coefs[k][i], x + dx, x)
+        else
+            xl = i == first ? lo : a; xr = i == last ? hi : b
+            width = if delta > 0
+                i == first ? b - left : i == last ? delta - (a - left) : b - a
+            else
+                i == first ? delta + (left - b) : i == last ? a - left : a - b
+            end
+            x = (2xr - a - b) / (b - a); y = (2xl - a - b) / (b - a)
+            value += 2width / (b - a) * _clenshaw_divided(p.coefs[k][i], x, y)
+        end
+    end
+    return value
+end
+
 # ∫ Σ c_k T_k dx on [-1, 1] as a series vanishing at x = -1
 function _cheb_integral(c::Vector{Float64}, halfwidth)
     n = length(c)

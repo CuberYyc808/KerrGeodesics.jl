@@ -72,6 +72,43 @@ _rc(a, E, L, Q, potential) = _RadialConstants(a, E, L, Q, kerr_horizons(a).rplus
 
 @inline _rc_sqrtR(c::_RadialConstants, r) = sqrt(max(c.potential(r), 0.0))
 
+# Keep the small P near a horizon without rounding E(1+a^2)-aL first.
+@noinline function _rc_momentum(a, energy, lz, r)
+    a,E,L,x = _wide.(float.((a,energy,lz,r)))
+    square = _wide_add(_wide_mul(x,x),_wide_mul(a,a))
+    p = _wide_sub(_wide_mul(E,square),_wide_mul(a,L))
+    return p[1]+p[2]
+end
+@inline _rc_momentum(c::_RadialConstants,r) = _rc_momentum(c.a,c.E,c.L,r)
+
+@noinline function _rc_azimuth_numerator(a, energy, lz, r)
+    a,E,L,x = _wide.(float.((a,energy,lz,r)))
+    n = _wide_sub(_wide_mul(_wide(2.0),_wide_mul(E,x)),_wide_mul(a,L))
+    return n[1]+n[2]
+end
+@inline _rc_azimuth_numerator(c::_RadialConstants,r) =
+    _rc_azimuth_numerator(c.a,c.E,c.L,r)
+
+_radial_state(r_of,lambda) = nothing
+function _engine_rates(kind,c,r_of,lambda,hs)
+    state = _radial_state(r_of,lambda)
+    state === nothing || return _relative_rates(c,state,kind,hs)
+    radius = r_of(lambda)
+    return kind === :horizon ? _horizon_rates(c,radius,hs) : _plain_rates(c,radius)
+end
+function _engine_rstar(c,r_of,lambda,radius)
+    state = _radial_state(r_of,lambda)
+    return state === nothing ? _rstar_all(c.a,radius) : _relative_rstar(state)
+end
+function _engine_azimuth(c,r_of,lambda,radius)
+    state = _radial_state(r_of,lambda)
+    return state === nothing ? _horizon_azimuth(c.a,radius) : _relative_azimuth(c.a,state)
+end
+function _engine_rounding(kind,c,r_of,lambda,hs)
+    _radial_state(r_of,lambda) === nothing || return (0.0,0.0,0.0)
+    return _rate_rounding(kind,c,r_of(lambda),hs)
+end
+
 # the coefficient form of R by Horner's rule (the APEX and finite-window interfaces)
 function _coefficient_potential(a, E, L, Q)
     coefficients = collect(Float64, kerr_radial_coefficients(a, E, L, Q))
@@ -81,13 +118,13 @@ end
 @inline function _plain_rates(c::_RadialConstants, r)
     a, E, L = c.a, c.E, c.L
     Δ = kerr_delta(a, r)
-    P = kerr_radial_momentum(a, E, L, r)
-    return ((r^2 + a^2) * P / Δ, a * (2E * r - a * L) / Δ, r^2)
+    P = _rc_momentum(c,r)
+    return ((r^2 + a^2) * P / Δ, a * _rc_azimuth_numerator(c,r) / Δ, r^2)
 end
 
 @inline function _horizon_rates(c::_RadialConstants, r, hs)
     a, E, L, Q = c.a, c.E, c.L, c.Q
-    P = kerr_radial_momentum(a, E, L, r)
+    P = _rc_momentum(c,r)
     K = r^2 + (L - a * E)^2 + Q
     D = P + hs * _rc_sqrtR(c, r)
     return ((r^2 + a^2) * K / D, a * K / D - a * E, r^2)
@@ -99,7 +136,7 @@ end
 # is negligible elsewhere. The r-derivatives in closed form, R' from the coefficients.
 function _rate_rounding(kind, c::_RadialConstants, r, hs)
     a, E, L, Q = c.a, c.E, c.L, c.Q
-    P = kerr_radial_momentum(a, E, L, r)
+    P = _rc_momentum(c,r)
     if kind === :horizon
         K = r^2 + (L - a * E)^2 + Q
         rootR = _rc_sqrtR(c, r)
@@ -112,7 +149,7 @@ function _rate_rounding(kind, c::_RadialConstants, r, hs)
     end
     Δ = kerr_delta(a, r); Δprime = 2 * (r - 1)
     dt = (2r * P + (r^2 + a^2) * 2E * r) / Δ - (r^2 + a^2) * P * Δprime / Δ^2
-    dphi = 2E * a / Δ - a * (2E * r - a * L) * Δprime / Δ^2
+    dphi = 2E * a / Δ - a * _rc_azimuth_numerator(c,r) * Δprime / Δ^2
     return eps(Float64) * abs(r) .* (abs(dt), abs(dphi), 2abs(r))
 end
 
@@ -208,15 +245,15 @@ end
 
 _needs_r(s::_RadialSegment) = s.kind !== :plain
 
-function _segment_value(s::_RadialSegment, c::_RadialConstants, λ, r)
+function _segment_value(s::_RadialSegment, c::_RadialConstants, λ, r, r_of=nothing)
     kind = s.kind
     if kind === :plain
         return s.base .+ (_eval3(s.prim, float(λ)) .- s.prim_anchor)
     elseif kind === :horizon
         F = _eval3(s.prim, float(λ)) .- s.prim_anchor
         w = s.σ * s.hs
-        return (s.base[1] + F[1] + w * (_rstar_all(c.a, r) - s.rstar_anchor),
-                s.base[2] + F[2] + w * (_horizon_azimuth(c.a, r) - s.azimuth_anchor),
+        return (s.base[1] + F[1] + w * (_engine_rstar(c,r_of,λ,r) - s.rstar_anchor),
+                s.base[2] + F[2] + w * (_engine_azimuth(c,r_of,λ,r) - s.azimuth_anchor),
                 s.base[3] + F[3])
     elseif kind === :asymptote
         return s.base .+ (_eval3(s.prim, _asymptote_x(s, r)) .- s.prim_anchor) .+
@@ -250,14 +287,16 @@ function _build_segment(kind, c::_RadialConstants, r_of, lo, hi, σ; rd=NaN, mul
     floors = (0.0, abs(a) * (1 + abs(E)), 0.0)
     rates_d = (0.0, 0.0, 0.0); tail = _NO_TAIL; hs = 1.0
     if kind === :plain
-        f = λ -> _plain_rates(c, r_of(λ))
+        f = λ -> _engine_rates(:plain,c,r_of,λ,hs)
         prim = chebintegrate(chebfit(f, lo, hi; ncomp=3, tol=_RADIAL_ENGINE_TOL, absfloor=floors,
-            abserr=λ -> _rate_rounding(:plain, c, r_of(λ), hs)))
+            abserr=λ -> _engine_rounding(:plain,c,r_of,λ,hs)))
     elseif kind === :horizon
-        hs = kerr_radial_momentum(a, E, c.L, rh) >= 0 ? 1.0 : -1.0
-        f = λ -> _horizon_rates(c, r_of(λ), hs)
+        hs = _rc_momentum(c,rh) >= 0 ? 1.0 : -1.0
+        state = _radial_state(r_of,(lo+hi)/2)
+        state === nothing || (hs = sign(state.chart.momentum))
+        f = λ -> _engine_rates(:horizon,c,r_of,λ,hs)
         prim = chebintegrate(chebfit(f, lo, hi; ncomp=3, tol=_RADIAL_ENGINE_TOL, absfloor=floors,
-            abserr=λ -> _rate_rounding(:horizon, c, r_of(λ), hs)))
+            abserr=λ -> _engine_rounding(:horizon,c,r_of,λ,hs)))
     elseif kind === :infinity
         # variable q = √(r_s/r) from the finite end (q = 1) to infinity (q = 0)
         tail = _InfinityTail(c, r_of(σ > 0 ? lo : hi), σ)
@@ -310,14 +349,14 @@ function _anchor!(s::_RadialSegment, c, r_of, λ, base)
         _eval3(s.prim, s.kind === :asymptote ? _asymptote_x(s, r) : λ)
     s.base = base
     if s.kind === :horizon
-        s.rstar_anchor = _rstar_all(c.a, r)
-        s.azimuth_anchor = _horizon_azimuth(c.a, r)
+        s.rstar_anchor = _engine_rstar(c,r_of,λ,r)
+        s.azimuth_anchor = _engine_azimuth(c,r_of,λ,r)
     end
     return s
 end
 
 # λ on a monotone leg where r(λ) = target: bisection between an inner point and the far
-# end (a finite endpoint is never evaluated; an infinite one is bracketed by doubling).
+# end (an open endpoint is not evaluated; an infinite one is bracketed by doubling).
 function _leg_lambda(r_of, λin, λout, target)
     rin = r_of(λin)
     dir = sign(λout - λin)
@@ -393,6 +432,7 @@ struct _ErasedFunction
     f::Any
 end
 (e::_ErasedFunction)(x) = convert(Float64, e.f(x))::Float64
+_radial_state(e::_ErasedFunction,lambda) = _radial_state(e.f,lambda)
 
 function _radial_engine_tables(a, E, L, Q, r_of::_ErasedFunction, potential::_ErasedFunction,
         domain, ends, turn, σ, rd, multiplicity, λ_ref, period)
@@ -428,11 +468,11 @@ function _radial_engine_tables(a, E, L, Q, r_of::_ErasedFunction, potential::_Er
     _anchor!(segs[i0], c, r_of, λ_ref, (0.0, 0.0, 0.0))
     for j in i0+1:length(segs)
         b = segs[j].lo
-        _anchor!(segs[j], c, r_of, b, _segment_value(segs[j-1], c, b, r_of(b)))
+        _anchor!(segs[j], c, r_of, b, _segment_value(segs[j-1], c, b, r_of(b),r_of))
     end
     for j in i0-1:-1:1
         b = segs[j].hi
-        _anchor!(segs[j], c, r_of, b, _segment_value(segs[j+1], c, b, r_of(b)))
+        _anchor!(segs[j], c, r_of, b, _segment_value(segs[j+1], c, b, r_of(b),r_of))
     end
     return RadialEngine(c, r_of, segs, false, 0.0, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
 end
@@ -445,9 +485,8 @@ function _leg_segments(c, r_of, lo, hi, klo, khi, σ, rd, multiplicity, λ_ref)
     # finite inner reference radius of the leg
     rin_lo = open_end(klo) ? NaN : _end_radius(c, r_of, lo, klo)
     rin_hi = open_end(khi) ? NaN : _end_radius(c, r_of, hi, khi)
-    # an interior point of the leg where r is finite and regular
-    nudge = 1e-9 * (isfinite(hi - lo) ? max(1.0, abs(hi - lo)) : 1.0)
-    inner = !open_end(klo) ? lo + nudge : !open_end(khi) ? hi - nudge : float(λ_ref)
+    # A closed endpoint is a valid finite bracket, even on a very short Mino interval.
+    inner = !open_end(klo) ? lo : !open_end(khi) ? hi : float(λ_ref)
     rref = isfinite(rin_lo) ? rin_lo : isfinite(rin_hi) ? rin_hi : r_of(inner)
     function split_for(k, λend)
         if k === :infinity
@@ -487,11 +526,18 @@ function _leg_segments(c, r_of, lo, hi, klo, khi, σ, rd, multiplicity, λ_ref)
             lambda_t=hor_lo ? s_hi : s_lo
             rt=r_of(lambda_t)
             rh=c.rplus
-            count=max(2,ceil(Int,log2(rt/rh)))
+            state = _radial_state(r_of,lambda_t)
+            logspan = state === nothing ? log(rt/rh) : log1p(state.gap/rh)
+            count=max(2,ceil(Int,logspan/log(2.0)))
             cuts=Float64[lambda_h]
             for j in 1:count-1
-                target=rh*exp(log(rt/rh)*j/count)
-                push!(cuts,_leg_lambda(r_of,lambda_h,lambda_t,target))
+                if state === nothing
+                    target=rh*exp(logspan*j/count)
+                    push!(cuts,_leg_lambda(r_of,lambda_h,lambda_t,target))
+                else
+                    target=rh*expm1(logspan*j/count)
+                    push!(cuts,_leg_gap_lambda(r_of,lambda_h,lambda_t,target))
+                end
             end
             push!(cuts,lambda_t)
             for j in 1:count
@@ -507,6 +553,21 @@ function _leg_segments(c, r_of, lo, hi, klo, khi, σ, rd, multiplicity, λ_ref)
     open_end(khi) && push!(segs, _build_segment(khi, c, r_of, s_hi, hi, σ; rd=rd,
         multiplicity=multiplicity))
     return segs
+end
+
+function _leg_gap_lambda(r_of,left,right,target)
+    lo,hi=minmax(left,right)
+    initial=_radial_state(r_of,lo).gap-target
+    for _ in 1:200
+        mid=(lo+hi)/2
+        (mid==lo || mid==hi) && break
+        if (_radial_state(r_of,mid).gap-target)*initial>0
+            lo=mid
+        else
+            hi=mid
+        end
+    end
+    return (lo+hi)/2
 end
 
 # horizons strictly between two radii, in the order met going from `ra` to `rb` (r₋ only for
@@ -541,40 +602,107 @@ function _radial_eval_raw(e::RadialEngine, λ)
         end
         μ = λ - n * e.period
         s = _find_segment(e, μ)
-        return _segment_value(s, e.c, μ, _needs_r(s) ? e.r_of(μ) : NaN) .+ n .* e.totals
+        return _segment_value(s, e.c, μ, _needs_r(s) ? e.r_of(μ) : NaN,e.r_of) .+ n .* e.totals
     end
     s = _find_segment(e, λ)
-    return _segment_value(s, e.c, λ, _needs_r(s) ? e.r_of(λ) : NaN)
+    return _segment_value(s, e.c, λ, _needs_r(s) ? e.r_of(λ) : NaN,e.r_of)
 end
 function _radial_eval_raw(e::RadialEngine, λ, r)
     if e.periodic
         length(e.segments) == 1 && return _radial_eval_raw(e, λ)
         n = floor((λ - e.segments[1].lo) / e.period)
         μ = λ - n * e.period
-        return _segment_value(_find_segment(e, μ), e.c, μ, r) .+ n .* e.totals
+        return _segment_value(_find_segment(e, μ), e.c, μ, r,e.r_of) .+ n .* e.totals
     end
-    return _segment_value(_find_segment(e, λ), e.c, λ, r)
+    return _segment_value(_find_segment(e, λ), e.c, λ, r,e.r_of)
 end
 
 """(t_r, φ_r, τ_r) at λ (zero at the engine's reference λ); pass r if already known."""
 _radial_eval(e::RadialEngine, λ) = _radial_eval_raw(e, λ) .- e.shift
 _radial_eval(e::RadialEngine, λ, r) = _radial_eval_raw(e, λ, r) .- e.shift
 
-function _radial_proper_interval(e::RadialEngine, left, right)
-    left==right && return 0.0
-    right<left && return -_radial_proper_interval(e,right,left)
+function _increment_radii(e,lo,hi,left,right,radii)
+    rlo=radii!==nothing && lo==left ? radii[1] : e.r_of(lo)
+    rhi=radii!==nothing && hi==right ? radii[2] : e.r_of(hi)
+    return rlo,rhi
+end
+function _empty_increment_segment(s,lo,hi,left,right,radii)
+    hi<lo && return true
+    hi>lo && return false
+    return !(s.kind===:infinity && radii!==nothing && left==right &&
+        radii[1]!=radii[2] && s.lo<=left<=s.hi)
+end
+
+function _radial_regular_interval(e::RadialEngine, left, right, σr,radii=nothing)
+    left==right && (radii===nothing || radii[1]==radii[2]) && return (0.0,0.0)
+    right<left && return .-_radial_regular_interval(e,right,left,σr,
+        radii===nothing ? nothing : reverse(radii))
+    value = (0.0, 0.0)
+    for s in e.segments
+        lo = max(left, s.lo); hi = min(right, s.hi)
+        _empty_increment_segment(s,lo,hi,left,right,radii) && continue
+        coefficient = -σr
+        if s.kind === :plain || s.kind === :horizon
+            part = ntuple(k -> _cheb_increment(s.prim, lo, hi, k), 2)
+            s.kind === :horizon && (coefficient += s.σ * s.hs)
+        elseif s.kind === :asymptote
+            rlo,rhi=_increment_radii(e,lo,hi,left,right,radii)
+            xlo = _asymptote_x(s, rlo); xhi = _asymptote_x(s, rhi)
+            part = ntuple(k -> _cheb_increment(s.prim, xlo, xhi, k) +
+                s.rates_d[k] * (hi - lo), 2)
+        else
+            rlo,rhi=_increment_radii(e,lo,hi,left,right,radii)
+            qlo = min(_tail_q(s.tail, rlo), 1.0)
+            qhi = min(_tail_q(s.tail, rhi), 1.0)
+            p_lo = _tail_principal(s.tail, qlo); p_hi = _tail_principal(s.tail, qhi)
+            part = ntuple(k -> p_hi[k] - p_lo[k] +
+                _cheb_increment(s.prim, qlo, qhi, k), 2)
+        end
+        # The matching horizon kernel already is the regular rate, including at the horizon.
+        if !iszero(coefficient)
+            rlo,rhi=_increment_radii(e,lo,hi,left,right,radii)
+            geometry=s.kind===:infinity ?
+                (_rstar_all(e.c.a,rhi)-_rstar_all(e.c.a,rlo),
+                    _horizon_azimuth(e.c.a,rhi)-_horizon_azimuth(e.c.a,rlo)) :
+                (_engine_rstar(e.c,e.r_of,hi,rhi)-_engine_rstar(e.c,e.r_of,lo,rlo),
+                    _engine_azimuth(e.c,e.r_of,hi,rhi)-_engine_azimuth(e.c,e.r_of,lo,rlo))
+            part = part .+ coefficient .* geometry
+        end
+        value = value .+ part
+    end
+    return value
+end
+
+function _radial_regular_increment(e::RadialEngine, left, right, σr,radii=nothing)
+    right<left && return .-_radial_regular_increment(e,right,left,σr,
+        radii===nothing ? nothing : reverse(radii))
+    e.periodic || return _radial_regular_interval(e,left,right,σr,radii)
+    lo = e.segments[1].lo
+    nl = floor((left - lo) / e.period); nr = floor((right - lo) / e.period)
+    nl == nr && return _radial_regular_interval(e,left-nl*e.period,right-nr*e.period,σr,radii)
+    return (nr - nl - 1) .* (e.totals[1], e.totals[2]) .+
+        _radial_regular_interval(e, left - nl * e.period, lo + e.period, σr) .+
+        _radial_regular_interval(e, lo, right - nr * e.period, σr)
+end
+
+function _radial_proper_interval(e::RadialEngine,left,right,radii=nothing)
+    left==right && (radii===nothing || radii[1]==radii[2]) && return 0.0
+    right<left && return -_radial_proper_interval(e,right,left,
+        radii===nothing ? nothing : reverse(radii))
     value=0.0
     for s in e.segments
         lo=max(left,s.lo); hi=min(right,s.hi)
-        hi<=lo && continue
+        _empty_increment_segment(s,lo,hi,left,right,radii) && continue
         if s.kind===:plain || s.kind===:horizon
             value+=_cheb_increment(s.prim,lo,hi,3)
         elseif s.kind===:asymptote
-            xlo=_asymptote_x(s,e.r_of(lo)); xhi=_asymptote_x(s,e.r_of(hi))
+            rlo,rhi=_increment_radii(e,lo,hi,left,right,radii)
+            xlo=_asymptote_x(s,rlo); xhi=_asymptote_x(s,rhi)
             value+=_cheb_increment(s.prim,xlo,xhi,3)+s.rates_d[3]*(hi-lo)
         else
-            qlo=min(_tail_q(s.tail,e.r_of(lo)),1.0)
-            qhi=min(_tail_q(s.tail,e.r_of(hi)),1.0)
+            rlo,rhi=_increment_radii(e,lo,hi,left,right,radii)
+            qlo=min(_tail_q(s.tail,rlo),1.0)
+            qhi=min(_tail_q(s.tail,rhi),1.0)
             value+=_tail_principal(s.tail,qhi)[3]-_tail_principal(s.tail,qlo)[3]+
                 _cheb_increment(s.prim,qlo,qhi,3)
         end
@@ -582,12 +710,13 @@ function _radial_proper_interval(e::RadialEngine, left, right)
     return value
 end
 
-function _radial_proper_increment(e::RadialEngine, left, right)
-    right<left && return -_radial_proper_increment(e,right,left)
-    e.periodic || return _radial_proper_interval(e,left,right)
+function _radial_proper_increment(e::RadialEngine,left,right,radii=nothing)
+    right<left && return -_radial_proper_increment(e,right,left,
+        radii===nothing ? nothing : reverse(radii))
+    e.periodic || return _radial_proper_interval(e,left,right,radii)
     lo=e.segments[1].lo
     nl=floor((left-lo)/e.period); nr=floor((right-lo)/e.period)
-    nl==nr && return _radial_proper_interval(e,left-nl*e.period,right-nr*e.period)
+    nl==nr && return _radial_proper_interval(e,left-nl*e.period,right-nr*e.period,radii)
     return (nr-nl-1)*e.totals[3]+
         _radial_proper_interval(e,left-nl*e.period,lo+e.period)+
         _radial_proper_interval(e,lo,right-nr*e.period)
@@ -608,7 +737,8 @@ function _radial_regular(e::RadialEngine, λ, σ_wanted)
     end
     r = e.r_of(λ)
     t, φ, _ = _radial_eval(e, λ, r)
-    return (t - σ_wanted * kerr_rstar(e.c.a, r), φ - σ_wanted * _horizon_azimuth(e.c.a, r))
+    return (t-σ_wanted*_engine_rstar(e.c,e.r_of,λ,r),
+        φ-σ_wanted*_engine_azimuth(e.c,e.r_of,λ,r))
 end
 
 _spectral_summary(e::RadialEngine) = _spectral_summary(s.prim for s in e.segments)
@@ -689,15 +819,14 @@ _coords_tau(c::EngineCoordinates, λ) =
 _coords_radial(c::EngineCoordinates, λ) = _radial_eval(_coords_engine(c), λ)
 _coords_spectral(c::EngineCoordinates) = _spectral_summary(_coords_engine(c))
 
-# horizon-regular pair (t − σr r*, φ − σr φ_H) + polar part, zero at λr (origin cached in `origin`)
+# Definite regular-coordinate increment from λr; only the polar origin is cached.
 function _coords_regular(c::EngineCoordinates, σr, λr, origin, λ)
     e = _coords_engine(c)
     if isnan(origin[][1])
-        v0 = _radial_regular(e, λr, σr)
         p0 = c.polar_primitive(λr)
-        origin[] = (v0[1] + p0[1], v0[2] + p0[2])
+        origin[] = (p0[1], p0[2])
     end
-    v = _radial_regular(e, λ, σr)
+    v = _radial_regular_increment(e, λr, λ, σr)
     p = c.polar_primitive(λ)
     return (v[1] + p[1] - origin[][1], v[2] + p[2] - origin[][2])
 end
@@ -725,10 +854,11 @@ cancellation next to the horizon).
 """
 function _radius_increments(coords, λ_of, σ; σ_regular=-1.0, regular=true)
     # the known radius is passed on: next to the horizon t, φ carry log|r − r₊|
-    radial(k) = (r1, r2) -> σ * (_radial_eval(_coords_engine(coords), λ_of(r2), float(r2))[k] -
-                                 _radial_eval(_coords_engine(coords), λ_of(r1), float(r1))[k])
-    chart(k) = (r1, r2) -> σ * (_radial_regular(_coords_engine(coords), λ_of(r2), σ_regular)[k] -
-                                _radial_regular(_coords_engine(coords), λ_of(r1), σ_regular)[k])
+    radial(k) = (r1, r2) -> σ * (k==3 ?
+        _radial_proper_increment(_coords_engine(coords),λ_of(r1),λ_of(r2),(float(r1),float(r2))) :
+        _radial_regular_increment(_coords_engine(coords),λ_of(r1),λ_of(r2),0.0,(float(r1),float(r2)))[k])
+    chart(k) = (r1, r2) -> σ *
+        _radial_regular_increment(_coords_engine(coords),λ_of(r1),λ_of(r2),σ_regular,(float(r1),float(r2)))[k]
     increments = (radial_mino_increment=(r1, r2) -> σ * (λ_of(r2) - λ_of(r1)),
         radial_time_increment=radial(1), radial_phi_increment=radial(2),
         radial_proper_increment=radial(3))

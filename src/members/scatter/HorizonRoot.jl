@@ -11,8 +11,7 @@ exterior root (λ = 0, where t, φ, τ vanish) and returns to infinity.
 function kerr_geo_horizon_scatter(a::Real,energy::Real,lz::Real,q::Real;
         polar_sector=nothing,polar_phase::Real=0.0,
         polar_hemisphere::Symbol=:north)
-    metric=kerr_metric_limit(a)
-    metric in (:subextremal,:near_extremal) || throw(DomainError(
+    0<abs(a)<1 || throw(DomainError(
         a,"A subextremal horizon-root scatter orbit requires 0<|a|<1."))
     energy>=1 || throw(DomainError(
         energy,"A horizon-root scatter orbit requires E>=1."))

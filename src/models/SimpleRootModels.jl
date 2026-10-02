@@ -39,10 +39,11 @@ function _four_simple_inner_model(energy, roots)
     b = x2 - x3
     function radius(δ)
         sn = _ellipj_reduced(xi * δ, L)[1]
-        return x3 + b / (1.0 - n * sn^2)
+        s2 = sn^2
+        return x2 + b * n * s2 / (1.0 - n * s2)
     end
     function mino(r)
-        s2 = (1.0 - b / (r - x3)) / n
+        s2 = (x2 - r) / ((x3 - r) * n)
         phi = asin(sqrt(clamp(s2, 0.0, 1.0)))
         return _ellip_f(phi, m1) / xi
     end
@@ -140,9 +141,9 @@ function _complex_pair_model(energy, roots, rho, eta)
         return (bb * x2 * onepc + aa * x1 * onemc) / (bb * onepc + aa * onemc)
     end
     function mino(r)
-        y = (bb * (x2 - r) - aa * (r - x1)) /
-            (bb * (x2 - r) + aa * (r - x1))
-        return _ellip_f(pi / 2.0 + asin(clamp(y, -1.0, 1.0)), m1) / xi
+        amplitude = 2atan(sqrt(bb) * sqrt(max(x2 - r, 0.0)),
+            sqrt(aa) * sqrt(max(r - x1, 0.0)))
+        return _ellip_f(amplitude, m1) / xi
     end
     return (kind=:two_real_complex_pair, turn=x2, radius=radius, mino=mino, inward=true,
         roots=(x1=x1, x2=x2, rho=rho, eta=eta, A=aa, B=bb), modulus=m)
@@ -178,12 +179,14 @@ function _b5_model(roots)
         phi = phi_of_r(r)
         return scale * _ellip_pi(phi, m1, b / (h - x1), (h - x2) / (h - x1)) / (x1 - h)
     end
-    i0_turn = basis(x2).I0
     function radius(δ)
-        sn = _ellipj_reduced(clamp((i0_turn - δ) / scale, 0.0, L.K), L)[1]
-        return x1 + b * sn^2
+        sn,cn,_ = _ellipj_reduced(clamp(δ / scale, 0.0, L.K), L)
+        return x2 - b * m1 * sn^2 / (cn^2 + m1 * sn^2)
     end
-    mino(r) = i0_turn - basis(r).I0
+    function mino(r)
+        angle = atan(sqrt(max(x2-r,0.0)),sqrt(max(m1*(r-x1),0.0)))
+        return scale * _ellip_f(angle,m1)
+    end
     return (kind=:b5_parabolic_three_simple, turn=x2, radius=radius, mino=mino, inward=true,
         roots=(x1=x1, x2=x2, x3=x3), modulus=m, basis=basis, pole=pole)
 end
@@ -200,8 +203,8 @@ function _b6_model(energy, roots)
     g = x3 - x4
     scale = 2 / sqrt(lead * (x4 - x2) * (x3 - x1))
     function phi_of_r(r)
-        s2 = (x4 - x2) * (x3 - r) / ((x3 - x2) * (x4 - r))
-        return asin(sqrt(clamp(s2, 0.0, 1.0)))
+        return atan(sqrt(max((x4-x2)*(x3-r),0.0)),
+            sqrt(max((x4-x3)*(r-x2),0.0)))
     end
     function basis(r)
         phi = phi_of_r(r)
@@ -222,10 +225,9 @@ function _b6_model(energy, roots)
             ((x4 - h) * (x3 - h)))
     end
     function radius(δ)
-        s2 = _ellipj_reduced(clamp(δ / scale, 0.0, L.K), L)[1]^2
-        numerator = (x4 - x2) * x3 - s2 * (x3 - x2) * x4
-        denominator = (x4 - x2) - s2 * (x3 - x2)
-        return numerator / denominator
+        sn,cn,_ = _ellipj_reduced(clamp(δ / scale, 0.0, L.K), L)
+        denominator = cn^2+n1*sn^2
+        return (x3*cn^2+x2*n1*sn^2)/denominator
     end
     mino(r) = scale * _ellip_f(phi_of_r(r), m1)
     return (kind=:b6_hyperbolic_four_simple, turn=x3, radius=radius, mino=mino, inward=true,

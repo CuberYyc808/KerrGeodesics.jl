@@ -11,6 +11,7 @@ function _plunge_member(a, energy, lz, q, component, polar, λ_h, turn, r_of, la
         potential=potential, domain=(0.0, λ_h), ends=(:turning, :horizon), σ=-1.0, λ_bl=0.0,
         λ_regular=λ_h, σ_regular=-1.0)
     track = (r=λ -> r_of(check(λ)), check=check, check_bl=check_bl, coords=coords,
+        radial_track=r_of,
         sign_r=λ -> -1.0,
         domain=(mino=(0.0, λ_h), endpoint_closed=(true, true),
             endpoint_roles=(:finite_turning_point, :future_horizon), horizon_lambda=λ_h),
@@ -60,13 +61,17 @@ function _plunge_radial_component(a, energy, lz, q, classification, component, p
         _polar_solution(a, energy, lz, q, component.PolarSector, phase)
     end
     rplus = kerr_horizons(a).rplus
-    λ_h = model.mino(rplus)
-    radius, mino, turn = model.radius, model.mino, model.turn
-    r_of(λ) = λ >= λ_h ? rplus : clamp(radius(λ), rplus, turn)
+    relative = _horizon_relative_model(a,energy,lz,q,model)
+    λ_h = relative.horizon_time
+    turn = model.turn
+    r_of = relative
     function lambda_of_radius(r)
         rplus <= r <= turn || throw(DomainError(r,
             "The radius lies outside [r+, r_turn] of $(id)."))
-        return r == rplus ? λ_h : mino(r)
+        r==rplus && return λ_h
+        r==turn && return 0.0
+        gap=_wide_sub(_wide(float(r)),relative.horizon)
+        return _horizon_lambda_of_gap(relative,gap[1]+gap[2])
     end
     return _plunge_member(a, energy, lz, q, component, polar, λ_h, model.turn, r_of,
         lambda_of_radius; roots=model.roots, kind=model.kind)
