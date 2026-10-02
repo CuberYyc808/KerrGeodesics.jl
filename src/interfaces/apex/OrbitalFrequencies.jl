@@ -80,8 +80,9 @@ end
 """
     kerr_geo_polar_roots(a, p, e, x)
 
-Return `(zp, zm)` with zm = √(1 − x²) and zp² = a²(1 − E²) + Lz²/x² = Q/zm² (zp = √Q for
-polar orbits, x = 0); a²(1 − E²)(zm/zp)² is the parameter of the polar elliptic functions.
+Return `(zp, zm)` with ``z_m = \\sqrt{1 - x^2}`` and
+``z_p^2 = a^2(1 - E^2) + L_z^2/x^2 = Q/z_m^2`` (``z_p = \\sqrt{Q}`` for
+polar orbits, ``x = 0``); ``a^2(1 - E^2)(z_m/z_p)^2`` is the parameter of the polar elliptic functions.
 """
 function kerr_geo_polar_roots(a::Real, p::Real, e::Real, x::Real)
     c = _apex_constants(a, p, e, x)
@@ -345,10 +346,11 @@ end
 
 The fundamental frequencies of the bound orbit `(a, p, e, x)`, 0 ≤ e < 1, as a `Dict`
 (other eccentricities have no periodic radial motion and raise a `DomainError`). `Time="Mino"`
-gives the Mino-time frequencies `"ϒr"`, `"ϒθ"`, `"ϒϕ"` and `"ϒt"` (the mean of dt/dλ);
+gives the Mino-time frequencies `"ϒr"`, `"ϒθ"`, `"ϒϕ"` and `"ϒt"` (the mean of ``dt/d\\lambda``);
 `Time="BoyerLindquist"` gives `"Ωr"`, `"Ωθ"`, `"Ωϕ"`, the frequencies in coordinate time,
-Ωᵢ = ϒᵢ/ϒt; `Time="Proper"` gives the frequencies in proper time, ϒᵢ divided by the mean
-of dτ/dλ.
+``\\Omega_i = \\Upsilon_i/\\Upsilon_t``, with ``i \\in \\{r, \\theta, \\phi\\}``;
+`Time="Proper"` gives the frequencies in proper time, ``\\Upsilon_i`` divided by the mean
+of ``d\\tau/d\\lambda``.
 """
 function kerr_geo_frequencies(a, p, e, x; Time="Mino")
     0 <= e < 1 || throw(DomainError(e,

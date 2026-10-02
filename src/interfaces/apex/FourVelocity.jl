@@ -85,9 +85,9 @@ end
 """
     kerr_geo_four_velocity(a, p, e, x; initPhases=(0.0,0.0), Covariant=false, Parametrization="Mino")
 
-Four-velocity u^μ = dx^μ/dτ of the (a, p, e, x) orbit as four functions of Mino time λ,
+Four-velocity ``u^\\mu = dx^\\mu/d\\tau`` of the ``(a, p, e, x)`` orbit as four functions of Mino time ``\\lambda``,
 `[u^t, u^r, u^θ, u^φ]`, or the covariant `[u_t, u_r, u_θ, u_φ]` with `Covariant=true`.
-`initPhases = (qr0, qθ0)` are the radial and polar phases at λ = 0; `Parametrization` is
+`initPhases = (qr0, qθ0)` are the radial and polar phases at ``\\lambda = 0``; `Parametrization` is
 "Mino".
 """
 function kerr_geo_four_velocity(a, p, e, x; initPhases=(0.0,0.0), Covariant=false, Parametrization="Mino")

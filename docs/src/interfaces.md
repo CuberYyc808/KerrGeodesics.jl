@@ -56,7 +56,7 @@ meta = kerr_geo_orbit_type_metadata(0.9, 10.0, 0.5, 0.8)
 
 [`kerr_geo_orbit`](@ref) returns the stable orbit, or the constant-radius Critical orbit with
 ``E < 1``, as a `Dict` in the form of Fujita and Hikida: the trajectory, the four-velocity,
-the frequencies, the oscillating parts of ``t`` and ``φ`` (`"CrossFunction"`) and the
+the frequencies, the oscillating parts of ``t`` and ``\phi`` (`"CrossFunction"`) and the
 constants.
 
 ```@example apex
@@ -103,11 +103,11 @@ The functions it is built from are exported as well: [`radial_roots`](@ref),
 
 ## Finite-window capture and scattering
 
-[`kerr_geo_capture`](@ref) and [`kerr_geo_scatter`](@ref) build an ``E ≥ 1`` orbit from the
+[`kerr_geo_capture`](@ref) and [`kerr_geo_scatter`](@ref) build an ``E \geq 1`` orbit from the
 constants, `kerr_geo_capture(a, (E, Lz, Q))`, and `kerr_geo_scatter` also from the APEX
-parameters of an equatorial orbit. `Formula` names the closed form of ``r(λ)``:
+parameters of an equatorial orbit. `Formula` names the closed form of ``r(\lambda)``:
 
-| `Formula` | Energy | Radial roots | ``λ = 0`` |
+| `Formula` | Energy | Radial roots | ``\lambda = 0`` |
 | :--- | :--- | :--- | :--- |
 | `:hyperbolic_scatter` | ``E > 1`` | four real | closest approach |
 | `:parabolic_scatter` | ``E = 1`` | three real | closest approach |
@@ -115,10 +115,10 @@ parameters of an equatorial orbit. `Formula` names the closed form of ``r(λ)``:
 | `:parabolic_capture` | ``E = 1`` | one real and a complex pair | the future horizon |
 
 Constants without such an orbit give a record with `Status.supported == false`.
-`polar_phase` sets the polar phase at ``λ = 0``: phase 0 is the northern turning point for
-``E > 1`` and the equator, crossed northward, for ``E = 1``. For a capture, ``t`` and ``φ``
+`polar_phase` sets the polar phase at ``\lambda = 0``: phase 0 is the northern turning point for
+``E > 1`` and the equator, crossed northward, for ``E = 1``. For a capture, ``t`` and ``\phi``
 are given as increments over a finite window, since they diverge on the horizon; ``v`` and
-``ψ`` are given directly.
+``\psi`` are given directly.
 
 ```@example apex
 scatter = kerr_geo_scatter(0.5, (1.1, 5.0, 1.0))

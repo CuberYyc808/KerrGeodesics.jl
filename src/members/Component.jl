@@ -4,34 +4,34 @@
 """
     KerrGeoComponent{C}
 
-One member of a `KerrGeodesicFamily`, a single timelike geodesic in Mino time λ. `C` is its
+One member of a `KerrGeodesicFamily`, a single timelike geodesic in Mino time ``\\lambda``. `C` is its
 broad class (`:stable`, `:critical`, `:plunge`, `:capture`, `:scatter`, `:trapped`);
 `KerrGeoStableComponent`, `KerrGeoCriticalComponent`, … name the six types.
 
 - `CaseId`: the case, such as `:A1`, `:K3` or `:B5`, or the tier member, such as `:A_H1` or
   `:B_X1`.
-- `Tier`: `:primary`, `:horizon` (P(r₊) = 0) or `:extremal` (|a| = 1).
+- `Tier`: `:primary`, `:horizon` (``P(r_+) = 0``) or `:extremal` (``|a| = 1``).
 - `Role`: for Critical members `:on_root`, `:outer` or `:inner` (the side of the repeated root
   the member lies on); `:none` otherwise.
 - `Component`: the classified radial component (`KerrGeoRadialComponent`), or `nothing` for
   horizon- and extremal-tier members and Trapped members.
 - `ConstantsOfMotion`: `(a, E, Lz, Q)`.
 - `Roots`: the radial and polar roots.
-- `ReferenceZero`: the origins of the coordinates: the events of λ = 0 (`lambda0_event`), of
-  t = φ = 0 (`t_phi_zero_event`, at `t_phi_zero_lambda` and radius `t_phi_zero_radius`) and
-  of τ = 0 (`tau_zero_event`, always at λ = 0); `lambda_regular`, the λ where v = ψ = 0
+- `ReferenceZero`: the origins of the coordinates: the events of ``\\lambda = 0`` (`lambda0_event`), of
+  ``t = \\phi = 0`` (`t_phi_zero_event`, at `t_phi_zero_lambda` and radius `t_phi_zero_radius`) and
+  of ``\\tau = 0`` (`tau_zero_event`, always at ``\\lambda = 0``); `lambda_regular`, the ``\\lambda`` where ``v = \\psi = 0``
   (`nothing` without a horizon-regular chart); the polar phase (`polar_phase`, or `phases`
   for Stable members).
 - `Domain`: the Mino-time domain `mino` with `endpoint_closed` and `endpoint_roles`, and
   `horizon_lambda` for members that end on the future horizon.
-- `Trajectory`: functions of λ: `t, r, theta, z, phi, tau` (``z = \\cos θ``); `rstar, v, psi`
-  (``r_*``, ``v = t + r_*``, ``ψ = φ + φ_H``) where a horizon-regular chart exists (`v, psi` for Trapped members); `u, chi` for Trapped and
-  |a| = 1 members; member-specific extras such as `lambda_of_radius` and radial increments.
-- `Velocity`: the Mino-time rates, functions of λ: `ut` ``= dt/dλ``, `ur` ``= dr/dλ = ±\\sqrt{R(r)}``,
-  `uz` ``= dz/dλ = ±\\sqrt{Θ(z)}``, `utheta` ``= dθ/dλ = -(dz/dλ)/\\sin θ``, `uphi` ``= dφ/dλ`` and
-  `dtau_dlambda` ``= dτ/dλ = Σ = r^2 + a^2 z^2``; the four-velocity is ``u^μ = (dx^μ/dλ)/Σ``.
-- `Potentials`: ``R(r)`` (`radial`) and ``Θ(z)`` (`polar_z`) as functions of their variable.
-- `Residuals`: functions of λ: ``(dr/dλ)^2 - R``, ``(dz/dλ)^2 - Θ`` and ``g_{μν}u^μu^ν + 1``.
+- `Trajectory`: functions of ``\\lambda``: `t, r, theta, z, phi, tau` (``z = \\cos \\theta``); `rstar, v, psi`
+  (``r_*``, ``v = t + r_*``, ``\\psi = \\phi + \\phi_H``) where a horizon-regular chart exists (`v, psi` for Trapped members); `u, chi` for Trapped and
+  ``|a| = 1`` members; member-specific extras such as `lambda_of_radius` and radial increments.
+- `Velocity`: the Mino-time rates, functions of ``\\lambda``: `ut` ``= dt/d\\lambda``, `ur` ``= dr/d\\lambda = \\pm\\sqrt{R(r)}``,
+  `uz` ``= dz/d\\lambda = \\pm\\sqrt{\\Theta(z)}``, `utheta` ``= d\\theta/d\\lambda = -(dz/d\\lambda)/\\sin \\theta``, `uphi` ``= d\\phi/d\\lambda`` and
+  `dtau_dlambda` ``= d\\tau/d\\lambda = \\Sigma = r^2 + a^2 z^2``; the four-velocity is ``u^\\mu = (dx^\\mu/d\\lambda)/\\Sigma``.
+- `Potentials`: ``R(r)`` (`radial`) and ``\\Theta(z)`` (`polar_z`) as functions of their variable.
+- `Residuals`: functions of ``\\lambda``: ``(dr/d\\lambda)^2 - R``, ``(dz/d\\lambda)^2 - \\Theta`` and ``g_{\\mu\\nu}u^\\mu u^\\nu + 1``.
 - `Status`: `supported`, `spectral` (a `SpectralStatus`: the accuracy `achieved` by the
   member's Chebyshev tables and their number of `pieces`) and member-specific metadata
   (polar solution, formula family, stability; `apex`, `frequencies` and `precision` for
@@ -81,9 +81,9 @@ kerr_geo_member_class(::KerrGeoComponent{C}) where {C} = C
     kerr_geo_sample(m, λs)
 
 The trajectory and Mino-time four-velocity of member `m` at the Mino times `λs`: a NamedTuple
-of vectors `lambda, t, r, theta, phi, tau, ut, ur, utheta, uphi`, where `ut` ``= dt/dλ``,
-`ur` ``= dr/dλ``, `utheta` ``= dθ/dλ`` and `uphi` ``= dφ/dλ`` (divide by
-``Σ = r^2 + a^2\\cos^2θ`` for ``dx^μ/dτ``). Faster than calling the
+of vectors `lambda, t, r, theta, phi, tau, ut, ur, utheta, uphi`, where `ut` ``= dt/d\\lambda``,
+`ur` ``= dr/d\\lambda``, `utheta` ``= d\\theta/d\\lambda`` and `uphi` ``= d\\phi/d\\lambda`` (divide by
+``\\Sigma = r^2 + a^2\\cos^2\\theta`` for ``dx^\\mu/d\\tau``). Faster than calling the
 member's functions point by point from untyped code: the loop runs behind a function barrier
 on the member's concrete closures.
 """
