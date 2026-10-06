@@ -99,6 +99,10 @@ motion; `reference_radius` places the zero of t and φ on Critical and Capture m
 `initPhases` sets the phases of the Stable member; `trapped_component` (`:full`,
 `:outgoing`, `:incoming`) selects the part of the Trapped member, and `disposition_id` is
 checked against it.
+
+The orbits are computed in the floating-point type of the input (`Float64`, or `BigFloat` at
+the precision of the given numbers); `precision = p` converts the input to `BigFloat` of `p`
+bits. The members' functions evaluate at the precision they were built with.
 """
 function kerr_geodesic(a::Real, constants::NamedTuple; kwargs...)
     return kerr_geodesic(a, (constants.E, constants.Lz, constants.Q); kwargs...)
@@ -264,7 +268,18 @@ end
 # The constants are used exactly as given: the quartic coefficient E² − 1 decides whether
 # an orbit reaches infinity however small it is, so no energy is moved to E = 1. Only the
 # APEX conversion rounds a spin within a few ulps of |a| = 1 to exactly ±1 (below).
-function kerr_geodesic(a::Real, constants::Tuple{<:Real,<:Real,<:Real}; kwargs...)
+function kerr_geodesic(a::Real, constants::Tuple{<:Real,<:Real,<:Real}; precision=nothing,
+        kwargs...)
+    precision === nothing || return setprecision(BigFloat, precision) do
+        kerr_geodesic(BigFloat(a), BigFloat.(constants); kwargs...)
+    end
+    T = _float_type(a, constants...)
+    return _with_precision(T, _input_precision(a, constants...)) do
+        _kerr_geodesic(T(a), T.(constants); kwargs...)
+    end
+end
+
+function _kerr_geodesic(a, constants; kwargs...)
     energy, lz, q = constants
     if haskey(kwargs, :axis)
         requested = get(kwargs, :polar_sector, nothing)
@@ -519,16 +534,27 @@ function _classified_family(a, energy, lz, q, kwargs)
         stable=stable, critical=critical, plunge=plunge, capture=capture, scatter=scatter)
 end
 
-function kerr_geodesic(a::Real, p::Real, e::Real, x::Real; input::Symbol=:apex, kwargs...)
+function kerr_geodesic(a::Real, p::Real, e::Real, x::Real; input::Symbol=:apex,
+        precision=nothing, kwargs...)
     if input == :constants
-        return kerr_geodesic(a, (p, e, x); kwargs...)
+        return kerr_geodesic(a, (p, e, x); precision=precision, kwargs...)
     elseif input != :apex
         error("Unknown input type. Use :apex or :constants.")
     end
+    precision === nothing || return setprecision(BigFloat, precision) do
+        kerr_geodesic(BigFloat(a), BigFloat(p), BigFloat(e), BigFloat(x); kwargs...)
+    end
+    T = _float_type(a, p, e, x)
+    return _with_precision(T, _input_precision(a, p, e, x)) do
+        _kerr_geodesic_apex(T(a), T(p), T(e), T(x); kwargs...)
+    end
+end
+
+function _kerr_geodesic_apex(a, p, e, x; kwargs...)
 
     # APEX input only: a spin a few ulps from ±1 (a conversion artefact) is the extremal one
     a_input = a
-    abs(abs(a) - 1) <= SPIN_SNAP_TOL && (a = copysign(1.0, a))
+    abs(abs(a) - 1) <= _spin_snap_tol(_float_type(a)) && (a = copysign(one(float(a)), a))
     constants = kerr_geo_constants_of_motion(a, p, e, x)
     energy = constants["E"]
     lz = constants["Lz"]

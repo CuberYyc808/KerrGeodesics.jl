@@ -3,11 +3,11 @@
 function radial_roots_for_constants(a::Real, energy::Real, lz::Real, q::Real)
     coeffs = [-a^2 * q, 2 * (a * energy - lz)^2 + 2 * q,
               -(q + lz^2 - a^2 * _e2m1(energy)), 2, _e2m1(energy)]
-    return roots(Polynomial(coeffs))
+    return _polynomial_roots(coeffs)
 end
 
-_real_roots(values; atol=1e-10) =
-    sort!(Float64[real(v) for v in values if abs(imag(v)) <= atol])
+_real_roots(values; atol=_tol(real(float(eltype(values))), 1e-10)) =
+    sort!([real(v) for v in values if abs(imag(v)) <= atol])
 
 _root_class_symbol(n) = n == 4 ? :four_real : n == 3 ? :three_real :
     n == 2 ? :two_real_complex_pair : n == 1 ? :one_real : :other
@@ -22,7 +22,8 @@ connected to infinity has an exterior turning point, `:parabolic_capture` /
 `:elliptic` for E < 1 (no motion to infinity). `energy_regime` is `:elliptic`, `:parabolic`
 or `:hyperbolic`.
 """
-function _outcome_at_infinity(a::Real, energy::Real, lz::Real, q::Real; atol=1e-10)
+function _outcome_at_infinity(a::Real, energy::Real, lz::Real, q::Real;
+        atol=_tol(_float_type(a, energy, lz, q), 1e-10))
     rplus = _rplus(a)
     real_roots = _real_roots(radial_roots_for_constants(a, energy, lz, q); atol=atol)
     root_class = _root_class_symbol(length(real_roots))

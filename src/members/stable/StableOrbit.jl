@@ -7,9 +7,9 @@
 
 # Divide c (ascending coefficients) by (r − ρ) from the constant term up: stable when ρ is
 # the largest root in magnitude.
-function _deflate_largest(c::AbstractVector{Float64}, ρ)
+function _deflate_largest(c::AbstractVector{<:Real}, ρ)
     n = length(c) - 1
-    q = zeros(n)
+    q = zeros(float(eltype(c)), n)
     q[1] = -c[1] / ρ
     for k in 2:n
         q[k] = (q[k - 1] - c[k]) / ρ
@@ -25,7 +25,7 @@ function _class_a_inner_roots(a, energy, lz, q, r1, r2)
     disc = max(0.0, c1^2 - 4 * c2 * c0)
     big = -(c1 + copysign(sqrt(disc), c1)) / 2           # c2 r² + c1 r + c0, no cancellation
     rA = big / c2
-    rB = iszero(big) ? 0.0 : c0 / big
+    rB = iszero(big) ? zero(big) : c0 / big
     return max(rA, rB), min(rA, rB)
 end
 
@@ -41,33 +41,34 @@ _class_a_labels(case_id, q) = ["Stable", case_id === :A1 ? "Eccentric" : "Circul
 northern polar turning point.
 """
 function _class_a_orbit(a, energy, lz, q, component; initPhases=(0.0, 0.0, 0.0, 0.0))
-    a, energy, lz, q = float(a), float(energy), float(lz), float(q)
+    T = _float_type(a, energy, lz, q)
+    a, energy, lz, q = T(a), T(energy), T(lz), T(q)
     case_id = component.CaseId
     r2 = float(component.LowerEndpoint.Radius)
     r1 = case_id === :A1 ? float(component.UpperEndpoint.Radius) : r2
     r3, r4 = _class_a_inner_roots(a, energy, lz, q, r1, r2)
     potential = _radial_potential_from_roots(a, energy, lz, q, component.Metadata.structure)
     rc = _rc(a, energy, lz, q, potential)
-    qt0, qr0, qθ0, qϕ0 = float.(initPhases)
+    qt0, qr0, qθ0, qϕ0 = T.(initPhases)
 
     # ---- radial: r = r2 + (r1−r2)(r2−r3) sn² / ((r1−r3) cn² + (r2−r3) sn²), u = ωr λ
     # (A2: r1 = r2, k = 0 and ϒr is the epicyclic frequency)
     libration = case_id === :A1 ? _libration_model(energy,r1,r2,r3,r4) : nothing
     omega = case_id === :A1 ? libration.omega :
         sqrt(max(0.0,(1-energy)*(1+energy)*(r1-r3)*(r2-r4)))/2
-    Kr = case_id === :A1 ? libration.K : _ellip_k(1.0)
+    Kr = case_id === :A1 ? libration.K : _ellip_k(one(T))
     ϒr = π * omega / Kr
     radial_state(λ) = case_id === :A1 ?
-        libration.state(λ) : (r2,0.0)
+        libration.state(λ) : (r2,zero(T))
     radial_r(λ) = radial_state(λ)[1]
     radial = case_id === :A1 ?
-        _radial_engine(a, energy, lz, q, radial_r; potential=potential, domain=(0.0, 2Kr / omega),
+        _radial_engine(a, energy, lz, q, radial_r; potential=potential, domain=(zero(T), 2Kr / omega),
             period=2Kr / omega) :
         _plain_rates(rc, r2)
 
     # ---- polar: northern turning point at λ = 0
     polar = iszero(q) ? _equatorial_polar_solution(a, energy, lz) :
-        _polar_solution(a, energy, lz, q, :pendular, 0.0)
+        _polar_solution(a, energy, lz, q, :pendular, zero(T))
     ϒθ = polar.metadata.sector === :equatorial ?
         sqrt(lz^2 + a^2 * (1 - energy) * (1 + energy)) :
         π * polar.metadata.omega / polar.metadata.period_u
@@ -82,9 +83,9 @@ end
 
 # radial (t, φ, τ) primitive from periapsis: spectral for librations, linear for r = const
 _class_a_radial_primitive(e::RadialEngine, λ) = _radial_eval(e, λ)
-_class_a_radial_primitive(rates::NTuple{3,Float64}, λ) = rates .* λ
+_class_a_radial_primitive(rates::NTuple{3,Real}, λ) = rates .* λ
 _class_a_radial_mean(e::RadialEngine) = _radial_mean_rates(e)
-_class_a_radial_mean(rates::NTuple{3,Float64}) = rates
+_class_a_radial_mean(rates::NTuple{3,Real}) = rates
 
 # (function barrier: every closure below captures concretely typed values)
 function _class_a_assemble(g, radial_state::RS, radial::RE, polar_primitive::PP,
@@ -100,7 +101,8 @@ function _class_a_assemble(g, radial_state::RS, radial::RE, polar_primitive::PP,
     polar = (primitive=polar_primitive, position=polar_position)
 
     # ---- phases: λ offsets on the radial and polar clocks
-    δr = ϒr > 0 ? qr0 / ϒr : 0.0
+    o = zero(ϒr)
+    δr = ϒr > 0 ? qr0 / ϒr : o
     δθ = qθ0 / ϒθ
     R0 = radial_primitive(δr)
     Z0 = polar.primitive(δθ)
@@ -110,13 +112,13 @@ function _class_a_assemble(g, radial_state::RS, radial::RE, polar_primitive::PP,
     θ(λ) = acos(clamp(polar.position(λ + δθ)[1], -1.0, 1.0))
 
     # ---- cross functions of the phases q_r = ϒr λ, q_θ = ϒθ λ (oscillating parts)
-    Δtr(qr) = ϒr > 0 ? radial_primitive(qr / ϒr)[1] - mean_r[1] * qr / ϒr : 0.0
-    Δϕr(qr) = ϒr > 0 ? radial_primitive(qr / ϒr)[2] - mean_r[2] * qr / ϒr : 0.0
+    Δtr(qr) = ϒr > 0 ? radial_primitive(qr / ϒr)[1] - mean_r[1] * qr / ϒr : o
+    Δϕr(qr) = ϒr > 0 ? radial_primitive(qr / ϒr)[2] - mean_r[2] * qr / ϒr : o
     Δtθ(qθ) = polar.primitive(qθ / ϒθ)[1] - mean_θ[1] * qθ / ϒθ
     Δϕθ(qθ) = polar.primitive(qθ / ϒθ)[2] - mean_θ[2] * qθ / ϒθ
-    dtr(qr) = ϒr > 0 ? (_plain_rates(rc, radial_r(qr / ϒr))[1] - mean_r[1]) / ϒr : 0.0
-    dϕr(qr) = ϒr > 0 ? (_plain_rates(rc, radial_r(qr / ϒr))[2] - mean_r[2]) / ϒr : 0.0
-    polar_rates(s2) = (a * lz - a^2 * energy * s2, iszero(lz) ? 0.0 : lz / s2)   # s2 = sin²θ
+    dtr(qr) = ϒr > 0 ? (_plain_rates(rc, radial_r(qr / ϒr))[1] - mean_r[1]) / ϒr : o
+    dϕr(qr) = ϒr > 0 ? (_plain_rates(rc, radial_r(qr / ϒr))[2] - mean_r[2]) / ϒr : o
+    polar_rates(s2) = (a * lz - a^2 * energy * s2, iszero(lz) ? o : lz / s2)   # s2 = sin²θ
     dtθ(qθ) = (polar_rates(polar.position(qθ / ϒθ)[3])[1] - mean_θ[1]) / ϒθ
     dϕθ(qθ) = (polar_rates(polar.position(qθ / ϒθ)[3])[2] - mean_θ[2]) / ϒθ
 

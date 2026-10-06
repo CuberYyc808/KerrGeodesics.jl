@@ -4,12 +4,14 @@
 # radius sits on a domain endpoint. Every site decides through these, so each criterion has
 # one definition. Q = 0 is exact (`iszero(q)`): the sign of Q selects the polar sector. E = 1
 # is exact as well (`kerr_energy_regime`, core/Metric.jl): the sign of E² − 1 selects the
-# radial formulas.
+# radial formulas. Tolerances are functions of the floating-point type T of the constants:
+# multiples of eps(T), or empirical Float64 values carried to T by `_tol`; the Float64 values
+# are unchanged.
 
 # Spin limits: a = 0 (Schwarzschild) and |a| = 1 (extremal) within a few ulps
-# (`kerr_metric_limit`). APEX input alone rounds a spin within SPIN_SNAP_TOL of ±1 to ±1.
-const DEFAULT_CLASSIFICATION_ATOL = 64 * eps(Float64)
-const SPIN_SNAP_TOL = 8 * eps(Float64)
+# (`kerr_metric_limit`). APEX input alone rounds a spin within `_spin_snap_tol` of ±1 to ±1.
+_classification_atol(::Type{T}) where {T} = 64 * eps(T)
+_spin_snap_tol(::Type{T}) where {T} = 8 * eps(T)
 
 # E = 1 is exact by default; the keywords of `kerr_energy_regime` and of the radial
 # coefficients remain for callers that snap the quartic coefficient of R on purpose.
@@ -18,9 +20,9 @@ const DEFAULT_ENERGY_RTOL = 0.0
 
 # Radial roots: two roots this close are one repeated root, a root this close to r₊ lies on
 # the horizon, and a probe radius this close to a root sits on it (`kerr_geo_root_structure`,
-# `kerr_root_multiplicity_at`).
-const ROOT_ATOL = 1.0e-12
-const ROOT_RTOL = 1.0e-12
+# `kerr_root_multiplicity_at`). Empirical (between rounding and the physical scale): `_tol`.
+_root_atol(::Type{T}) where {T} = _tol(T, 1.0e-12)
+_root_rtol(::Type{T}) where {T} = _tol(T, 1.0e-12)
 
 # A root of multiplicity m at r: the Float64 constants must lie within one ulp per component
 # of the manifold where R, R′, …, R^(m−1) vanish at r. To first order that is
@@ -46,10 +48,12 @@ end
 function _radial_input_reach(a,E,L,Q,r,k)
     w = a*E-L
     # ∂(c₀, …, c₄)/∂θ for c = (−a²Q, 2(aE − Lz)² + 2Q, −(Q + Lz² − a²(E² − 1)), 2, E² − 1)
-    partials = ((-2a*Q, 4E*w, 2a*_e2m1(E), 0.0, 0.0), (0.0, 4a*w, 2a^2*E, 0.0, 2E),
-                (0.0, -4w, -2L, 0.0, 0.0), (-a^2, 2.0, -1.0, 0.0, 0.0))
-    ulps = map(x -> iszero(x) ? 0.0 : eps(abs(float(x))), (a, E, L, Q))
-    reach = 0.0
+    T = _float_type(a, E, L, Q, r)
+    o = zero(T)
+    partials = ((-2a*Q, 4E*w, 2a*_e2m1(E), o, o), (o, 4a*w, 2a^2*E, o, 2E),
+                (o, -4w, -2L, o, o), (-a^2, 2one(T), -one(T), o, o))
+    ulps = map(x -> iszero(x) ? zero(T) : eps(abs(T(x))), (a, E, L, Q))
+    reach = zero(T)
     for (dc, u) in zip(partials, ulps)
         reach += abs(sum(dc[j+1]*factorial(j)/factorial(j-k)*r^(j-k) for j in k:4)) * u
     end
@@ -74,44 +78,46 @@ end
 # P(r₊) = 0: r₊ itself is a root of R (the H tier and, at |a| = 1, the X tier). P(r₊) is a sum
 # of two products and is exact to a few ulps, so a few ulps is the test; a root numerically at
 # r₊ with P(r₊) ≠ 0 bounds the allowed sliver above the horizon instead (`kerr_geo_root_structure`).
-const HORIZON_MOMENTUM_TOL = DEFAULT_CLASSIFICATION_ATOL
+_horizon_momentum_tol(::Type{T}) where {T} = _classification_atol(T)
 _horizon_root(a, energy, lz) = abs(kerr_radial_momentum(a, energy, lz, _rplus(a))) <=
-    HORIZON_MOMENTUM_TOL * max(1.0, abs(energy), abs(lz))
+    _horizon_momentum_tol(_float_type(a, energy, lz)) * max(1.0, abs(energy), abs(lz))
 
 # Lz = 0: |Lz| below which the polar turning point rounds to the pole, z₊ = 1 − O(Lz²/max(Q, |c|))
 # with c = a²(1 − E²), so the generic pendular forms have no digits left and the Lz = 0
 # (axis-crossing) forms are the exact ones. The bound scales with Q and c, so a small Q does
-# not turn a small Lz into an axis orbit.
-_axis_lz_tolerance(q, c) = 2 * sqrt(eps(1.0)) * sqrt(max(abs(q), abs(c)))
+# not turn a small Lz into an axis orbit (z₊ within eps of 1: Lz ≲ √eps √max(Q, |c|)).
+_axis_lz_tolerance(q, c) = 2 * sqrt(eps(_float_type(q, c))) * sqrt(max(abs(q), abs(c)))
 _zero_lz(a, energy, lz, q) = abs(lz) <= _axis_lz_tolerance(q, kerr_axis_carter_q(a, energy))
 
 # Motion along the spin axis: Lz = 0 and Q = a²(1 − E²).
 function _on_axis(a, energy, lz, q)
     c = kerr_axis_carter_q(a, energy)
-    return abs(lz) <= _axis_lz_tolerance(q, c) && abs(q - c) <= ROOT_RTOL * max(abs(q), abs(c))
+    return abs(lz) <= _axis_lz_tolerance(q, c) &&
+        abs(q - c) <= _root_rtol(_float_type(q, c)) * max(abs(q), abs(c))
 end
 
 # Motion over the axis: Lz = 0 with Q above a²(1 − E²), so the polar turning point is the pole.
 function _axis_crossing(a, energy, lz, q)
     c = kerr_axis_carter_q(a, energy)
-    return abs(lz) <= _axis_lz_tolerance(q, c) && q - c > ROOT_RTOL * max(abs(q), abs(c))
+    return abs(lz) <= _axis_lz_tolerance(q, c) &&
+        q - c > _root_rtol(_float_type(q, c)) * max(abs(q), abs(c))
 end
 
 # Constant latitude: the two roots of the vortical polar polynomial coincide, relative to the
 # two terms of its discriminant (`_polar_vortical_geometry`).
-const CONSTANT_LATITUDE_RTOL = 128 * ROOT_RTOL
+_constant_latitude_rtol(::Type{T}) where {T} = 128 * _root_rtol(T)
 
 # A computed polar turning root may land this far above 1: Θ(1) = −Lz² puts z₊ ≤ 1, and with
 # Lz² ≪ Q the rounded root can sit an ulp above 1.
-const POLAR_ROOT_SLACK = 4 * eps(Float64)
+_polar_root_slack(::Type{T}) where {T} = 4 * eps(T)
 
 # A Mino time this close outside a closed domain endpoint is that endpoint, and a radius this
-# close to a turning point sits on it (input rounding).
-const MINO_ENDPOINT_TOL = 2.0e-12
-const RADIUS_TOL = 2.0e-11
+# close to a turning point sits on it (input rounding). Empirical: `_tol`.
+_mino_endpoint_tol(::Type{T}) where {T} = _tol(T, 2.0e-12)
+_radius_tol(::Type{T}) where {T} = _tol(T, 2.0e-11)
 
 # The horizon-root quadratic h(z) = h2 z² + h1 z + h0 of |a| = 1 with P(r₊) = 0 (h2 = 3E² − 1 − Q,
 # h1 = 4E² − 2, h0 = E² − 1): a coefficient this small counts as zero when the family is
 # classified (h linear, the triple horizon root; both h1 and h2 zero, the excluded quadruple
 # root). The radial model itself is uniform in h2 and h0 and needs no such threshold.
-const HORIZON_ROOT_COEFFICIENT_TOL = 1.0e-11
+_horizon_root_coefficient_tol(::Type{T}) where {T} = _tol(T, 1.0e-11)

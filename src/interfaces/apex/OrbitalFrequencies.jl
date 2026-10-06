@@ -6,14 +6,26 @@ _sqrt_nonnegative(value) = sqrt(_nonnegative_radicand(value))
 
 # [F(r+) - F(r-)] / (r+ - r-), or its |a| -> 1 limit F'((r+ + r-)/2) when the horizons merge.
 function _horizon_divdiff(F, rp, rm)
+    T = _float_type(rp, rm)
     # Plain divided difference while its cancellation error, ~eps/(rp - rm), stays below
-    # ~1e-10; it differs from F'(ρ0) only by F‴ (rp - rm)^2/24, so below that the
-    # derivative is a symmetric difference with two Richardson steps (truncation O(δ^6)).
-    rp - rm > 1e-6 && return (F(rp) - F(rm)) / (rp - rm)
+    # ~1e-10 (Float64; `_tol` in T); it differs from F'(ρ0) only by F‴ (rp - rm)^2/24, so below
+    # that the derivative is a symmetric difference with k Richardson steps: truncation
+    # O(δ^(2k+2)) with δ = 1e-3 needs k + 1 ≥ (decimal digits)/6, two steps in Float64.
+    rp - rm > _tol(T, 1e-6) && return (F(rp) - F(rm)) / (rp - rm)
     ρ0 = (rp + rm) / 2
     g(δ) = (F(ρ0 + δ) - F(ρ0 - δ)) / (2δ)
-    δ = 1e-3
-    return (64g(δ / 4) - 20g(δ / 2) + g(δ)) / 45      # two Richardson steps: O(δ⁶)
+    δ = T(1e-3)
+    k = cld(floor(Int, -log10(eps(T))), 6) - 1
+    # weights of g(δ/2^j) extrapolated to δ = 0 in δ²: integer numerators over one denominator
+    # (k = 2: (64g(δ/4) − 20g(δ/2) + g(δ))/45)
+    w = [prod(big(4)^j // (big(4)^j - big(4)^i) for i in 0:k if i != j; init=big(1) // 1)
+        for j in 0:k]
+    D = lcm(denominator.(w))
+    value = T(numerator(w[k + 1] * D)) * g(δ / 2^k)
+    for j in k-1:-1:0
+        value += T(numerator(w[j + 1] * D)) * g(δ / 2^j)
+    end
+    return value / T(D)
 end
 
 # -------------------------------------------------------------------
@@ -48,7 +60,7 @@ function kerr_geo_radial_roots(a::Real, p::Real, e::Real, x::Real; En = nothing,
         AB = a^2 * Q / (κ * r2)
 
         r3 = (AplusB + _sqrt_nonnegative(AplusB^2 - 4.0 * AB)) / 2.0
-        r4 = iszero(r3) ? 0.0 : AB / r3
+        r4 = iszero(r3) ? zero(r3) : AB / r3
         return (r1, r2, r3, r4)
     end
 
@@ -59,12 +71,12 @@ function kerr_geo_radial_roots(a::Real, p::Real, e::Real, x::Real; En = nothing,
 
     denom = a^2 * (-1 + x^2) - (-2 + rho2) * rho2
     inner_sqrt1 = rho2 * (a^2 + (-2 + rho2) * rho2) * (-a^2 * (-1 + x^2) + rho2^2)
-    termA = 8.0 * a^2 * (-1 + x^2) * (-2.0 * a * x * rho2 + sqrt(2.0) * _sqrt_nonnegative(inner_sqrt1))^2 / (rho2 * denom^2)
-    big_inner = a^4 * (x^2 - x^4) + 2.0 * (-2 + rho2) * rho2^2 + a^2 * rho2 * (2.0 + x^2 * rho2) - 2.0 * sqrt(2.0) * a * x * _sqrt_nonnegative(inner_sqrt1)
+    termA = 8.0 * a^2 * (-1 + x^2) * (-2.0 * a * x * rho2 + sqrt(_float_type(a, p, e, x)(2)) * _sqrt_nonnegative(inner_sqrt1))^2 / (rho2 * denom^2)
+    big_inner = a^4 * (x^2 - x^4) + 2.0 * (-2 + rho2) * rho2^2 + a^2 * rho2 * (2.0 + x^2 * rho2) - 2.0 * sqrt(_float_type(a, p, e, x)(2)) * a * x * _sqrt_nonnegative(inner_sqrt1)
     termB = 4.0 * rho2^2 * big_inner^2 / denom^4
     sqrt_part = _sqrt_nonnegative(termA + termB)
     numerator = -a^4 * (-1 + x^2) * (-1 + x^2 + 2.0 * rho2) -
-                4.0 * sqrt(2.0) * a * x * rho2 * _sqrt_nonnegative(inner_sqrt1) +
+                4.0 * sqrt(_float_type(a, p, e, x)(2)) * a * x * rho2 * _sqrt_nonnegative(inner_sqrt1) +
                 rho2^2 * (-4.0 + 4.0 * rho2 - 5.0 * rho2^2 + 2.0 * rho2^3) -
                 2.0 * a^2 * rho2 * (-2.0 + 3.0 * rho2 - 2.0 * rho2^2 + x^2 * (2.0 - 5.0 * rho2 + rho2^2))
     big_frac = numerator / denom^2
@@ -92,7 +104,7 @@ end
 function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
 
     # Case 1: e ≈ 0
-    if isapprox(e, 0.0; atol=1e-12)
+    if isapprox(e, 0.0; atol=_tol(_float_type(a, p, e, x), 1e-12))
         return Dict(
             "ϒr" => _sqrt_nonnegative((p * (p - 6)) / (p - 3)),
             "ϒθ" => p / _sqrt_nonnegative(p - 3),
@@ -111,17 +123,17 @@ function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
     e2m1 = (e - 1) * (e + 1)
 
     return Dict(
-        "ϒr" => _sqrt_nonnegative(-(p * (-6 + 2*e + p)) / (3 + e^2 - p)) * π / (2 * Elliptic.K(m)),
+        "ϒr" => _sqrt_nonnegative(-(p * (-6 + 2*e + p)) / (3 + e^2 - p)) * π / (2 * _K(m)),
         "ϒθ" => p / _sqrt_nonnegative(p - 3 - e^2),
         "ϒϕ" => (p * sign(x)) / _sqrt_nonnegative(p - 3 - e^2),
         "ϒt" => begin
-            num = -(((-4+p) * p^2 * (-6+2*e+p) * Elliptic.E(m)) / e2m1) +
-                (p^2 * (28 + 4*e^2 - 12*p + p^2) * Elliptic.K(m)) / e2m1 -
+            num = -(((-4+p) * p^2 * (-6+2*e+p) * _E(m)) / e2m1) +
+                (p^2 * (28 + 4*e^2 - 12*p + p^2) * _K(m)) / e2m1 -
                 (2 * (6 + 2*e - p) * (3 + e^2 - p) * p^2 * Π1) / ((-1+e) * (1+e)^2) +
-                (4 * (-4+p) * p * (2 * (1+e) * Elliptic.K(m) + (-6 - 2*e + p) * Π1)) / (1+e) +
-                2 * (-4+p)^2 * ((-4+p) * Elliptic.K(m) -
+                (4 * (-4+p) * p * (2 * (1+e) * _K(m) + (-6 - 2*e + p) * Π1)) / (1+e) +
+                2 * (-4+p)^2 * ((-4+p) * _K(m) -
                 ((6+2*e-p) * p * Π2) / (2+2*e-p))
-            0.5 * _sqrt_nonnegative((-4*e^2 + (-2+p)^2) / (p * (-3 - e^2 + p))) * (8 + num / ( (-4+p)^2 * Elliptic.K(m) ))
+            0.5 * _sqrt_nonnegative((-4*e^2 + (-2+p)^2) / (p * (-3 - e^2 + p))) * (8 + num / ( (-4+p)^2 * _K(m) ))
         end
     )
 end
@@ -136,21 +148,21 @@ function kerr_geo_mino_frequency_r(a::Real, p::Real, e::Real, x::Real, EnLQ, roo
     En, L, Q = EnLQ
     ρ1, ρ2, ρ3, ρ4 = roots
 
-    if isapprox(a, 0.0; atol=1e-12) && isapprox(e, 0.0; atol=1e-12)
+    if isapprox(a, 0.0; atol=_tol(_float_type(a, p, e, x), 1e-12)) && isapprox(e, 0.0; atol=_tol(_float_type(a, p, e, x), 1e-12))
         return _sqrt_nonnegative(p*(p-6)/(p-3))
     end
 
     kr = ((ρ1 - ρ2) / (ρ1 - ρ3)) * ((ρ3 - ρ4) / (ρ2 - ρ4))
     # 1 − E² = 2/(ρ1 + ρ2 + ρ3 + ρ4), finite times ρ1 − ρ3 as e → 1
     return (π * _sqrt_nonnegative(2 * (ρ1 - ρ3) / (ρ1 + ρ2 + ρ3 + ρ4) * (ρ2 - ρ4))) /
-        (2 * Elliptic.K(kr))
+        (2 * _K(kr))
 end
 
 function kerr_geo_mino_frequency_θ(a::Real, p::Real, e::Real, x::Real, EnLQ, roots)
     En, L, Q = EnLQ
     zp, zm = roots
 
-    return π * zp / (2 * Elliptic.K(a^2*(1-En^2)*(zm/zp)^2))
+    return π * zp / (2 * _K(a^2*(1-En^2)*(zm/zp)^2))
 end
 
 function kerr_geo_mino_frequency_ϕ(a, p, e, x, EnLQ, roots, zpzm)
@@ -162,23 +174,23 @@ function kerr_geo_mino_frequency_ϕ_r(a, p, e, x, EnLQ, roots)
     En, L, Q = EnLQ
     ρ1, ρ2, ρ3, ρ4 = roots
 
-    if isapprox(a^2, 1.0; atol=1e-12)
+    if isapprox(a^2, 1.0; atol=_tol(_float_type(a, p, e, x), 1e-12))
         ρin = 1 - sqrt(1 - a^2)
         ρout = 1 + sqrt(1 - a^2)
         kr = ((ρ1-ρ2)/(ρ1-ρ3)) * ((ρ3-ρ4)/(ρ2-ρ4))
         hM = (ρ3 - 1) / (ρ2 - 1) * (ρ1 - ρ2) / (ρ1 - ρ3)
-        return a * En * (2 / (ρ3 - 1) * (1 - (ρ2 - ρ3) / (ρ2 - 1) * Elliptic.Π(hM, π/2, kr) / Elliptic.K(kr))
+        return a * En * (2 / (ρ3 - 1) * (1 - (ρ2 - ρ3) / (ρ2 - 1) * _Pi(hM, kr) / _K(kr))
                 + (2 - a*L / En) / (2 * (ρ3 - 1)^2) * ((2 - ((ρ1 - ρ3)*(ρ2 - ρ3)) / ((ρ1 - 1)*(ρ2 - 1))) +
-                  ((ρ1 - ρ3)*(ρ2 - ρ4)*(ρ3 - 1)) / ((ρ1 - 1)*(ρ2 - 1)*(ρ4 - 1)) * Elliptic.E(kr) / Elliptic.K(kr) +
-                  (ρ2 - ρ3) / (ρ2 - 1) * ((ρ1 - ρ3)/(ρ1 - 1) + (ρ2 - ρ3)/(ρ2 - 1) + (ρ4 - ρ3)/(ρ4 - 1) - 4) * Elliptic.Π(hM, π/2, kr) / Elliptic.K(kr)))
+                  ((ρ1 - ρ3)*(ρ2 - ρ4)*(ρ3 - 1)) / ((ρ1 - 1)*(ρ2 - 1)*(ρ4 - 1)) * _E(kr) / _K(kr) +
+                  (ρ2 - ρ3) / (ρ2 - 1) * ((ρ1 - ρ3)/(ρ1 - 1) + (ρ2 - ρ3)/(ρ2 - 1) + (ρ4 - ρ3)/(ρ4 - 1) - 4) * _Pi(hM, kr) / _K(kr)))
     else
         # general Kerr
         ρin = 1 - sqrt(1 - a^2)
         ρout = 1 + sqrt(1 - a^2)
         kr = ((ρ1-ρ2)/(ρ1-ρ3)) * ((ρ3-ρ4)/(ρ2-ρ4))
-        Kr = Elliptic.K(kr)
+        Kr = _K(kr)
         hρ(ρ) = ((ρ1-ρ2)/(ρ1-ρ3)) * ((ρ3-ρ)/(ρ2-ρ))
-        H(ρ) = (2*En*ρ - a*L)/(ρ3-ρ) * (1 - (ρ2-ρ3)/(ρ2-ρ) * Elliptic.Π(hρ(ρ), π/2, kr)/Kr)
+        H(ρ) = (2*En*ρ - a*L)/(ρ3-ρ) * (1 - (ρ2-ρ3)/(ρ2-ρ) * _Pi(hρ(ρ), kr)/Kr)
         # a/(2 sqrt(1-a^2)) [H(ρout) - H(ρin)] as a divided difference (finite as |a| -> 1)
         return a * _horizon_divdiff(H, ρout, ρin)
     end
@@ -188,10 +200,10 @@ function kerr_geo_mino_frequency_ϕ_θ(a, p, e, x, EnLQ, zpzm)
     En, L, Q = EnLQ
     zp, zm = zpzm
 
-    iszero(x) && return 0.0     # Lz = 0: the polar part Lz/(1 − z²) of dφ/dλ vanishes
+    iszero(x) && return zero(L)     # Lz = 0: the polar part Lz/(1 − z²) of dφ/dλ vanishes
     m = a^2*(1 - En^2)*(zm/zp)^2
     # Π(z₋²|m) with 1 − z₋² = x² supplied: for |x| ≪ 1 the characteristic is within rounding of 1
-    return L * _complete_pi(zm^2, x^2, m) / Elliptic.K(m)
+    return L * _complete_pi(zm^2, x^2, m) / _K(m)
 end
 
 function kerr_geo_mino_frequency_t(a, p, e, x, params, rhos, zvals)
@@ -216,28 +228,28 @@ function kerr_geo_mino_frequency_t_r(a, p, e, x, params, rhos)
     # Π(hr|kr) with 1 − hr formed directly: hr → 1 as e → 1
     Πr = _complete_pi(hr, (ρ2 - ρ3)/(ρ1 - ρ3), kr)
 
-    if isapprox(a^2, 1.0; atol=1e-12)
+    if isapprox(a^2, 1.0; atol=_tol(_float_type(a, p, e, x), 1e-12))
         hM = (ρ1 - ρ2)/(ρ1 - ρ3) * (ρ3 - 1)/(ρ2 - 1)
         return 5 * En + En * (0.5 * ((ρ3*(ρ1 + ρ2 + ρ3) - ρ1*ρ2) +
-                (ρ1 + ρ2 + ρ3 + ρ4)*(ρ2 - ρ3) * Πr/Elliptic.K(kr) +
-                (ρ1 - ρ3)*(ρ2 - ρ4) * Elliptic.E(kr)/Elliptic.K(kr)) +
-                2*(ρ3 + (ρ2 - ρ3) * Πr/Elliptic.K(kr)) +
-                (2*(4 - a*L/En))/(ρ3 - 1) * (1 - (ρ2 - ρ3)/(ρ2 - 1) * Elliptic.Π(hM, π/2, kr)/Elliptic.K(kr)) +
+                (ρ1 + ρ2 + ρ3 + ρ4)*(ρ2 - ρ3) * Πr/_K(kr) +
+                (ρ1 - ρ3)*(ρ2 - ρ4) * _E(kr)/_K(kr)) +
+                2*(ρ3 + (ρ2 - ρ3) * Πr/_K(kr)) +
+                (2*(4 - a*L/En))/(ρ3 - 1) * (1 - (ρ2 - ρ3)/(ρ2 - 1) * _Pi(hM, kr)/_K(kr)) +
                 (2 - a*L/En)/(ρ3 - 1)^2 * (
                     (2 - ((ρ1 - ρ3)*(ρ2 - ρ3))/((ρ1 - 1)*(ρ2 - 1))) +
-                    ((ρ1 - ρ3)*(ρ2 - ρ4)*(ρ3 - 1))/((ρ1 - 1)*(ρ2 - 1)*(ρ4 - 1)) * Elliptic.E(kr)/Elliptic.K(kr) +
-                    (ρ2 - ρ3)/(ρ2 - 1) * ((ρ1 - ρ3)/(ρ1 - 1) + (ρ2 - ρ3)/(ρ2 - 1) + (ρ4 - ρ3)/(ρ4 - 1) - 4) * Elliptic.Π(hM, π/2, kr)/Elliptic.K(kr)
+                    ((ρ1 - ρ3)*(ρ2 - ρ4)*(ρ3 - 1))/((ρ1 - 1)*(ρ2 - 1)*(ρ4 - 1)) * _E(kr)/_K(kr) +
+                    (ρ2 - ρ3)/(ρ2 - 1) * ((ρ1 - ρ3)/(ρ1 - 1) + (ρ2 - ρ3)/(ρ2 - 1) + (ρ4 - ρ3)/(ρ4 - 1) - 4) * _Pi(hM, kr)/_K(kr)
                 )
             )
     end
     
     term1 = (a^2 + 4) * En
     term2 = En * (0.5 * (ρ3*(ρ1 + ρ2 + ρ3) - ρ1*ρ2 + 
-             (ρ1 + ρ2 + ρ3 + ρ4)*(ρ2 - ρ3) * Πr/Elliptic.K(kr) +
-             (ρ1 - ρ3)*(ρ2 - ρ4) * Elliptic.E(kr)/Elliptic.K(kr)) +
-             2*(ρ3 + (ρ2 - ρ3) * Πr/Elliptic.K(kr)) +
+             (ρ1 + ρ2 + ρ3 + ρ4)*(ρ2 - ρ3) * Πr/_K(kr) +
+             (ρ1 - ρ3)*(ρ2 - ρ4) * _E(kr)/_K(kr)) +
+             2*(ρ3 + (ρ2 - ρ3) * Πr/_K(kr)) +
              2 * _horizon_divdiff(ρ -> ((4 - a*L/En)*ρ - 2a^2)/(ρ3 - ρ) *
-                (1 - (ρ2 - ρ3)/(ρ2 - ρ) * Elliptic.Π(((ρ1 - ρ2)/(ρ1 - ρ3)) * ((ρ3 - ρ)/(ρ2 - ρ)), π/2, kr)/Elliptic.K(kr)),
+                (1 - (ρ2 - ρ3)/(ρ2 - ρ) * _Pi(((ρ1 - ρ2)/(ρ1 - ρ3)) * ((ρ3 - ρ)/(ρ2 - ρ)), kr)/_K(kr)),
                 ρout, ρin))
     return term1 + term2
 end
@@ -249,12 +261,12 @@ function kerr_geo_mino_frequency_t_θ(a, p, e, x, params, zvals)
     # E Q (1 − E(m)/K(m))/((1 − E²) z₋²) with m = a²(1 − E²)(z₋/z₊)², written with
     # D(m) = (K − E)/m so that nothing is divided by 1 − E² (→ 0 as e → 1); −a²E for Q = 0
     m = a^2*(1 - En^2)*(zm/zp)^2
-    return En*Q*a^2/zp^2 * _elliptic_D(π/2, m)/Elliptic.K(m) - a^2*En
+    return En*Q*a^2/zp^2 * _D(m)/_K(m) - a^2*En
 end
 
 function kerr_geo_mino_frequencies(a, p, e, x)
 
-    if isapprox(a, 0.0; atol=1e-12)
+    if isapprox(a, 0.0; atol=_tol(_float_type(a, p, e, x), 1e-12))
         return schwarzschild_geo_mino_frequencies(a, p, e, x)
     end
     if a < 0
@@ -265,7 +277,7 @@ function kerr_geo_mino_frequencies(a, p, e, x)
             "ϒϕ" => real(- freqs["ϒϕ"]),
             "ϒt" => real(freqs["ϒt"])
         )
-    elseif isapprox(e, 0.0; atol=1e-12) && isapprox(x, 1.0; atol=1e-12)
+    elseif isapprox(e, 0.0; atol=_tol(_float_type(a, p, e, x), 1e-12)) && isapprox(x, 1.0; atol=_tol(_float_type(a, p, e, x), 1e-12))
         U_r = _sqrt_nonnegative(p * (-2*a^2 + 6*a*sqrt(p) + (-5 + p)*p +
                 ((a - sqrt(p))^2 * (a^2 - 4*a*sqrt(p) - (-4 + p)*p)) /
                 abs(a^2 - 4*a*sqrt(p) - (-4 + p)*p)) /
@@ -303,7 +315,7 @@ function kerr_geo_mino_frequencies(a, p, e, x)
 end
 
 function kerr_geo_boyerlindquist_frequencies(a, p, e, x)
-    if isapprox(a, 0.0; atol=1e-12) && isapprox(e, 0.0; atol=1e-12)
+    if isapprox(a, 0.0; atol=_tol(_float_type(a, p, e, x), 1e-12)) && isapprox(e, 0.0; atol=_tol(_float_type(a, p, e, x), 1e-12))
         return schwarzschild_geo_boyerlindquist_frequencies(a, p, e, x)
     end
 
@@ -325,12 +337,12 @@ function kerr_geo_proper_frequency_factor(a, p, e, x)
     kr = (ρ1 - ρ2) / (ρ1 - ρ3) * (ρ3 - ρ4) / (ρ2 - ρ4)
     kθ = a^2 * (1 - En^2) * (zm / zp)^2
     hr = (ρ1 - ρ2) / (ρ1 - ρ3)
-    Kr = Elliptic.K(kr)
+    Kr = _K(kr)
     r2 = 0.5 * (ρ3 * (ρ1 + ρ2 + ρ3) - ρ1 * ρ2 +
                 (ρ1 + ρ2 + ρ3 + ρ4) * (ρ2 - ρ3) * _complete_pi(hr, (ρ2 - ρ3) / (ρ1 - ρ3), kr) / Kr +
-                (ρ1 - ρ3) * (ρ2 - ρ4) * Elliptic.E(kr) / Kr)
+                (ρ1 - ρ3) * (ρ2 - ρ4) * _E(kr) / Kr)
     # a²⟨z²⟩ = a² z₋² D(kθ)/K(kθ), D = (K − E)/kθ
-    a2z2 = a^2 * zm^2 * _elliptic_D(π/2, kθ) / Elliptic.K(kθ)
+    a2z2 = a^2 * zm^2 * _D(kθ) / _K(kθ)
     return r2 + a2z2
 end
 
@@ -341,16 +353,27 @@ function kerr_geo_proper_frequencies(a, p, e, x)
 end
 
 """
-    kerr_geo_frequencies(a, p, e, x; Time="Mino")
+    kerr_geo_frequencies(a, p, e, x; Time="Mino", precision=nothing)
 
 The fundamental frequencies of the bound orbit `(a, p, e, x)`, 0 ≤ e < 1, as a `Dict`
 (other eccentricities have no periodic radial motion and raise a `DomainError`). `Time="Mino"`
 gives the Mino-time frequencies `"ϒr"`, `"ϒθ"`, `"ϒϕ"` and `"ϒt"` (the mean of dt/dλ);
 `Time="BoyerLindquist"` gives `"Ωr"`, `"Ωθ"`, `"Ωϕ"`, the frequencies in coordinate time,
 Ωᵢ = ϒᵢ/ϒt; `Time="Proper"` gives the frequencies in proper time, ϒᵢ divided by the mean
-of dτ/dλ.
+of dτ/dλ. The frequencies are computed in the floating-point type of `(a, p, e, x)`;
+`precision = p` converts them to `BigFloat` of `p` bits.
 """
-function kerr_geo_frequencies(a, p, e, x; Time="Mino")
+function kerr_geo_frequencies(a, p, e, x; Time="Mino", precision=nothing)
+    precision === nothing || return setprecision(BigFloat, precision) do
+        kerr_geo_frequencies(BigFloat(a), BigFloat(p), BigFloat(e), BigFloat(x); Time=Time)
+    end
+    T = _float_type(a, p, e, x)
+    return _with_precision(T, _input_precision(a, p, e, x)) do
+        _kerr_geo_frequencies(T(a), T(p), T(e), T(x), Time)
+    end
+end
+
+function _kerr_geo_frequencies(a, p, e, x, Time)
     0 <= e < 1 || throw(DomainError(e,
         "Orbital frequencies are defined for bound orbits, 0 ≤ e < 1."))
     if Time == "Mino"

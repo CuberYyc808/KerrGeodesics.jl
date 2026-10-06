@@ -112,6 +112,8 @@ root of Θ cancels against dz, so the integrand is smooth up to the Lz/ε spike,
 the adaptive rule resolves. For a = 0 the pendular value is π sgn(Lz) exactly.
 """
 function _polar_period_azimuth(a, energy, lz, q, sector)
+    T = _float_type(a, energy, lz, q)
+    quarter, rtol = T(π) / 2, _tol(T, 1e-14)
     c = -a^2 * _e2m1(energy)                          # Θ(u) = c u² − (Q + Lz² + c) u + Q
     b = q + lz^2 + c
     if sector === :vortical
@@ -127,9 +129,9 @@ function _polar_period_azimuth(a, energy, lz, q, sector)
         dw = s / (-c)
         β = -c
         f(ζ) = lz / (sqrt(up - dw * sin(ζ)^2) * (ε + dw * sin(ζ)^2) * sqrt(β))
-        return 2 * quadgk(f, 0.0, pi / 2; rtol=1e-14)[1]
+        return 2 * quadgk(f, zero(T), quarter; rtol=rtol)[1]
     end
-    iszero(a) && return pi * sign(lz)
+    iszero(a) && return T(π) * sign(lz)
     # pendular: u₁ = z²_max is the root of Θ in (0, 1]; G(u) = Θ(u)/(u₁ − u) = Q/u₁ − c u.
     # ε = 1 − u₁ is the root in (0, 1] of Θ(1 − w) = c w² − (2c − b) w − Lz² (same discriminant,
     # roots with product −Lz²/c), so it keeps its digits when u₂ lies within rounding of 1
@@ -146,7 +148,7 @@ function _polar_period_azimuth(a, energy, lz, q, sector)
         ε = 0 < w_small <= 1 ? w_small : w_big
     end
     g(ζ) = lz / ((ε + u1 * sin(ζ)^2) * sqrt(q / u1 - c * u1 * cos(ζ)^2))
-    return 2 * quadgk(g, 0.0, pi / 2; rtol=1e-14)[1]
+    return 2 * quadgk(g, zero(T), quarter; rtol=rtol)[1]
 end
 
 """

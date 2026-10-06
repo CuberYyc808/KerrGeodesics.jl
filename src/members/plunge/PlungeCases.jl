@@ -27,11 +27,11 @@ function _plunge_member(a, energy, lz, q, component, polar, λ_h, turn, r_of, la
 end
 
 # Mino-time checks of a member from a turning point (λ = 0) into the horizon (λ = λ_h):
-# (r, z, τ, v, ψ) on [0, λ_h], (t, φ) on [0, λ_h). λ within MINO_ENDPOINT_TOL below 0 is the
+# (r, z, τ, v, ψ) on [0, λ_h], (t, φ) on [0, λ_h). λ within `_mino_endpoint_tol` below 0 is the
 # turning point.
 function _turning_to_horizon_checks(λ_h)
     function check(λ)
-        -MINO_ENDPOINT_TOL <= λ <= λ_h || throw(DomainError(λ, "Mino time must lie in [0, λ_h = $(λ_h)]."))
+        -_mino_endpoint_tol(_float_type(λ, λ_h)) <= λ <= λ_h || throw(DomainError(λ, "Mino time must lie in [0, λ_h = $(λ_h)]."))
         return max(float(λ), 0.0)
     end
     check_bl(λ) = (check(λ) < λ_h || throw(DomainError(λ,
@@ -105,7 +105,9 @@ function _plunge_component(a, energy, lz, q, classification, case_id; polar_phas
     component = _class_component(classification, :plunge, case_id)
     # the turning point is the reference event of every Plunge member
     reference_radius === nothing || isapprox(reference_radius,
-        component.UpperEndpoint.Radius; atol=RADIUS_TOL, rtol=RADIUS_TOL) || error(
+        component.UpperEndpoint.Radius;
+        atol=_radius_tol(typeof(component.UpperEndpoint.Radius)),
+        rtol=_radius_tol(typeof(component.UpperEndpoint.Radius))) || error(
         "Plunge members use their turning point as the reference radius.")
     return _plunge_radial_component(a, energy, lz, q, classification, component, polar_phase)
 end

@@ -18,7 +18,7 @@ function _constant_latitude_polar_solution(a, energy, lz, q, polar_phase;
     time_rate = a * lz - a^2 * energy * (1 - u0)
     formula = lambda -> (
         z=z0,
-        uz=0.0,
+        uz=zero(z0),
         sin2=1 - u0,
         theta=atan(sqrt(1 - u0), z0),
         phi=phi_rate * float(lambda),
@@ -47,7 +47,7 @@ function _vortical_polar_solution(a, energy, lz, q, polar_phase;
         a, energy, lz, q, polar_phase; hemisphere=hemisphere)
     uminus, uplus = minmax(roots.u_small, roots.u_big)
     # Θ(1) = −Lz² puts u₊ ≤ 1; for Lz² ≪ |Q| the rounded root can land an ulp above 1
-    0 < uminus < uplus <= 1 + POLAR_ROOT_SLACK || error(
+    0 < uminus < uplus <= 1 + _polar_root_slack(_float_type(uplus)) || error(
         "Vortical polar roots must satisfy 0<uminus<uplus≤1.")
     uplus = min(uplus, 1.0)
     # z = ±√u₊ dn(u|m), m = (u₊ − u₋)/u₊ with u₊ − u₋ = √disc/β, and 1 − m = u₋/u₊
@@ -160,7 +160,7 @@ function _axis_crossing_polar_solution(a, energy, lz, q, polar_phase;
         p = primitive(u)
         sin2=tanh(u)^2
         return (z=z, uz=-signz * omega * sech * tanh(u), sin2=sin2,
-            theta=atan(sqrt(sin2), z), phi=0.0,
+            theta=atan(sqrt(sin2), z), phi=zero(z),
             t=p.t - p0.t, tau=p.tau - p0.tau)
     end
     return (formula=formula, metadata=merge(meta, (modulus=1.0, omega=omega,
@@ -215,7 +215,7 @@ function _polar_solution(a, energy, lz, q, sector, polar_phase;
         zminus = roots.u_small
         # The amplitude remains representable when its square underflows.
         amplitude = sqrt(q) / sqrt(roots.cu_big)
-        0 < amplitude <= sqrt(1 + POLAR_ROOT_SLACK) || error("Polar turning root with E<=1 lies outside (0,1].")
+        0 < amplitude <= sqrt(1 + _polar_root_slack(_float_type(amplitude))) || error("Polar turning root with E<=1 lies outside (0,1].")
         zminus = min(zminus, 1.0)
         # m = z₋/z₊ and 1 − m = (z₊ − z₋)/z₊ = √disc/(c z₊)
         return _elliptic_polar_solution(a, energy, lz, q; kind=:cd, A=zminus,

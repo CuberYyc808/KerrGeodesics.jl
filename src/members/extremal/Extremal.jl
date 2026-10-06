@@ -61,22 +61,24 @@ end
 # exactly one, so the primitives take their branch values without the √eps error of a
 # rounded root.
 function _horizon_root_S(X)
+    T = float(typeof(X))
     if abs(X) < 0.25
         # asinh(√X)/√X = Σ c_k X^k, c_{k+1}/c_k = −(2k + 1)²/((2k + 2)(2k + 3)); S₁ and S₂ from the
-        # same terms; the tail after 32 terms is below 4^(−30)
-        c = 1.0; S = 0.0; S1 = 0.0; S2 = 0.0; Xk = 1.0
-        for k in 0:32
+        # same terms. Each term is at most 1/4 of the previous: 33 terms (tail below 4^(−30)) in
+        # Float64, ⌈p/2⌉ + 6 for p bits
+        c = one(T); S = zero(T); S1 = zero(T); S2 = zero(T); Xk = one(T)
+        for k in 0:cld(precision(T), 2) + 5
             S += c * Xk
             k >= 1 && (S1 += c * Xk / X)
             k >= 2 && (S2 += c * Xk / X^2)
-            c *= -(2k + 1)^2 / ((2k + 2) * (2k + 3))
+            c *= T(-(2k + 1)^2) / ((2k + 2) * (2k + 3))
             Xk *= X
         end
-        return iszero(X) ? (1.0, -1 / 6, 3 / 40) : (S, S1, S2)
+        return iszero(X) ? (one(T), -inv(T(6)), T(3) / 40) : (S, S1, S2)
     end
     S = X > 0 ? asinh(sqrt(X)) / sqrt(X) : asin(sqrt(-X)) / sqrt(-X)
     S1 = (S - 1) / X
-    return S, S1, (S1 + 1 / 6) / X
+    return S, S1, (S1 + inv(T(6))) / X
 end
 
 # D and ρ = D + h1 of the quadratic, ρ without cancellation for h1 < 0
@@ -88,12 +90,13 @@ end
 function _horizon_root_primitives(h2, h1, h0, z; root=false, sqrt_h=nothing)
     h = (h2 * z + h1) * z + h0
     # a negative h beyond the rounding of its own terms lies outside the allowed interval
-    root || h >= -32 * eps(Float64) * (abs(h2 * z^2) + abs(h1 * z) + abs(h0)) || throw(DomainError(h,
+    T = typeof(h)
+    root || h >= -32 * eps(T) * (abs(h2 * z^2) + abs(h1 * z) + abs(h0)) || throw(DomainError(h,
         "The horizon-root quadratic lies outside its allowed radial interval."))
-    w = root ? 0.0 : sqrt_h === nothing ? sqrt(max(h, 0.0)) : sqrt_h
+    w = root ? zero(T) : sqrt_h === nothing ? sqrt(max(h, zero(T))) : sqrt_h
     D, ρ = _horizon_root_scales(h2, h1, h0)
     position = root ? sign(2h2 * z + h1) : (2h2 * z + h1) / D
-    if position > 1 / sqrt(2.0)
+    if position > 1 / sqrt(T(2))
         S, S1, S2 = _horizon_root_S(4h2 * w^2 / D^2)
         k0 = 2 * (w / D) * S
         k1 = -4h0 * w / (D * ρ) - 4h1 * w^3 * S1 / D^3
@@ -103,7 +106,7 @@ function _horizon_root_primitives(h2, h1, h0, z; root=false, sqrt_h=nothing)
     end
     h2 < 0 || throw(DomainError(z, "The horizon-root primitives of h2 > 0 lie on the branch 2 h2 z + h1 ≥ D."))
     # acos(a): near a = −1 through 1 + a = −4 h2 h/(D (D − 2 h2 z − h1)), which keeps its digits
-    angle = position < -1 / sqrt(2.0) ?
+    angle = position < -1 / sqrt(T(2)) ?
         pi - 2 * asin(sqrt(-2h2 * w^2 / (D * (D - 2h2 * z - h1)))) : acos(position)
     k0 = angle / sqrt(-h2)
     k1 = w / h2 - h1 * k0 / (2h2)
@@ -113,26 +116,29 @@ end
 
 # (cosh √y − 1)/y and sinh(√y)/√y for y of either sign (cos, sin for y < 0), the inversion of
 # k0: 2 h2 z + h1 = D cosh(√h2 k0)
-_horizon_root_G(y) = y > 0 ? 2 * sinh(sqrt(y) / 2)^2 / y : y < 0 ? 2 * sin(sqrt(-y) / 2)^2 / (-y) : 0.5
-_horizon_root_Sh(y) = y > 0 ? sinh(sqrt(y)) / sqrt(y) : y < 0 ? sin(sqrt(-y)) / sqrt(-y) : 1.0
+_horizon_root_G(y) = y > 0 ? 2 * sinh(sqrt(y) / 2)^2 / y : y < 0 ? 2 * sin(sqrt(-y) / 2)^2 / (-y) :
+    one(float(y)) / 2
+_horizon_root_Sh(y) = y > 0 ? sinh(sqrt(y)) / sqrt(y) : y < 0 ? sin(sqrt(-y)) / sqrt(-y) :
+    one(float(y))
 
 # The horizon-root radial model in z = 1/(r − 1) (header of `_horizon_root_primitives`). Near the
 # horizon root r = 1 + 1/z loses all of z's digits (and saturates at r = 1), so the Mino-time
 # path works in z: `_hr_basis_from(m, left, delta)` evaluates the primitives at the z reached
 # after delta. One struct holds the quadratic and the branch's turning points; the functions
 # below evaluate it (closures over each other would nest the model in every member type).
-struct _HorizonRootModel{T}
-    h2::Float64; h1::Float64; h0::Float64
-    D::Float64; ρ::Float64
-    k0inf::Float64                  # k0 at z = 0 (r = ∞) when the orbit reaches infinity
-    turns::T                        # the branch's turning points (roots of h)
+struct _HorizonRootModel{T,U}
+    h2::T; h1::T; h0::T
+    D::T; ρ::T
+    k0inf::T                        # k0 at z = 0 (r = ∞) when the orbit reaches infinity
+    turns::U                        # the branch's turning points (roots of h)
 end
 
 function _horizon_root_model(energy,q; turns=())
+    T=_float_type(energy,q)
     h0=_e2m1(energy); h1=4energy^2-2; h2=3energy^2-1-q
     D,ρ=_horizon_root_scales(h2,h1,h0)
-    k0inf=h0>=0 ? _horizon_root_primitives(h2,h1,h0,0.0)[1] : NaN
-    return _HorizonRootModel(h2,h1,h0,D,ρ,k0inf,turns)
+    k0inf=h0>=0 ? _horizon_root_primitives(h2,h1,h0,zero(T))[1] : T(NaN)
+    return _HorizonRootModel{T,typeof(turns)}(h2,h1,h0,D,ρ,k0inf,turns)
 end
 
 # (1/z is a root of the reversed quadratic exactly when z is a root of h)
@@ -172,7 +178,8 @@ function _hr_mino(m::_HorizonRootModel,r)
 end
 
 function _radial_increment(model,left,right)
-    left==right && return (I0=0.0,I1=0.0,I2=0.0,J1=0.0,J2=0.0)
+    o=zero(_float_type(left,right))
+    left==right && return (I0=o,I1=o,I2=o,J1=o,J2=o)
     if right<left
         value=_radial_increment(model,right,left)
         return NamedTuple{keys(value)}(Tuple(-item for item in values(value)))
@@ -208,18 +215,21 @@ _phi_h(a,r)=-a/(r-1)
 function _extremal_polar_engine(a,energy,lz,q,sector,phase;
         axis=nothing,polar_hemisphere::Symbol=:north)
     if axis!==nothing
-        z0=axis===:north ? 1.0 : axis===:south ? -1.0 :
+        T=_float_type(a,energy,lz,q)
+        o=zero(T)
+        z0=axis===:north ? one(T) : axis===:south ? -one(T) :
             throw(ArgumentError("axis must be :north or :south"))
-        formula=lambda -> (z=z0,uz=0.0,sin2=0.0,theta=acos(z0),phi=0.0,t=0.0,tau=lambda)
-        return (formula=formula,sector=:axis_constant,phase=0.0,
-            metadata=(sector=:axis_constant,phase=0.0,phase_convention=:not_applicable))
+        formula=lambda -> (z=z0,uz=o,sin2=o,theta=acos(z0),phi=o,t=o,tau=lambda)
+        return (formula=formula,sector=:axis_constant,phase=o,
+            metadata=(sector=:axis_constant,phase=o,phase_convention=:not_applicable))
     end
     selected=sector!==nothing ? sector :
         _axis_crossing(a,energy,lz,q) ? :axis_crossing :
         iszero(q) ? :equatorial : q>0 ? :pendular : :vortical
-    solution=_polar_solution(a,energy,lz,q,selected,float(phase);
+    T=_float_type(a,energy,lz,q)
+    solution=_polar_solution(a,energy,lz,q,selected,T(phase);
         hemisphere=polar_hemisphere)
-    return (formula=solution.formula,sector=selected,phase=float(phase),metadata=solution.metadata,
+    return (formula=solution.formula,sector=selected,phase=T(phase),metadata=solution.metadata,
         solution=solution)
 end
 
@@ -290,14 +300,15 @@ end
 
 # positive roots z = r − 1 of a z² + b z + c (the exterior roots at |a| = 1); `linear` for E = 1
 function _positive_roots(a,b,c; linear)
-    exterior=ROOT_ATOL+ROOT_RTOL
+    T=_float_type(a,b,c)
+    exterior=_root_atol(T)+_root_rtol(T)
     if linear
-        iszero(b) && return Float64[]
+        iszero(b) && return T[]
         root=-c/b
-        return root>exterior ? [root] : Float64[]
+        return root>exterior ? [root] : T[]
     end
     disc=b^2-4a*c
-    disc>=0 || return Float64[]
+    disc>=0 || return T[]
     roots=sort([(-b-sqrt(disc))/(2a),(-b+sqrt(disc))/(2a)])
     return [root for root in roots if root>exterior]
 end
@@ -310,7 +321,7 @@ function _horizon_root_specs(a,energy,lz,q)
     q>=0 || return (structure=structure,specs=NamedTuple[],
         excluded=(:horizon_root_negative_Q_polar_inadmissible,))
     x=energy^2; aa=_e2m1(energy); bb=4x-2; cc=3x-1-q
-    tol=HORIZON_ROOT_COEFFICIENT_TOL
+    tol=_horizon_root_coefficient_tol(_float_type(a,energy,lz,q))
     if abs(bb)<=tol && abs(cc)<=tol
         return (structure=structure,specs=NamedTuple[],excluded=(:horizon_root_quadruple_forbidden,))
     end
@@ -353,7 +364,7 @@ function _horizon_root_specs(a,energy,lz,q)
                 lower=1.0,upper=turn,kind=:horizon_root_turn,component=nothing))
         elseif bb>tol && length(roots)==2
             qstable=x^2/(1-x)
-            if abs(q-qstable)<=1e-10*max(1.0,abs(qstable))
+            if abs(q-qstable)<=_tol(_float_type(q),1e-10)*max(1.0,abs(qstable))
                 radius=1+(2x-1)/(1-x)
                 push!(specs,(id=:A_X2,broad=:stable,
                     formula=:EXT_CONSTANT,lower=radius,upper=radius,
@@ -522,7 +533,7 @@ function _extremal_endpoint_metadata(kind,endpoint,model,a,energy)
     return if model isa _HorizonRootModel &&
             kind in (:horizon_root_turn,:horizon_root_from_infinity)
         c=model.h2; b=model.h1
-        if abs(c)>HORIZON_ROOT_COEFFICIENT_TOL
+        if abs(c)>_horizon_root_coefficient_tol(_float_type(c))
             (kind=:exact_extremal_horizon_root_double,
              horizon_multiplicity=2,series_type=:laurent,
              finite_regular_endpoint=false,

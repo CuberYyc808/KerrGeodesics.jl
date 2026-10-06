@@ -77,7 +77,7 @@ function _k8_model(roots)
             _quadratic_denominator_primitive(x1 - h, d, y))
     end
     radius(δ) = begin
-        y = min(tanh(max(δ / scale, 0.0)), prevfloat(1.0))
+        y = min(tanh(max(δ / scale, 0.0)), prevfloat(one(scale)))
         x1 + d * y^2
     end
     mino(r) = basis(r).I0
@@ -120,7 +120,7 @@ function _k11_model(energy, roots)
     end
     function radius(δ)
         jn = max(δ / scale, 0.0)
-        z = min(tanh(sqrt(n) * jn), prevfloat(1.0))
+        z = min(tanh(sqrt(n) * jn), prevfloat(one(scale)))
         y = z / sqrt(n)
         return (x2 - x1 * y^2) / (1 - y^2)
     end
@@ -151,7 +151,7 @@ function _k7_model(roots)
     end
     # δ from the infinity endpoint, where I0 = 0
     function radius(δ)
-        δ > 0 || return Inf
+        δ > 0 || return oftype(x1 + d, Inf)
         u = inv(tanh(δ / scale))
         return x1 + d * u^2
     end
@@ -206,7 +206,7 @@ function _k10_model(energy, roots)
     i0_infinity = -scale * atanh(sqrt(k))
     function radius(δ)
         z = tanh(max(-(i0_infinity - δ) / scale, 0.0))
-        z = clamp(z, nextfloat(sqrt(k)), prevfloat(1.0))
+        z = clamp(z, nextfloat(sqrt(k)), prevfloat(one(k)))
         return x2 + h0 / (z^2 - k)
     end
     mino(r) = i0_infinity - basis(r).I0
@@ -242,15 +242,15 @@ function _homoclinic_model(energy, x1, rc, ra)
         return sqrt((r - x1) / (ra - r))
     end
     jalpha(t) = log(abs((t - alpha) / (t + alpha))) / (2 * alpha)
-    j1(t) = atan(t) - pi / 2
-    j2(t) = 0.5 * (atan(t) - pi / 2 + t / (1 + t^2))
+    j1(t) = atan(t) - oftype(t, π) / 2
+    j2(t) = (atan(t) - oftype(t, π) / 2 + t / (1 + t^2)) / 2
     a1(t) = (jalpha(t) - j1(t)) / (1 + alpha^2)
     a2(t) = (jalpha(t) - j1(t)) / (1 + alpha^2)^2 -
         j2(t) / (1 + alpha^2)
 
     function basis(r)
         if r == ra
-            return (I0=0.0, I1=0.0, I2=0.0)
+            return (I0=zero(ra), I1=zero(ra), I2=zero(ra))
         end
         t = t_of_r(r)
         ja = jalpha(t)
@@ -278,13 +278,13 @@ function _homoclinic_model(energy, x1, rc, ra)
     end
 
     function pole(h, r)
-        r == ra && return 0.0
+        r == ra && return zero(ra)
         t = t_of_r(r)
         a0 = x1 - h
         b0 = ra - h
         coefficient_repeated = 1 / (rc - h)
         coefficient_quadratic = (rc - ra) / (rc - h)
-        quadratic_infinity = a0 > 0 ? pi / (2 * sqrt(a0 * b0)) : 0.0
+        quadratic_infinity = a0 > 0 ? pi / (2 * sqrt(a0 * b0)) : zero(a0)
         return scale * (
             coefficient_repeated * jalpha(t) +
             coefficient_quadratic *
@@ -299,7 +299,7 @@ function _homoclinic_model(energy, x1, rc, ra)
         b0 = ra - h
         coefficient_repeated = 1 / (rc - h)
         coefficient_quadratic = (rc - ra) / (rc - h)
-        quadratic_infinity = a0 > 0 ? pi / (2 * sqrt(a0 * b0)) : 0.0
+        quadratic_infinity = a0 > 0 ? pi / (2 * sqrt(a0 * b0)) : zero(a0)
         return -scale * (
             coefficient_repeated * jalpha(t) +
             coefficient_quadratic *
@@ -353,5 +353,5 @@ function _j_z2_minus(k, z)
     elseif z > root
         return log(abs((z - root) / (z + root))) / (2 * root)
     end
-    return -Inf
+    return -oftype(float(z), Inf)
 end

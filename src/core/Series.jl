@@ -1,8 +1,11 @@
 # Truncated power-series arithmetic (product, inverse, quotient, square root, exponential,
-# composition and reversion) used by the near-horizon series of the coordinates.
+# composition and reversion) used by the near-horizon series of the coordinates, in the
+# floating-point type of the coefficients.
+
+_series_type(a) = float(eltype(a))
 
 function _series_mul(a, b, order)
-    c = zeros(Float64, order + 1)
+    c = zeros(promote_type(_series_type(a), _series_type(b)), order + 1)
     for i in 0:order
         ai = a[i + 1]
         iszero(ai) && continue
@@ -17,10 +20,11 @@ function _series_inv(a, order)
     if iszero(a[1])
         error("Series inverse requires a nonzero constant term.")
     end
-    b = zeros(Float64, order + 1)
+    T = _series_type(a)
+    b = zeros(T, order + 1)
     b[1] = inv(a[1])
     for n in 1:order
-        s = 0.0
+        s = zero(T)
         for k in 1:n
             s += a[k + 1] * b[n - k + 1]
         end
@@ -37,10 +41,11 @@ function _series_sqrt_positive(a, order)
     if a[1] <= 0
         error("Positive-root series square root requires positive leading coefficient.")
     end
-    b = zeros(Float64, order + 1)
+    T = _series_type(a)
+    b = zeros(T, order + 1)
     b[1] = sqrt(a[1])
     for n in 1:order
-        s = 0.0
+        s = zero(T)
         for k in 1:(n - 1)
             s += b[k + 1] * b[n - k + 1]
         end
@@ -50,10 +55,11 @@ function _series_sqrt_positive(a, order)
 end
 
 function _series_exp(a, order)
-    b = zeros(Float64, order + 1)
+    T = _series_type(a)
+    b = zeros(T, order + 1)
     b[1] = exp(a[1])
     for n in 1:order
-        s = 0.0
+        s = zero(T)
         for k in 1:n
             s += k * a[k + 1] * b[n - k + 1]
         end
@@ -63,12 +69,13 @@ function _series_exp(a, order)
 end
 
 function _series_compose(f, g, order)
-    if abs(g[1]) > 100 * eps(Float64)
+    T = promote_type(_series_type(f), _series_type(g))
+    if abs(g[1]) > 100 * eps(T)
         error("Series composition expects an inner series with zero constant term.")
     end
-    out = zeros(Float64, order + 1)
-    power = zeros(Float64, order + 1)
-    power[1] = 1.0
+    out = zeros(T, order + 1)
+    power = zeros(T, order + 1)
+    power[1] = 1
     for n in 0:order
         if n > 0
             power = _series_mul(power, g, order)
@@ -81,14 +88,15 @@ function _series_compose(f, g, order)
 end
 
 function _series_revert_unit_linear(f, order)
-    if abs(f[1]) > 100 * eps(Float64) || abs(f[2] - 1) > 1e-10
+    T = _series_type(f)
+    if abs(f[1]) > 100 * eps(T) || abs(f[2] - 1) > _tol(T, 1e-10)
         error("Series reversion requires q = x + O(x²).")
     end
-    g = zeros(Float64, order + 1)
-    g[2] = 1.0
+    g = zeros(T, order + 1)
+    g[2] = 1
     for n in 2:order
         trial = copy(g)
-        trial[n + 1] = 0.0
+        trial[n + 1] = 0
         composed = _series_compose(f, trial, order)
         g[n + 1] = -composed[n + 1]
     end

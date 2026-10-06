@@ -26,3 +26,5 @@ end
     @test member.Status isa NamedTuple && member.Trajectory isa NamedTuple
     @test kerr_geo_members(family)[end] === member
 end
+
+include(joinpath(@__DIR__, "precision", "runtests.jl"))

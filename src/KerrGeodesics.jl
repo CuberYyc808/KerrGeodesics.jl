@@ -15,13 +15,16 @@ G = c = M = 1.
 """
 module KerrGeodesics
 
-using Elliptic
 using Polynomials
 using QuadGK
 using Roots
 
+include("core/Precision.jl")
 include("core/Spectral.jl")
-include("core/Elliptic.jl")
+include("core/elliptic/Carlson.jl")
+include("core/elliptic/Legendre.jl")
+include("core/elliptic/Jacobi.jl")
+include("core/elliptic/Interface.jl")
 include("core/Series.jl")
 include("core/ExactInputArithmetic.jl")
 include("core/Metric.jl")
@@ -62,7 +65,6 @@ include("members/capture/CaptureCases.jl")
 include("members/trapped/TrappedCases.jl")
 include("members/extremal/Extremal.jl")
 include("members/extremal/EngineMembers.jl")
-include("interfaces/ReferenceJacobi.jl")
 include("interfaces/apex/ConstantsOfMotion.jl")
 include("interfaces/apex/OrbitalFrequencies.jl")
 include("interfaces/apex/FourVelocity.jl")

@@ -30,10 +30,12 @@ function _capture_domain(lambda_infinity)
             endpoint_closed=(false, true))
 end
 
-function _c3_complex_parameters(a, energy, lz, q; atol=1e-10, structure=nothing)
+function _c3_complex_parameters(a, energy, lz, q;
+        atol=_tol(_float_type(a, energy, lz, q), 1e-10), structure=nothing)
+    T = _float_type(a, energy, lz, q)
     roots_all = structure===nothing ? radial_roots_for_constants(a, energy, lz, q) : structure.raw_roots
-    real_roots = Float64[]
-    complex_roots = ComplexF64[]
+    real_roots = T[]
+    complex_roots = Complex{T}[]
     if structure===nothing
         for root in roots_all
             if abs(imag(root)) <= atol
@@ -60,7 +62,7 @@ function _c3_complex_parameters(a, energy, lz, q; atol=1e-10, structure=nothing)
     lead = _e2m1(energy)
     lead > 0 || return nothing
     return (
-        energy=float(energy),
+        energy=T(energy),
         lead=lead,
         r1=real_roots[1],
         r2=real_roots[2],
@@ -156,19 +158,19 @@ function _c3_horizon_lambda(c,horizon,radius=Inf)
     return value(result)
 end
 
-struct _C3HorizonRadius{P,J}
+struct _C3HorizonRadius{T,P,J}
     params::P
     landen::J
-    B::Float64; C::Float64; m::Float64; m1::Float64
-    scale::Float64
-    sh::Float64; ch::Float64; dh::Float64
-    si::Float64; ci::Float64; di::Float64
-    base::Float64
-    lambda_infinity::Float64
-    horizon::Tuple{Float64,Float64}
-    separation::Float64
-    momentum::Float64
-    shifted::NTuple{5,Tuple{Float64,Float64}}
+    B::T; C::T; m::T; m1::T
+    scale::T
+    sh::T; ch::T; dh::T
+    si::T; ci::T; di::T
+    base::T
+    lambda_infinity::T
+    horizon::Tuple{T,T}
+    separation::T
+    momentum::T
+    shifted::NTuple{5,Tuple{T,T}}
 end
 
 function _c3_horizon_track(a,E,L,Q,c)
@@ -182,12 +184,15 @@ function _c3_horizon_track(a,E,L,Q,c)
     si=2sqrt(B*C)/(B+C); ci=(B-C)/(B+C); di=sqrt(m1+m*ci^2)
     base=2B*C*(c.r2-c.r1)/((h1[1]+h1[2])*den)
     scale=_c3_scale(c,_c3_wide_shape(c))
-    return _C3HorizonRadius(c,_landen(m,m1),B,C,m,m1,scale[1]+scale[2],
+    T=_float_type(a,E,L,Q)
+    landen=_landen(T(m),T(m1))
+    return _C3HorizonRadius{T,typeof(c),typeof(landen)}(c,landen,B,C,m,m1,
+        scale[1]+scale[2],
         sh,ch,dh,si,ci,di,base,_c3_horizon_lambda(c,h),h,d,p[1]+p[2],co)
 end
 
-function _radial_state(r::_C3HorizonRadius,lambda)
-    iszero(lambda) && return (gap=0.0,velocity=-r.momentum,chart=r)
+function _radial_state(r::_C3HorizonRadius{T},lambda) where {T}
+    iszero(lambda) && return (gap=zero(T),velocity=-r.momentum,chart=r)
     L=r.landen; m=r.m
     s,cn,dn=_ellipj_reduced(-lambda*r.scale/2,L)
     w=r.dh^2+m*r.sh^2*cn^2
@@ -302,10 +307,12 @@ function _c3_radial_model(a, energy, lz, q; structure=nothing)
             shape=_c3_shape(c)))
 end
 
-function _c1_one_real_parameters(a, lz, q; atol=1e-10, structure=nothing)
-    roots_all = structure===nothing ? radial_roots_for_constants(a, 1.0, lz, q) : structure.raw_roots
-    real_roots = Float64[]
-    complex_roots = ComplexF64[]
+function _c1_one_real_parameters(a, lz, q; atol=_tol(_float_type(a, lz, q), 1e-10),
+        structure=nothing)
+    T = _float_type(a, lz, q)
+    roots_all = structure===nothing ? radial_roots_for_constants(a, one(T), lz, q) : structure.raw_roots
+    real_roots = T[]
+    complex_roots = Complex{T}[]
     if structure===nothing
         for root in roots_all
             if abs(imag(root)) <= atol
@@ -502,7 +509,8 @@ function _capture_finite_window(parameters, constants, outcome; polar_phase=0.0)
     tau(λ) = _coords_tau(coords, λ)
     v(λ) = _coords_v(coords, λ)
     psi(λ) = _coords_psi(coords, λ)
-    rstar(λ) = λ >= -MINO_ENDPOINT_TOL ? NaN : kerr_rstar(a, r_of_lambda(λ))
+    rstar(λ) = λ >= -_mino_endpoint_tol(_float_type(a, λ)) ? _float_type(a, λ)(NaN) :
+        kerr_rstar(a, r_of_lambda(λ))
     utheta(λ) = inclined ? -polar.uz(λ) / sqrt(max(1 - polar.z(λ)^2, 0.0)) : 0.0
     phase = _polar_phase_metadata(polar, polar_phase, :future_horizon_regular_endpoint)
 

@@ -1,13 +1,25 @@
 # APEX reference API: `kerr_geo_stable`, the KerrGeoStable record of a Stable orbit from (a, p, e, x).
 
 """
-    kerr_geo_stable(a, p, e, x; initPhases=(0.0, 0.0, 0.0, 0.0))
+    kerr_geo_stable(a, p, e, x; initPhases=(0.0, 0.0, 0.0, 0.0), precision=nothing)
 
 The stable orbit with APEX parameters `(a, p, e, x)` as a `KerrGeoStable` record. The
 initial phases `(qt0, qr0, qθ0, qφ0)` shift t, the radial phase, the polar phase and φ at
 λ = 0; with zero phases, λ = 0 is at periapsis and at the northern polar turning point.
+`precision = p` builds it in `BigFloat` of `p` bits (see `kerr_geo_orbit`).
 """
-function kerr_geo_stable(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0.0, 0.0, 0.0))
+function kerr_geo_stable(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0.0, 0.0, 0.0),
+        precision=nothing)
+    precision === nothing || return setprecision(BigFloat, precision) do
+        kerr_geo_stable(BigFloat(a), BigFloat(p), BigFloat(e), BigFloat(x); initPhases=initPhases)
+    end
+    T = _float_type(a, p, e, x)
+    return _with_precision(T, _input_precision(a, p, e, x)) do
+        _kerr_geo_stable(T(a), T(p), T(e), T(x), initPhases)
+    end
+end
+
+function _kerr_geo_stable(a, p, e, x, initPhases)
     # Orbital Type
     otype = kerr_geo_orbit_type(a, p, e, x)
 

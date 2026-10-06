@@ -3,15 +3,15 @@
 function _theta_phase_from_theta(a, energy, lz, q, theta)
     zm, xi_theta, ktheta = _plunge_polar_parameters(a, energy, lz, q)
     if zm <= 0 || iszero(q)
-        return 0.0
+        return zero(zm)
     end
     z = cos(theta)
     amplitude = z / sqrt(zm)
-    if abs(amplitude) > 1 + 1e-12
+    if abs(amplitude) > 1 + _tol(typeof(amplitude), 1e-12)
         error("initial_theta is outside the allowed polar range for this plunge.")
     end
     amplitude = clamp(amplitude, -1.0, 1.0)
-    return Elliptic.F(asin(amplitude), ktheta) / xi_theta
+    return _F(asin(amplitude), ktheta) / xi_theta
 end
 
 function _radial_phase_from_options(a, energy, lz, q; radial_phase=nothing, initial_radius=nothing, radial_start=:turning_point)
@@ -27,7 +27,7 @@ function _radial_phase_from_options(a, energy, lz, q; radial_phase=nothing, init
         return phase
     end
     if radial_start in (:turning_point, :outer_turning)
-        return 0.0
+        return zero(_float_type(a, energy, lz, q))
     elseif radial_start == :inner_turning
         return lambda_max
     else

@@ -24,9 +24,10 @@ Return the ISCO radius: 6 for `a = 0`, and for `a ≠ 0` the equatorial ISCO wit
 `kerr_geo_isso(a, x)`.
 """
 function kerr_geo_isco(a::Real, x::Real)
-    if isapprox(a, 0.0; atol=1e-12)
-        return 6.0
-    elseif isapprox(abs(x), 1.0; atol=1e-12)
+    T = _float_type(a, x)
+    if isapprox(a, 0; atol=_tol(T, 1e-12))
+        return T(6)
+    elseif isapprox(abs(x), 1; atol=_tol(T, 1e-12))
         return kerr_equatorial_isco(a, x)
     else
         throw(DomainError(x, "kerr_geo_isco is defined for a = 0 and for equatorial " *
@@ -37,20 +38,23 @@ end
 # Photon Sphere
 
 # x = ±1: prograde for a x > 0
-kerr_equatorial_photon_sphere_radius(a::Real, x::Real) = 2 * (1 + cos((2/3) * acos(-a * sign(x))))
+kerr_equatorial_photon_sphere_radius(a::Real, x::Real) =
+    2 * (1 + cos(_float_type(a, x)(2) / 3 * acos(-a * sign(x))))
 
 function kerr_polar_photon_sphere_radius(a::Real, x::Real)
-    arg_denom = (1 - (a^2) / 3.0)
+    T = _float_type(a, x)
+    arg_denom = (1 - (a^2) / 3)
     @assert arg_denom > 0 "Polar formula domain violation (|a| too large for this closed form)."
-    inside = (1 - a^2) / (arg_denom^(3/2))
-    inside_clamped = clamp(inside, -1.0, 1.0)
-    return 1.0 + 2.0 * sqrt(arg_denom) * cos((1/3) * acos(inside_clamped))
+    inside = (1 - a^2) / (arg_denom^(T(3) / 2))
+    inside_clamped = clamp(inside, -1, 1)
+    return 1 + 2 * sqrt(arg_denom) * cos(T(1) / 3 * acos(inside_clamped))
 end
 
 # |a| = 1 (the caller's test); (a, x) → (−a, −x) is a symmetry
 function kerr_extremal_photon_sphere_radius(a::Real, x::Real)
     a < 0 && return kerr_extremal_photon_sphere_radius(-a, -x)
-    return x < sqrt(3) - 1 ? 1.0 + sqrt(2.0) * sqrt(1.0 - x) - x : 1.0
+    T = _float_type(a, x)
+    return x < sqrt(T(3)) - 1 ? 1 + sqrt(T(2)) * sqrt(1 - x) - x : one(T)
 end
 
 function kerr_geo_photon_sphere_radius_numeric(a::Real, x0::Real)
@@ -63,29 +67,30 @@ function kerr_geo_photon_sphere_radius_numeric(a::Real, x0::Real)
     delta = sqrt(delta2)
     f(t) = t^3 + (a^2 * (1 + x0^2) - 3) * t - 2 * delta2 +
         2 * a * x0 * (1 + t) * sqrt((t - delta) * (t + delta))
-    return 1 + find_zero(f, (delta, 3.0), Bisection())
+    return 1 + find_zero(f, (delta, 3one(delta)), Bisection())
 end
 
 function kerr_geo_photon_sphere_radius(a::Real, x::Real)
     @assert abs(x) <= 1.0 "Inclination parameter x must satisfy |x| ≤ 1"
 
+    T = _float_type(a, x)
     # Schwarzschild case
-    if isapprox(a, 0.0; atol=1e-12)
-        return 3.0
+    if isapprox(a, 0; atol=_tol(T, 1e-12))
+        return T(3)
     end
 
     # Extremal analytic
-    if isapprox(abs(a), 1.0; atol=1e-12)
+    if isapprox(abs(a), 1; atol=_tol(T, 1e-12))
         return kerr_extremal_photon_sphere_radius(a, x)
     end
 
     # Equatorial analytic
-    if isapprox(abs(x), 1.0; atol=1e-12)
+    if isapprox(abs(x), 1; atol=_tol(T, 1e-12))
         return kerr_equatorial_photon_sphere_radius(a, x)
     end
 
     # Polar analytic (x ~ 0)
-    if isapprox(abs(x), 0.0; atol=1e-14)
+    if isapprox(abs(x), 0; atol=_tol(T, 1e-14))
         return kerr_polar_photon_sphere_radius(a, x)
     end
 
@@ -156,7 +161,7 @@ function kerr_geo_separatrix(a::Real, e::Real, x::Real)
         err isa DomainError || rethrow()
         E_near                  # still within the rounding sliver above the horizon limit
     end
-    E_near < 2^(1 / 4) * E_far && return p0
+    E_near < 2^(one(E_near) / 4) * E_far && return p0
     throw(DomainError((a, e, x),
         "No timelike orbit with this eccentricity and inclination has a double root at its pericentre."))
 end
@@ -167,7 +172,7 @@ end
 The radius of the innermost bound spherical orbit of inclination `x`: the unstable spherical
 orbit with E = 1, also called the marginally bound orbit; half the e = 1 separatrix.
 """
-kerr_geo_ibso(a::Real, x::Real) = kerr_geo_separatrix(a, 1.0, x) / 2
+kerr_geo_ibso(a::Real, x::Real) = kerr_geo_separatrix(a, one(_float_type(a, x)), x) / 2
 
 # Innermost stable spherical orbit (ISSO)
 
@@ -177,7 +182,7 @@ kerr_geo_ibso(a::Real, x::Real) = kerr_geo_separatrix(a, 1.0, x) / 2
 Return the ISSO radius: the innermost stable spherical orbit of inclination `x`, i.e. the
 `e = 0` separatrix (the equatorial ISCO for `x = ±1`).
 """
-kerr_geo_isso(a::Real, x::Real) = kerr_geo_separatrix(a, 0.0, x)
+kerr_geo_isso(a::Real, x::Real) = kerr_geo_separatrix(a, zero(_float_type(a, x)), x)
 
 """
     kerr_geo_orbit_type_metadata(a, p, e, x)
@@ -192,7 +197,8 @@ For `p ≤ 0` the orbit is not classified: `family = "NotClassified"`, `outcome 
 `stability = "Unknown"` and `labels = [family]`.
 """
 function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
-    iszero_tol(v) = isapprox(v, 0.0; atol=1e-12)
+    T = _float_type(a, p, e, x)
+    iszero_tol(v) = isapprox(v, 0; atol=_tol(T, 1e-12))
     circular = iszero_tol(e)
     inclination = iszero_tol(abs(x) - 1) ? "Equatorial" : "Inclined"
     shape = circular ? "Circular" : e < 1 ? "Eccentric" : iszero_tol(e - 1) ? "Parabolic" : "Hyperbolic"
@@ -201,13 +207,13 @@ function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
     separatrix_p = circular ? kerr_geo_isso(a, x) :
         try kerr_geo_separatrix(a, e, x) catch err
             (err isa DomainError && e >= 1) || rethrow()
-            NaN
+            T(NaN)
         end
-    photon_p = circular ? kerr_geo_photon_sphere_radius(a, x) : NaN
-    ibso_p = circular ? kerr_geo_ibso(a, x) : NaN
-    isso_p = circular ? kerr_geo_isso(a, x) : NaN
-    tolerance = 1e-12
-    separatrix_tolerance = 1e-15
+    photon_p = circular ? kerr_geo_photon_sphere_radius(a, x) : T(NaN)
+    ibso_p = circular ? kerr_geo_ibso(a, x) : T(NaN)
+    isso_p = circular ? kerr_geo_isso(a, x) : T(NaN)
+    tolerance = _tol(T, 1e-12)
+    separatrix_tolerance = _tol(T, 1e-15)
     at_separatrix = abs(p - separatrix_p) <= separatrix_tolerance
     p_effective = at_separatrix ? separatrix_p : p
     on_separatrix = isapprox(p_effective, separatrix_p; atol=tolerance)

@@ -1,18 +1,18 @@
 # The radius and its horizon distance share one analytic radial phase. Keeping the
 # distance separately is necessary when an exterior turning root rounds to r+.
-struct _HorizonRelativeRadius{J}
+struct _HorizonRelativeRadius{T,J}
     kind::Symbol
-    parameters::NTuple{4,Float64}
+    parameters::NTuple{4,T}
     landen::J
-    omega::Float64
-    horizon_phase::Float64
-    horizon_time::Float64
-    horizon::Tuple{Float64,Float64}
-    separation::Float64
-    momentum::Float64
-    turn_gap::Float64
-    amplitude_denominator::Float64
-    shifted::NTuple{5,Tuple{Float64,Float64}}
+    omega::T
+    horizon_phase::T
+    horizon_time::T
+    horizon::Tuple{T,T}
+    separation::T
+    momentum::T
+    turn_gap::T
+    amplitude_denominator::T
+    shifted::NTuple{5,Tuple{T,T}}
 end
 
 function _horizon_shifted_polynomial(a, E, L, Q)
@@ -34,7 +34,7 @@ end
 
 function _horizon_turn_gap(co, horizon, turn)
     difference = _wide_sub(_wide(turn),horizon)
-    delta = max(difference[1]+difference[2],0.0)
+    delta = max(difference[1]+difference[2],zero(turn))
     derivative = _wide_derivative_coefficients(co,1)
     for _ in 1:64
         next = delta-_wide_evalpoly(delta,co)/_wide_evalpoly(delta,derivative)
@@ -72,8 +72,8 @@ function _horizon_relative_model(a,E,L,Q,model)
         omega = sqrt(-_e2m1(E)*total*(x.x3-x.x2))/2
         denominator_h=n1*distance(x.x1)
         angle = atan(sqrt(delta),sqrt(denominator_h))
-        m = 0.0; m1 = 1.0
-        parameters = (span,n1,1.0,n1-1.0)
+        m = zero(span); m1 = one(span)
+        parameters = (span,n1,one(span),n1-1)
     elseif kind === :four_simple_single_exterior
         x1,x2,x3,x4 = x.x1,x.x2,x.x3,x.x4
         h1 = (x4-x3)/(x3-x1)
@@ -118,12 +118,13 @@ function _horizon_relative_model(a,E,L,Q,model)
     end
     landen = _landen(m,m1)
     phase = _ellip_f(angle,m1)
-    return _HorizonRelativeRadius(kind,parameters,landen,omega,phase,phase/omega,
-        h,d,p[1]+p[2],delta,denominator_h,co)
+    T = _float_type(a,E,L,Q)
+    return _HorizonRelativeRadius{T,typeof(landen)}(kind,parameters,landen,omega,phase,
+        phase/omega,h,d,p[1]+p[2],delta,denominator_h,co)
 end
 
-function _horizon_relative_state(r::_HorizonRelativeRadius,lambda)
-    lambda == 0 && return (gap=r.turn_gap,velocity=0.0,chart=r)
+function _horizon_relative_state(r::_HorizonRelativeRadius{T},lambda) where {T}
+    lambda == 0 && return (gap=r.turn_gap,velocity=zero(T),chart=r)
     du = r.omega*(lambda-r.horizon_time)
     mid = _ellipj_reduced(r.horizon_phase+du/2,r.landen)
     step = _ellipj_reduced(du/2,r.landen)
@@ -157,8 +158,8 @@ end
     r.horizon[1]+(r.horizon[2]+_horizon_relative_state(r,lambda).gap)
 _radial_state(r::_HorizonRelativeRadius,lambda) = _horizon_relative_state(r,lambda)
 
-function _horizon_lambda_of_gap(r::_HorizonRelativeRadius,gap)
-    gap==r.turn_gap && return 0.0
+function _horizon_lambda_of_gap(r::_HorizonRelativeRadius{T},gap) where {T}
+    gap==r.turn_gap && return zero(T)
     iszero(gap) && return r.horizon_time
     displacement=r.turn_gap-gap
     if r.kind===:two_real_complex_pair
@@ -174,22 +175,22 @@ function _horizon_lambda_of_gap(r::_HorizonRelativeRadius,gap)
     return _ellip_f(angle,r.landen.m1)/r.omega
 end
 
-struct _InteriorRepeatedHorizonRadius
+struct _InteriorRepeatedHorizonRadius{T}
     kind::Symbol
-    span::Float64
-    ratio::Float64
-    omega::Float64
-    horizon_phase::Float64
-    tangent_h::Float64
-    horizon_time::Float64
-    simple_gap::Float64
-    repeated_gap::Float64
-    root_separation::Float64
-    horizon::Tuple{Float64,Float64}
-    separation::Float64
-    momentum::Float64
-    turn_gap::Float64
-    shifted::NTuple{5,Tuple{Float64,Float64}}
+    span::T
+    ratio::T
+    omega::T
+    horizon_phase::T
+    tangent_h::T
+    horizon_time::T
+    simple_gap::T
+    repeated_gap::T
+    root_separation::T
+    horizon::Tuple{T,T}
+    separation::T
+    momentum::T
+    turn_gap::T
+    shifted::NTuple{5,Tuple{T,T}}
 end
 
 function _interior_repeated_horizon_model(E,model,h,d,p,co,delta)
@@ -203,12 +204,13 @@ function _interior_repeated_horizon_model(E,model,h,d,p,co,delta)
     repeated_distance=_wide_sub(h,_wide(repeated))
     repeated_gap=repeated_distance[1]+repeated_distance[2]
     y_h=sqrt(delta/simple_gap)
+    T=typeof(y_h)
     if triple
-        ratio=1.0
+        ratio=one(T)
         omega=sqrt(-_e2m1(E))*span/2
         phase=y_h
         tangent=y_h
-        root_separation=0.0
+        root_separation=zero(T)
     else
         A=roots.outer-repeated
         B=simple-repeated
@@ -220,19 +222,19 @@ function _interior_repeated_horizon_model(E,model,h,d,p,co,delta)
             asinh(sqrt(-B)*sqrt(delta)/(sqrt(span)*sqrt(repeated_gap)))
         tangent=B>0 ? tan(phase) : tanh(phase)
     end
-    return _InteriorRepeatedHorizonRadius(model.kind,span,ratio,omega,phase,
+    return _InteriorRepeatedHorizonRadius{T}(model.kind,span,ratio,omega,phase,
         tangent,phase/omega,simple_gap,repeated_gap,root_separation,
         h,d,p[1]+p[2],delta,co)
 end
 
-function _radial_state(r::_InteriorRepeatedHorizonRadius,lambda)
-    lambda==0 && return (gap=r.turn_gap,velocity=0.0,chart=r)
+function _radial_state(r::_InteriorRepeatedHorizonRadius{T},lambda) where {T}
+    lambda==0 && return (gap=r.turn_gap,velocity=zero(T),chart=r)
     u=r.omega*lambda
     offset=r.omega*(r.horizon_time-lambda)
     if r.kind===:elliptic_triple_below_horizon
         tangent=u
         difference=offset
-        derivative=1.0
+        derivative=one(T)
     elseif r.kind===:elliptic_double_d_below_simple
         tangent=tan(u)
         step=tan(offset)
@@ -255,9 +257,9 @@ end
 (r::_InteriorRepeatedHorizonRadius)(lambda)=
     r.horizon[1]+(r.horizon[2]+_radial_state(r,lambda).gap)
 
-function _horizon_lambda_of_gap(r::_InteriorRepeatedHorizonRadius,gap)
+function _horizon_lambda_of_gap(r::_InteriorRepeatedHorizonRadius{T},gap) where {T}
     iszero(gap) && return r.horizon_time
-    gap==r.turn_gap && return 0.0
+    gap==r.turn_gap && return zero(T)
     displacement=r.turn_gap-gap
     tangent=sqrt(displacement/(r.simple_gap+gap)/r.ratio)
     phase=r.kind===:elliptic_triple_below_horizon ? tangent :
@@ -282,7 +284,7 @@ end
 
 function _relative_logs(state)
     gap = state.gap; d = state.chart.separation
-    gap > 0 || return (-Inf,-Inf)
+    gap > 0 || return (-oftype(gap, Inf),-oftype(gap, Inf))
     ratio_log = gap<d ? log(gap)-log(d)-log1p(gap/d) : -log1p(d/gap)
     return log((gap+d)/2),ratio_log
 end
@@ -290,29 +292,29 @@ function _relative_rstar(state)
     h = state.chart; gap = state.gap
     radius = h.horizon[1]+(h.horizon[2]+gap)
     if iszero(h.separation)
-        return radius+2log(gap)-2/gap-2log(2.0)
+        return radius+2log(gap)-2/gap-2log(oftype(gap, 2))
     end
     log_inner,log_ratio = _relative_logs(state)
     return radius+2log_inner+2(h.horizon[1]+h.horizon[2])/h.separation*log_ratio
 end
 function _relative_azimuth(a,state)
-    iszero(a) && return 0.0
+    iszero(a) && return zero(state.gap)
     iszero(state.chart.separation) && return -a/state.gap
     return a/state.chart.separation*_relative_logs(state)[2]
 end
 
-struct _ParabolicCriticalHorizonRadius
-    horizon::Tuple{Float64,Float64}
-    separation::Float64
-    momentum::Float64
-    span::Float64
-    simple::Float64
-    repeated::Float64
-    frequency::Float64
-    angle::Float64
-    tangent_h::Float64
-    sech_h_squared::Float64
-    shifted::NTuple{5,Tuple{Float64,Float64}}
+struct _ParabolicCriticalHorizonRadius{T}
+    horizon::Tuple{T,T}
+    separation::T
+    momentum::T
+    span::T
+    simple::T
+    repeated::T
+    frequency::T
+    angle::T
+    tangent_h::T
+    sech_h_squared::T
+    shifted::NTuple{5,Tuple{T,T}}
 end
 
 function _parabolic_critical_horizon_model(a,E,L,Q,model)
@@ -321,7 +323,7 @@ function _parabolic_critical_horizon_model(a,E,L,Q,model)
     span=rc-s
     gap=_wide_sub(h,_wide(s)); distant=_wide_sub(_wide(rc),h)
     tangent=sqrt((gap[1]+gap[2])/span)
-    return _ParabolicCriticalHorizonRadius(h,d,p[1]+p[2],span,s,rc,sqrt(span/2),
+    return _ParabolicCriticalHorizonRadius{typeof(tangent)}(h,d,p[1]+p[2],span,s,rc,sqrt(span/2),
         atanh(tangent),tangent,(distant[1]+distant[2])/span,co)
 end
 
@@ -339,7 +341,7 @@ end
     r.horizon[1]+(r.horizon[2]+_radial_state(r,lambda).gap)
 
 function _parabolic_critical_lambda_of_radius(r::_ParabolicCriticalHorizonRadius,radius)
-    radius==r.repeated && return -Inf
+    radius==r.repeated && return -oftype(r.span, Inf)
     tangent=sqrt((radius-r.simple)/r.span)
     gap=_wide_sub(_wide(float(radius)),r.horizon)
     difference=(gap[1]+gap[2])/(r.span*(tangent+r.tangent_h))

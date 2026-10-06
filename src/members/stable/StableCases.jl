@@ -8,7 +8,7 @@ function _polar_turning_cosine_squared(a, energy, lz, q)
     iszero(roots.c) && iszero(q + lz^2) && error(
         "The polar turning point is not isolated: a²(E² − 1) and Q + Lz² both vanish.")
     admissible = [clamp(value, 0.0, 1.0) for value in (roots.u_small, roots.u_big)
-        if -POLAR_ROOT_SLACK <= value <= 1 + POLAR_ROOT_SLACK]
+        if -_polar_root_slack(_float_type(value)) <= value <= 1 + _polar_root_slack(_float_type(value))]
     isempty(admissible) && error(
         "Polar APEX inversion found no turning point in cos(theta)^2 in [0,1].")
     return maximum(admissible)
@@ -60,7 +60,7 @@ R''(r) < 0 is checked; not applicable to the eccentric A1), the `radial_derivati
 root, and the `formula_family`.
 """
 function kerr_geo_stability_metadata(a::Real, energy::Real, lz::Real, q::Real,
-        component::KerrGeoRadialComponent; atol::Real=1.0e-8)
+        component::KerrGeoRadialComponent; atol::Real=_tol(_float_type(a, energy, lz, q), 1.0e-8))
     component.CaseId in (:A1, :A2) || error(
         "Stability metadata requires a Class A component.")
     shape = component.CaseId === :A1 ? :eccentric :

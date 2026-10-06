@@ -17,7 +17,7 @@ end
 
 # φ from tan²φ = A/(r − x3): π/2 at the turning point without asin next to 1
 function _three_real_amplitude(leg, r)
-    r >= leg.x3 - RADIUS_TOL || error("The radius lies below the turning point x3.")
+    r >= leg.x3 - _radius_tol(_float_type(r, leg.x3)) || error("The radius lies below the turning point x3.")
     return atan(sqrt(leg.A / max(r - leg.x3, 0.0)))
 end
 
