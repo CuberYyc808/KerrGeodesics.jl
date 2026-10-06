@@ -108,15 +108,16 @@ numbers or `precision = p` (bits); see
 kg = kerr_geodesic(9//10, (19//20, 3, 4); precision=256)
 ```
 
-The rationals `9//10` and `19//20` are the exact values 0.9 and 0.95, rounded once to 256 bits.
-The literal `0.9` is a `Float64`, whose exact value is
+The rationals `9//10` and `19//20` are exactly 0.9 and 0.95, rounded once to 256 bits. The
+literals `0.9` and `0.95` are `Float64` numbers, whose exact values are
 
 ```
-0.90000000000000002220446049250313080847263336181640625
+0.9  → 0.90000000000000002220446049250313080847263336181640625
+0.95 → 0.9499999999999999555910790149937383830547332763671875
 ```
 
-With `precision=256` this number is converted unchanged, and the orbit is computed for it rather
-than for 0.9.
+With `precision=256` these are converted unchanged, so the orbit would be computed for
+a = 0.90000000000000002220… rather than for a = 0.9.
 
 ## Examples
 
