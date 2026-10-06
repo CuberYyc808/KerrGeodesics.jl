@@ -100,6 +100,14 @@ kerr_geo_frequencies(0.9, 10.0, 0.5, 0.8; Time="BoyerLindquist")    # Ωr, Ωθ,
 kerr_geo_sample(kg.Stable, range(0, 20; length=10_000))   # vectors t, r, theta, phi, tau and the rates ut, ur, utheta, uphi
 ```
 
+**Precision.** Everything is computed in `Float64` by default. For more digits, pass `BigFloat`
+numbers or `precision = p` (bits); see
+[Arbitrary precision](https://CuberYyc808.github.io/KerrGeodesics.jl/stable/arbitrary_precision/).
+
+```julia
+kg = kerr_geodesic(9//10, (19//20, 3, 4); precision=256)
+```
+
 ## Examples
 
 [`example/KerrGeodesics_Tutorial.ipynb`](example/KerrGeodesics_Tutorial.ipynb) walks through

@@ -20,6 +20,7 @@ makedocs(
             "Working with an orbit" => "orbits.md",
             "Conventions" => "conventions.md",
             "Numerics and accuracy" => "accuracy.md",
+            "Arbitrary precision" => "arbitrary_precision.md",
         ],
         "Examples" => "examples.md",
         "APEX and finite-window interfaces" => "interfaces.md",

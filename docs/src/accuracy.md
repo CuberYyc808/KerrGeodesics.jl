@@ -44,6 +44,12 @@ period and the spacing of double-precision numbers at that value:
 stable.Status.precision
 ```
 
+## Arbitrary precision
+
+Everything above holds in the floating-point type of the input. In `BigFloat` the tolerances,
+the series and the Chebyshev orders follow the number of digits; see
+[Arbitrary precision](arbitrary_precision.md).
+
 ## Limits of double precision
 
 Accuracy can be limited both by the conditioning of Float64 inputs and by rounding in
