@@ -127,17 +127,17 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
     hm = ((r1-r2)*(r3-rm))/((r1-r3)*(r2-rm))
 
     # Radial JacobiSN mapping
-    rq(qr) = (r3*(r1 - r2) * Elliptic.Jacobi.sn(Elliptic.K(kr)/π * qr, kr)^2 - r2*(r1-r3)) /
-            ((r1-r2) * Elliptic.Jacobi.sn(Elliptic.K(kr)/π * qr, kr)^2 - (r1-r3))
+    rq(qr) = (r3*(r1 - r2) * _reference_sn(Elliptic.K(kr)/π * qr, kr)^2 - r2*(r1-r3)) /
+            ((r1-r2) * _reference_sn(Elliptic.K(kr)/π * qr, kr)^2 - (r1-r3))
 
     # Polar JacobiSN mapping
-    zq(qθ) = zm * Elliptic.Jacobi.sn(Elliptic.K(kθ) * 2/π * (qθ + π/2), kθ)
+    zq(qθ) = zm * _reference_sn(Elliptic.K(kθ) * 2/π * (qθ + π/2), kθ)
 
     # Radial and polar Jacobi amplitudes
-    ψr(qr) = Elliptic.Jacobi.am(Elliptic.K(kr)/π * qr, kr)
-    ψθ(qθ) = Elliptic.Jacobi.am(Elliptic.K(kθ)*2/π*(qθ+π/2), kθ)
-    dψr(qr) = Elliptic.Jacobi.dn(Elliptic.K(kr)/π * qr, kr) * Elliptic.K(kr) / π
-    dψθ(qθ) = 2 * Elliptic.Jacobi.dn(Elliptic.K(kθ)*2/π*(qθ+π/2), kθ) * Elliptic.K(kθ) / π
+    ψr(qr) = _reference_am_checked(Elliptic.K(kr)/π * qr, kr)
+    ψθ(qθ) = _reference_am_checked(Elliptic.K(kθ)*2/π*(qθ+π/2), kθ)
+    dψr(qr) = _reference_dn(Elliptic.K(kr)/π * qr, kr) * Elliptic.K(kr) / π
+    dψθ(qθ) = 2 * _reference_dn(Elliptic.K(kθ)*2/π*(qθ+π/2), kθ) * Elliptic.K(kθ) / π
 
     # t and phi increments due to radial motion
 

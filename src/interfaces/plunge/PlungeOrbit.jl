@@ -5,7 +5,7 @@ function real2_radial_position(absλ, E, roots)
     r4, r3, r2, r1 = roots
     ξr = sqrt((1 - E^2) * (r1 - r3) * (r2 - r4)) / 2
     kr = (r1 - r2) / (r1 - r3) * (r3 - r4) / (r2 - r4)
-    sn2 = Elliptic.Jacobi.sn(Elliptic.K(kr) - ξr * absλ, kr)^2
+    sn2 = _reference_sn(Elliptic.K(kr) - ξr * absλ, kr)^2
     return (r3 * (r1 - r2) * sn2 - r2 * (r1 - r3)) /
            ((r1 - r2) * sn2 - (r1 - r3))
 end
@@ -31,7 +31,7 @@ function generic_plunge_orbit(a, E, L, Q; initPhases = (0.0, 0.0, 0.0, 0.0), rea
         cf == "Real2" && return _generic_plunge_orbit(a, E, L, Q, initPhases, half,
             λ -> real2_radial_position(λ + λr0, E, roots))
         return _generic_plunge_orbit(a, E, L, Q, initPhases, half, function (λ)
-            sn2 = Elliptic.Jacobi.sn(ξr * (λ + λr0), kr)^2
+            sn2 = _reference_sn(ξr * (λ + λr0), kr)^2
             return (r3 * (r2 - r4) - r2 * (r3 - r4) * sn2) / ((r2 - r4) - (r3 - r4) * sn2)
         end)
     elseif cf == "Complex"
@@ -40,8 +40,8 @@ function generic_plunge_orbit(a, E, L, Q; initPhases = (0.0, 0.0, 0.0, 0.0), rea
         kr = ((r1 - r2)^2 - (A - B)^2) / (4 * A * B)
         return _generic_plunge_orbit(a, E, L, Q, initPhases, 2 * Elliptic.K(kr) / ξr,
             function (λ)
-                sn = Elliptic.Jacobi.sn(ξr * (λ + λr0), kr)
-                cn = Elliptic.Jacobi.cn(ξr * (λ + λr0), kr)
+                sn = _reference_sn(ξr * (λ + λr0), kr)
+                cn = _reference_cn(ξr * (λ + λr0), kr)
                 return (2 * A * B * (r1 + r2) + (A - B) * (A * r2 - B * r1) * sn^2 +
                     2 * A * B * (r1 - r2) * cn) / (4 * A * B + (A - B)^2 * sn^2)
             end)
@@ -53,7 +53,7 @@ end
 function _generic_plunge_orbit(a, E, L, Q, initPhases, half, radius)
     λt0, λr0, λθ0, λϕ0 = initPhases
     zm, ξθ, kθ = _plunge_polar_parameters(a, E, L, Q)
-    θ(λ) = acos(sqrt(zm) * Elliptic.Jacobi.sn(ξθ * (λ + λθ0), kθ))
+    θ(λ) = acos(sqrt(zm) * _reference_sn(ξθ * (λ + λθ0), kθ))
     # z = √z₋ sn(ξθ(λ + λθ0)): the polar engine's phase is counted from the northern turning point
     polar = _polar_solution(a, E, L, Q, iszero(Q) ? :equatorial : :pendular,
         ξθ * λθ0 - Elliptic.K(kθ))

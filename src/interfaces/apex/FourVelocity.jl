@@ -45,16 +45,16 @@ function kerr_geo_velocity_mino(a, p, e, x, initPhases::Tuple{Float64,Float64}, 
     qz(λ) = λ * Υθ + qθ0 + π / 2
 
     # Radial motion functions
-    r(qr) = (r3*(r1 - r2)*Elliptic.Jacobi.sn(Elliptic.K(kr)/π*qr, kr)^2 - r2*(r1 - r3)) /
-            ((r1 - r2)*Elliptic.Jacobi.sn(Elliptic.K(kr)/π*qr, kr)^2 - (r1 - r3))
-    rprime(qr) = (2*(r1 - r2)*(r1 - r3)*(r2 - r3)*Elliptic.K(kr)*Elliptic.Jacobi.cn(qr*Elliptic.K(kr)/π, kr)*
-                Elliptic.Jacobi.dn(qr*Elliptic.K(kr)/π, kr)*Elliptic.Jacobi.sn(qr*Elliptic.K(kr)/π, kr)) /
-                (π*((-r1 + r3) + (r1 - r2)*Elliptic.Jacobi.sn(qr*Elliptic.K(kr)/π, kr)^2)^2)
+    r(qr) = (r3*(r1 - r2)*_reference_sn(Elliptic.K(kr)/π*qr, kr)^2 - r2*(r1 - r3)) /
+            ((r1 - r2)*_reference_sn(Elliptic.K(kr)/π*qr, kr)^2 - (r1 - r3))
+    rprime(qr) = (2*(r1 - r2)*(r1 - r3)*(r2 - r3)*Elliptic.K(kr)*_reference_cn(qr*Elliptic.K(kr)/π, kr)*
+                _reference_dn(qr*Elliptic.K(kr)/π, kr)*_reference_sn(qr*Elliptic.K(kr)/π, kr)) /
+                (π*((-r1 + r3) + (r1 - r2)*_reference_sn(qr*Elliptic.K(kr)/π, kr)^2)^2)
 
     # Polar motion functions
-    z(qθ) = zm * Elliptic.Jacobi.sn(Elliptic.K(kz)*2*qθ/π, kz)
-    zprime(qθ) = (2*zm*Elliptic.K(kz)*Elliptic.Jacobi.cn(2*qθ*Elliptic.K(kz)/π, kz)*
-                Elliptic.Jacobi.dn(2*qθ*Elliptic.K(kz)/π, kz))/π
+    z(qθ) = zm * _reference_sn(Elliptic.K(kz)*2*qθ/π, kz)
+    zprime(qθ) = (2*zm*Elliptic.K(kz)*_reference_cn(2*qθ*Elliptic.K(kz)/π, kz)*
+                _reference_dn(2*qθ*Elliptic.K(kz)/π, kz))/π
 
     # Auxiliary functions
     Δ(qr) = r(qr)^2 + a^2 - 2*r(qr)
