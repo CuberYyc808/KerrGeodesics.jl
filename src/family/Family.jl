@@ -80,7 +80,10 @@ slot of its broad class. The constants are used exactly as given.
 
 The four-argument form takes APEX parameters (semi-latus rectum `p`, eccentricity `e`,
 `x = cos ι`) and converts them to `(E, Lz, Q)`; a spin within `8eps()` of ±1 is taken as
-exactly ±1, and the original input is kept in `Status.input_provenance`. With
+exactly ±1, and the original input is kept in `Status.input_provenance`. A bound eccentric
+orbit keeps the turning points `p/(1 ∓ e)` in its Stable member; `Status.apex_root_geometry`
+records whether they were used (`accepted`) or why not (`reason`), and
+`Status.component_root_models` the roots each component is built from. With
 `input=:constants` the three numbers are read as `(E, Lz, Q)`.
 
 Returns a `KerrGeodesicFamily`. Each member (a `KerrGeoComponent`) gives the Boyer–Lindquist
@@ -279,7 +282,9 @@ function kerr_geodesic(a::Real, constants::Tuple{<:Real,<:Real,<:Real}; precisio
     end
 end
 
-function _kerr_geodesic(a, constants; kwargs...)
+# `stable_geometry`: the APEX turning-point root geometry the Stable member is built from
+# (`_apex_root_geometry`); every other member uses the roots of the constants.
+function _kerr_geodesic(a, constants; stable_geometry=nothing, kwargs...)
     energy, lz, q = constants
     if haskey(kwargs, :axis)
         requested = get(kwargs, :polar_sector, nothing)
@@ -293,7 +298,8 @@ function _kerr_geodesic(a, constants; kwargs...)
     family = abs(a) == 1 ? _exact_extremal_family(a, energy, lz, q, kwargs) :
         energy < 0 ? _trapped_family(a, energy, lz, q, kwargs) :
         _horizon_root_family(a, energy, lz, q, kwargs)
-    family === nothing && (family = _classified_family(a, energy, lz, q, kwargs))
+    family === nothing && (family = _classified_family(a, energy, lz, q, kwargs;
+        stable_geometry=stable_geometry))
     _validate_selection(family, kwargs)
     return family
 end
@@ -481,7 +487,7 @@ function _isolated_member(build, label, errors, kwargs)
     end
 end
 
-function _classified_family(a, energy, lz, q, kwargs)
+function _classified_family(a, energy, lz, q, kwargs; stable_geometry=nothing)
     member_errors = NamedTuple[]
     # Motion exactly along the spin axis (Lz = 0, Q = a²(1 - E²); for a = 0 purely radial
     # motion) defaults to the northern axis. A defaulted axis member that cannot be built is
@@ -495,6 +501,16 @@ function _classified_family(a, energy, lz, q, kwargs)
     requested_polar = get(kwargs, :polar_sector, haskey(kwargs, :axis) ? :axis_constant : nothing)
     classification = kerr_geo_classify(
         a, energy, lz, q; polar_sector=requested_polar)
+    # the Stable member's own classification: of the APEX turning-point geometry if given
+    stable_classification = stable_geometry === nothing ? classification :
+        kerr_geo_classify(a, energy, lz, q; polar_sector=requested_polar,
+            structure=stable_geometry.structure)
+    stable_ids = (:A1, :A2)
+    components = stable_geometry === nothing ? classification.Components :
+        [filter(c -> c.CaseId in stable_ids, stable_classification.Components);
+         filter(c -> !(c.CaseId in stable_ids), classification.Components)]
+    component_models = Tuple((case_id=c.CaseId, roots=stable_geometry !== nothing &&
+        c.CaseId in stable_ids ? :apex_turning_points : :constants) for c in components)
     axis_member = !haskey(kwargs, :axis) ? nothing : axis_requested ?
         _family_axis_member(a, energy, classification, kwargs) :
         _isolated_member(() -> _family_axis_member(a, energy, classification, kwargs),
@@ -509,19 +525,20 @@ function _classified_family(a, energy, lz, q, kwargs)
     scatter = axis_member === nothing ?
         _isolated_member(() -> _family_member(:scatter, a, energy, lz, q, classification, kwargs),
             :scatter, member_errors, kwargs) : nothing
-    stable = any(component -> component.CaseId in (:A1, :A2), classification.Components) ?
-        _isolated_member(() -> _stable_component(a, energy, lz, q, classification, nothing;
+    stable = any(component -> component.CaseId in stable_ids, stable_classification.Components) ?
+        _isolated_member(() -> _stable_component(a, energy, lz, q, stable_classification, nothing;
             initPhases=get(kwargs, :initPhases, (0.0, 0.0, 0.0, 0.0))), :stable,
             member_errors, kwargs) : nothing
     outcome = _outcome_at_infinity(a, energy, lz, q)
-    selection = _family_selection(classification, kwargs)
+    selection = _family_selection((Components=components,), kwargs)
     members = filter(!isnothing, [stable, critical..., plunge, capture, scatter])
     status = (
         supported=any(m -> m.Status.supported, members),
         reason=isempty(members) ? outcome.reason : :components_available,
         classification=classification,
-        case_ids=classification.CaseIds,
-        components=classification.Components,
+        case_ids=Tuple(c.CaseId for c in components if c.CaseId !== nothing),
+        components=components,
+        component_root_models=component_models,
         selected_case=selection.case_id,
         selected_component=selection.component,
         selection_hint=selection.requested ?
@@ -560,8 +577,14 @@ function _kerr_geodesic_apex(a, p, e, x; kwargs...)
     lz = constants["Lz"]
     q = constants["Q"]
     constants_tuple = (E=energy, Lz=lz, Q=q)
-    family = kerr_geodesic(a, (energy, lz, q); kwargs...)
+    # The turning points are part of the input: the Stable member keeps them (with the inner
+    # roots of the same constants) unless the geometry is not resolved at this precision.
+    geometry = _apex_root_geometry(a, p, e, x, energy, lz, q)
+    family = _kerr_geodesic(a, (energy, lz, q);
+        stable_geometry=geometry.accepted ? geometry : nothing, kwargs...)
     status = merge(family.Status, (
+        apex_root_geometry=(accepted=geometry.accepted, reason=geometry.reason,
+            diagnostics=geometry.diagnostics),
         input_provenance=(
             kind=:apex,
             original=(a=a_input, p=p, e=e, x=x),

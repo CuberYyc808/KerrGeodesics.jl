@@ -233,8 +233,9 @@ end
 # double-double: it keeps its digits next to a turning point, where the factored form loses
 # them to the rounding of r − root. A repeated root read from the constants (within one input
 # ulp, or an interior cluster merged below rounding) defines the member's model, so then
-# R = c ∏(r − xᵢ) over the classified roots (complex ones as (r − ρ)² + η²). Members' dr/dλ,
-# residuals and radial tables use it.
+# R = c ∏(r − xᵢ) over the classified roots (complex ones as (r − ρ)² + η²). So does the
+# APEX turning-point geometry (`_apex_root_geometry`), whose roots define the Stable member's
+# model. Members' dr/dλ, residuals and radial tables use it.
 function _radial_potential_from_roots(a, energy, lz, q, structure)
     # all roots read exactly: R of the given constants, in double-double
     if all(item -> get(item, :reading, :exact) === :exact, structure.real_roots)
@@ -680,14 +681,16 @@ function _classify(a::Real, energy::Real, lz::Real, q::Real;
         radial_sign=nothing,
         endpoint_intent=nothing,
         atol::Real=_root_atol(_float_type(a, energy, lz, q)),
-        rtol::Real=_root_rtol(_float_type(a, energy, lz, q)))
+        rtol::Real=_root_rtol(_float_type(a, energy, lz, q)),
+        structure=nothing)
     all(isfinite, (a, energy, lz, q)) || throw(DomainError(
         (a, energy, lz, q), "a, E, Lz and Q must be finite."))
     metric = kerr_metric_limit(a)
     horizons = kerr_horizons(a)
     regime = kerr_energy_regime(energy)
-    structure = kerr_geo_root_structure(
-        a, energy, lz, q; atol=atol, rtol=rtol)
+    # the roots of the constants, unless the input supplies its own geometry (APEX turning points)
+    structure === nothing && (structure = kerr_geo_root_structure(
+        a, energy, lz, q; atol=atol, rtol=rtol))
     intervals = _allowed_intervals(
         a, energy, lz, q, structure; atol=atol, rtol=rtol)
     polar = kerr_polar_admissibility(a, energy, lz, q)

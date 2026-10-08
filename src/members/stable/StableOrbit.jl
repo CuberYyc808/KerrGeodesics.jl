@@ -2,20 +2,9 @@
 #
 # r(λ) is the Jacobi-sn libration between the turning points r2 ≤ r ≤ r1 of the classified
 # component, z(λ) the polar engine (PolarEngine.jl); t, φ and the Mino frequencies ϒt, ϒφ
-# come from one Chebyshev period of the radial and polar rates. APEX (p, e, x) is reported
-# as metadata only, so nothing depends on inverting it (e → 1, E → 1 stay well posed).
-
-# Divide c (ascending coefficients) by (r − ρ) from the constant term up: stable when ρ is
-# the largest root in magnitude.
-function _deflate_largest(c::AbstractVector{<:Real}, ρ)
-    n = length(c) - 1
-    q = zeros(float(eltype(c)), n)
-    q[1] = -c[1] / ρ
-    for k in 2:n
-        q[k] = (q[k - 1] - c[k]) / ρ
-    end
-    return q
-end
+# come from one Chebyshev period of the radial and polar rates. Nothing depends on inverting
+# APEX (p, e, x) (e → 1, E → 1 stay well posed); with APEX input the component's roots are
+# those of the turning-point geometry (`_apex_root_geometry`) when it is resolved.
 
 """Inner roots r3 ≥ r4 of R(r) once the turning points r1 ≥ r2 are known."""
 function _class_a_inner_roots(a, energy, lz, q, r1, r2)
@@ -46,7 +35,10 @@ function _class_a_orbit(a, energy, lz, q, component; initPhases=(0.0, 0.0, 0.0, 
     case_id = component.CaseId
     r2 = float(component.LowerEndpoint.Radius)
     r1 = case_id === :A1 ? float(component.UpperEndpoint.Radius) : r2
-    r3, r4 = _class_a_inner_roots(a, energy, lz, q, r1, r2)
+    # APEX input: the inner roots of the turning-point geometry the component was classified with
+    structure = component.Metadata.structure
+    r3, r4 = haskey(structure, :apex_turning_points) ? structure.apex_turning_points.roots[3:4] :
+        _class_a_inner_roots(a, energy, lz, q, r1, r2)
     potential = _radial_potential_from_roots(a, energy, lz, q, component.Metadata.structure)
     rc = _rc(a, energy, lz, q, potential)
     qt0, qr0, qθ0, qϕ0 = T.(initPhases)

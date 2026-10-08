@@ -84,6 +84,18 @@ quadrature gives relative discrepancies in ``t`` of about ``8 × 10^{-10}`` at
 This concerns the divergent Boyer–Lindquist coordinate, not an error bound for the regular
 coordinates ``v`` and ``ψ``.
 
+**Near the separatrix.** As ``p`` approaches the separatrix ``p_s``, the radial roots ``r_2``
+and ``r_3`` merge and the frequencies become sensitive to the constants. For APEX input the
+Stable member keeps the turning points (see [Conventions](conventions.md)), so the relative
+error of ``ϒ_r`` grows about as ``ε/(p - p_s)``; for a tuple of constants it grows about as
+``ε/(p - p_s)^2``, because the rounding of the constants also moves ``r_2``. In Float64,
+comparison with independent 120-digit references for 436 orbits (``|a| ≤ 0.99``,
+``e = 0.1, 0.5, 0.8``, all inclinations) gives a largest relative error of ``ϒ_r`` of
+``1.4 × 10^{-10}``, ``1.2 × 10^{-9}``, ``1.9 × 10^{-8}``, ``2.2 × 10^{-7}`` and
+``1.1 × 10^{-6}`` at ``p - p_s = 10^{-6}, 10^{-7}, 10^{-8}, 10^{-9}, 10^{-10}``; the largest
+errors are at ``a = 0.99``, where the constants themselves carry a few units of rounding.
+Closer to the separatrix, or for tighter requirements, use `BigFloat`.
+
 **Very small nonzero spin.** Some combinations approaching the Schwarzschild limit lose
 precision through cancellation. This is an implementation limitation in addition to
 input conditioning, and is not described by the spectral fit estimate alone.
