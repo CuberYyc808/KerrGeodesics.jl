@@ -101,6 +101,11 @@ function kerr_geo_polar_roots(a::Real, p::Real, e::Real, x::Real)
     return (sqrt(a^2 * c.ν + c.L^2), sqrt(1 - x^2))
 end
 
+# sign(x) with x = 0 taken from the side of its sign bit: x = 0 is the limit x → 0⁺ (a polar
+# orbit's φ gains +π at every pass over the axis), and −x maps it to the limit from the other
+# side, as the a < 0 reflection (a, x, ϒϕ) → (−a, −x, −ϒϕ) needs
+_polar_side(x) = signbit(x) ? -one(x) : one(x)
+
 function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
 
     # Case 1: e ≈ 0
@@ -108,7 +113,7 @@ function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
         return Dict(
             "ϒr" => _sqrt_nonnegative((p * (p - 6)) / (p - 3)),
             "ϒθ" => p / _sqrt_nonnegative(p - 3),
-            "ϒϕ" => (p * sign(x)) / _sqrt_nonnegative(p - 3),
+            "ϒϕ" => (p * _polar_side(x)) / _sqrt_nonnegative(p - 3),
             "ϒt" => _sqrt_nonnegative(p^5 / (p - 3))
         )
     end
@@ -125,7 +130,7 @@ function schwarzschild_geo_mino_frequencies(a::Real, p::Real, e::Real, x::Real)
     return Dict(
         "ϒr" => _sqrt_nonnegative(-(p * (-6 + 2*e + p)) / (3 + e^2 - p)) * π / (2 * _K(m)),
         "ϒθ" => p / _sqrt_nonnegative(p - 3 - e^2),
-        "ϒϕ" => (p * sign(x)) / _sqrt_nonnegative(p - 3 - e^2),
+        "ϒϕ" => (p * _polar_side(x)) / _sqrt_nonnegative(p - 3 - e^2),
         "ϒt" => begin
             num = -(((-4+p) * p^2 * (-6+2*e+p) * _E(m)) / e2m1) +
                 (p^2 * (28 + 4*e^2 - 12*p + p^2) * _K(m)) / e2m1 -
@@ -141,7 +146,7 @@ end
 function schwarzschild_geo_boyerlindquist_frequencies(a::Real, p::Real, e::Real, x::Real)
     return Dict("Ωr" => _sqrt_nonnegative(p-6)/p^2,
         "Ωθ" => 1/p^(3/2),
-        "Ωϕ" => sign(x)/p^(3/2))
+        "Ωϕ" => _polar_side(x)/p^(3/2))
 end
 
 function kerr_geo_mino_frequency_r(a::Real, p::Real, e::Real, x::Real, EnLQ, roots)
@@ -200,8 +205,9 @@ function kerr_geo_mino_frequency_ϕ_θ(a, p, e, x, EnLQ, zpzm)
     En, L, Q = EnLQ
     zp, zm = zpzm
 
-    iszero(x) && return zero(L)     # Lz = 0: the polar part Lz/(1 − z²) of dφ/dλ vanishes
     m = a^2*(1 - En^2)*(zm/zp)^2
+    # Lz = 0: the limit of L Π(1 − x²|m)/K(m) is ±ϒθ, π per pass over the axis
+    iszero(x) && return _polar_side(x) * π * zp / (2 * _K(m))
     # Π(z₋²|m) with 1 − z₋² = x² supplied: for |x| ≪ 1 the characteristic is within rounding of 1
     return L * _complete_pi(zm^2, x^2, m) / _K(m)
 end
@@ -360,7 +366,8 @@ The fundamental frequencies of the bound orbit `(a, p, e, x)`, 0 ≤ e < 1, as a
 gives the Mino-time frequencies `"ϒr"`, `"ϒθ"`, `"ϒϕ"` and `"ϒt"` (the mean of dt/dλ);
 `Time="BoyerLindquist"` gives `"Ωr"`, `"Ωθ"`, `"Ωϕ"`, the frequencies in coordinate time,
 Ωᵢ = ϒᵢ/ϒt; `Time="Proper"` gives the frequencies in proper time, ϒᵢ divided by the mean
-of dτ/dλ. The frequencies are computed in the floating-point type of `(a, p, e, x)`;
+of dτ/dλ. At `x = 0` (`Lz = 0`) `"ϒϕ"` is the limit `x → 0⁺` and includes `"ϒθ"` (`x = -0.0`
+gives `x → 0⁻`). The frequencies are computed in the floating-point type of `(a, p, e, x)`;
 `precision = p` converts them to `BigFloat` of `p` bits.
 """
 function kerr_geo_frequencies(a, p, e, x; Time="Mino", precision=nothing)

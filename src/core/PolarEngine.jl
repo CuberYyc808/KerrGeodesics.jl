@@ -19,6 +19,10 @@
 #     dn: y = sn u, y' = cn dn,   B = A m,   p = 1 + m,  q = −m  (cn and dn)
 # with the spike at u = 0 in every case.
 #
+# Lz = 0: the orbit passes over the axis, where φ is undefined. φ is the Lz → 0⁺ limit of the
+# spike (x → 0⁺), a step of +π at every pass: Lz/(ω√(εB)) → 1 in every sector (Lz² = ε(Q − cA)/A
+# at the turning root A), and atan(√(B/ε) y) → (π/2) sign(y).
+#
 # Close to the equator (small |Q| with Lz² < a²(E² − 1)) the parameter m approaches 1 and
 # K ≈ ½ log(16/k'²) is fixed by k'² = 1 − m, which a rounded m no longer carries. Every
 # sector therefore supplies m1 = k'² from its polar roots, and sn, cn, dn come from the
@@ -76,9 +80,13 @@ end
 end
 
 function _polar_spike_increment(kind, L, left, delta, A, B, epsilon, lz_over_omega)
-    iszero(lz_over_omega) && return zero(_float_type(lz_over_omega, left, delta))
     right = left + delta
     jl = _ellipj_reduced(left, L); jr = _ellipj_reduced(right, L)
+    if iszero(lz_over_omega)                # Lz → 0⁺: +π per pass over the axis
+        yl = _polar_spike(kind, jl, A, L)[1][1]
+        yr = _polar_spike(kind, jr, A, L)[1][1]
+        return oftype(yl, π) / 2 * (sign(yr) - sign(yl))
+    end
     mid = _ellipj_reduced(left + delta / 2, L)
     step = _ellipj_reduced(delta / 2, L)
     denominator = 1 - L.m * mid[1]^2 * step[1]^2
@@ -167,13 +175,13 @@ function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A
     lz_over_omega = lz / omega
     spike_scale = !iszero(lz) && B > 0 ? sqrt(B / ε) : zero(T)
     spike_denom = !iszero(lz) && B > 0 ? sqrt(ε * B) : one(T)
-    @inline spike_of_y(y) = iszero(lz) ? zero(T) : lz_over_omega *
+    @inline spike_of_y(y) = iszero(lz) ? T(π) / 2 * Base.sign(y) : lz_over_omega *
         (B > 0 ? atan(spike_scale * y) / spike_denom : y / ε)
     # its values at the ends of [0, K] are exact (y = 0 and 1/k' for cd, 1 for cn, dn): an
     # evaluated y at u = K would carry the rounding of K
     y_ends = kind === :cd ? (zero(T), 1 / sqrt(T(m1))) : (zero(T), one(T))
     S0 = spike_of_y(y_ends[1])
-    spike_half = iszero(lz) ? zero(T) : spike_of_y(y_ends[2]) - S0
+    spike_half = spike_of_y(y_ends[2]) - S0
     # z² is even about u = 0 and about u = K: fit the rates on [0, K] only and unfold by
     # symmetry. The φ component is the bounded rest
     # of Lz/(1 − z²) after the closed-form spike.

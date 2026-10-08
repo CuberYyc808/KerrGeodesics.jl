@@ -147,7 +147,8 @@ function _axis_crossing_polar_solution(a, energy, lz, q, polar_phase;
             u0=float(polar_phase), sign=hemisphere === :north ? 1.0 : -1.0,
             metadata=meta)
     end
-    # q = 0: z = ±sech(u), elementary primitives
+    # q = 0: z = ±sech(u), elementary primitives; the single pass over the axis at u = 0 adds
+    # +π to φ (the Lz → 0⁺ limit, as in `_elliptic_polar_solution`)
     omega = sqrt(beta)
     u0 = float(polar_phase)
     signz = hemisphere === :north ? 1.0 : -1.0
@@ -160,7 +161,7 @@ function _axis_crossing_polar_solution(a, energy, lz, q, polar_phase;
         p = primitive(u)
         sin2=tanh(u)^2
         return (z=z, uz=-signz * omega * sech * tanh(u), sin2=sin2,
-            theta=atan(sqrt(sin2), z), phi=zero(z),
+            theta=atan(sqrt(sin2), z), phi=oftype(z, π) / 2 * (sign(u) - sign(u0)),
             t=p.t - p0.t, tau=p.tau - p0.tau)
     end
     return (formula=formula, metadata=merge(meta, (modulus=1.0, omega=omega,

@@ -44,6 +44,11 @@ with ``r = r(λ')``, ``z = z(λ')`` along the orbit and ``λ_0`` the reference e
 and `radial_tau` return; over a monotone leg they equal ``\int f(r)\,dr/\sqrt{R(r)}`` with
 ``f = (r^2+a^2)P/Δ``, ``aP/Δ - aE``, ``r^2`` (see [Radius as the variable](@ref)).
 
+At ``L_z = 0`` the orbit passes over the spin axis, where ``φ`` is undefined. ``φ`` is the
+limit ``L_z → 0^+`` (``x → 0^+``): it gains ``π`` at every pass over the axis, so the Cartesian
+position continues to the opposite meridian, and the azimuthal frequency ``ϒ_φ`` includes
+``ϒ_θ``.
+
 ## Constants of motion and APEX parameters
 
 The constants are the energy ``E``, the axial angular momentum ``L_z`` and the Carter

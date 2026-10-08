@@ -225,7 +225,7 @@ stay in one hemisphere.
 | `:equator_attractive` | ``Q = 0``, ``L_z^2 < a^2(E^2 - 1)`` | approaches the equatorial plane asymptotically |
 | `:vortical` | ``Q < 0``, ``E > 1`` | stays in one hemisphere, oscillating between two latitudes |
 | `:constant_latitude` | a double root of ``Θ`` | stays at one latitude off the equator |
-| `:axis_crossing` | ``L_z = 0``, ``Q > a^2(1 - E^2)``, ``Q ≠ 0`` | passes over the poles |
+| `:axis_crossing` | ``L_z = 0``, ``Q > a^2(1 - E^2)``, ``Q ≠ 0`` | passes over the poles; ``φ`` gains ``π`` at every pass (the limit ``L_z → 0^+``) |
 | `:axis_constant` | ``L_z = 0``, ``Q = a^2(1 - E^2)`` | moves along the spin axis |
 
 With ``L_z = Q = 0`` and ``E > 1`` the sector follows the spin. For ``a ≠ 0`` the default is

@@ -209,7 +209,10 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
     # F(ψ) = K x; the D form has no 1/(1 - En^2) (wide orbits, En -> 1).
     Dθc = _D(kθ)
     Δtθ(qθ) = En * a^2 * zm^2 / zp * (_D(ψθ(qθ), kθ) - Dθc * 2 * ((qθ+halfπ)/π))
-    Δϕθ(qθ) = iszero(Lz) ? o : -Lz/zp * elliptic_pi_θ(zm^2, kθ, qθ)   # Lz = 0: polar orbit, zm = 1
+    # Lz = 0 (zm = 1): the Lz → 0⁺ limit. Lz/zp Π(zm²|kθ) → π/2, and Lz/zp Π(zm², ψ|kθ) gains π
+    # at every pass over the axis, qθ = 0 mod π (half of it on the pass itself)
+    Δϕθ(qθ) = iszero(Lz) ? halfπ * (fld(qθ, 2halfπ) + cld(qθ, 2halfπ)) - qθ :
+        -Lz/zp * elliptic_pi_θ(zm^2, kθ, qθ)
 
     ellip_diff_pi_r(h, k, q) = _Pi(h, k)/π -
         dψr(q)/((1 - h * sin(ψr(q))^2) * sqrt(1 - k * sin(ψr(q))^2))
@@ -233,7 +236,7 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
 
     dtθ(qθ) = En * a^2 * zm^2 / zp * (sin(ψθ(qθ))^2 * dψθ(qθ) / sqrt(1 - kθ * sin(ψθ(qθ))^2) -
         2 * Dθc / π)
-    dϕθ(qθ) = iszero(Lz) ? o : (-(2 * Lz * _Pi(zm^2, kθ) / π) + (Lz * dψθ(qθ)) / (sqrt(1 - kθ * sin(ψθ(qθ))^2) * (1 - zm^2 * sin(ψθ(qθ))^2))) / zp
+    dϕθ(qθ) = iszero(Lz) ? -one(o) : (-(2 * Lz * _Pi(zm^2, kθ) / π) + (Lz * dψθ(qθ)) / (sqrt(1 - kθ * sin(ψθ(qθ))^2) * (1 - zm^2 * sin(ψθ(qθ))^2))) / zp
 
     qt0, qr0, qθ0, qϕ0 = initPhases
 
