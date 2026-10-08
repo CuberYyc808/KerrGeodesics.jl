@@ -24,6 +24,10 @@ end
 const _CHEB_N = 32
 _cheb_n(::Type{T}) where {T} = _CHEB_N * cld(precision(T), 53)
 
+# The bisection depth: 60 in Float64, growing with the number of bits like the order (a
+# feature as narrow as the rounding of the type must still be reachable by bisection)
+_cheb_maxdepth(::Type{T}) where {T} = 60 * cld(precision(T), 53)
+
 # x_j = cos(πj/n) on [-1, 1], x_0 = 1, and the DCT table cos(πjk/n), held as constants for
 # Float64 and the default order (the DCT below is the build cost of every table: n² cosines
 # per component and piece otherwise); for other types they are formed in the call
@@ -141,10 +145,11 @@ function _fit_piece(f, a::T, b::T, ncomp, tol, absfloor, abserr, n, xs, C) where
 end
 
 """
-    chebfit(f, breaks; ncomp=1, tol=1e-14, absfloor, abserr, maxdepth=60, maxpieces=2000)
+    chebfit(f, breaks; ncomp=1, tol=1e-14, absfloor, abserr, maxdepth, maxpieces=2000)
 
 Fit `f(x)` (returning `ncomp` values) on each interval of `breaks`, in the floating-point type
-T of `breaks` with pieces of order `_cheb_n(T)` and the tolerance `tol` carried to T by
+T of `breaks` with pieces of order `_cheb_n(T)`, at most `_cheb_maxdepth(T)` bisections deep
+(60 in Float64), and the tolerance `tol` carried to T by
 `_tol` (1e-14 in Float64), bisecting every
 interval until its error estimate (Chebyshev tail, and the misfit at four off-node points)
 is below `tol` times the local size of the function (or `absfloor[k]`), or below `abserr`,
@@ -159,7 +164,8 @@ an error. `achieved` of the result records each piece's estimate.
 """
 function chebfit(f, breaks::AbstractVector{<:Real}; ncomp::Int=1,
         tol=_tol(float(eltype(breaks)), 1.0e-14), absfloor=zeros(float(eltype(breaks)), ncomp),
-        abserr=zeros(float(eltype(breaks)), ncomp), maxdepth::Int=60, maxpieces::Int=2000,
+        abserr=zeros(float(eltype(breaks)), ncomp),
+        maxdepth::Int=_cheb_maxdepth(float(eltype(breaks))), maxpieces::Int=2000,
         n::Int=_cheb_n(float(eltype(breaks))))
     T = float(eltype(breaks))
     xs, C = _cheb_nodes(T, n), _dct_table(T, n)
