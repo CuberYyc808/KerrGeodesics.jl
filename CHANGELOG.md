@@ -19,6 +19,7 @@
   of every component.
 
 ### Changed
+- Requires Julia 1.12 or later.
 - **Orbits over the spin axis (`x = 0`, `Lz = 0`).** The azimuth is the limit `Lz → 0⁺`
   (`x → 0⁺`): `φ` gains `π` at every pass over the axis, and the azimuthal frequency `ϒφ` (and
   `Ωφ`) includes `ϒθ`. Before, `φ` had no jump at the axis and `ϒφ` lacked `ϒθ`, which placed
