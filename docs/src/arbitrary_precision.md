@@ -61,7 +61,11 @@ end
 precision(r)
 ```
 
-They can be called from several threads at once, at any precision.
+On Julia 1.10, where the `BigFloat` precision is global rather than per task, evaluate
+`BigFloat` orbits from one thread.
+
+Close to the separatrix `Float64` loses digits in the radial frequencies; `BigFloat` restores
+them in proportion to the number of bits (see [Numerics and accuracy](accuracy.md)).
 
 ## What follows the precision
 

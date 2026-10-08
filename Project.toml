@@ -1,6 +1,6 @@
 name = "KerrGeodesics"
 uuid = "53139c06-1eed-45f1-8780-9fca08ecab11"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Yucheng Yin <cuber.ycyin@gmail.com>"]
 
 [deps]

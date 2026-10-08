@@ -119,6 +119,10 @@ literals `0.9` and `0.95` are `Float64` numbers, whose exact values are
 With `precision=256` these are converted unchanged, so the orbit would be computed for
 a = 0.90000000000000002220… rather than for a = 0.9.
 
+New in 0.5.0: every orbit is computed in the precision of its input, as above. Bound orbits given
+by `(p, e, x)` keep their turning points `p/(1 ∓ e)`, so they stay bound and accurate up to the
+separatrix.
+
 ## Examples
 
 [`example/KerrGeodesics_Tutorial.ipynb`](example/KerrGeodesics_Tutorial.ipynb) walks through
