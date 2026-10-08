@@ -162,26 +162,26 @@ side (30, 60 and 120 from the opposite edge of that stretch) and at r = 1e6, 1e1
 1e24 on the way to an infinity end reached at finite λ, it compares, by finite differences
 of the trajectory,
 
-- `(dr/dλ)² = R(r)` and `(dz/dλ)² = Θ(z)` (relative to the size of the terms),
-- `dt/dλ`, `dφ/dλ` with the Carter equations (or `dv/dλ`, `dψ/dλ` for members given in
+- ``(dr/d\\lambda)^2 = R(r)`` and ``(dz/d\\lambda)^2 = \\Theta(z)`` (relative to the size of the terms),
+- ``dt/d\\lambda``, ``d\\phi/d\\lambda`` with the Carter equations (or ``dv/d\\lambda``, ``d\\psi/d\\lambda`` for members given in
   ingoing coordinates).
 
 Each check reports the largest raw relative discrepancy over the samples it could decide
 (`radial`, `polar`, `time`, `azimuth`) and, in `allowance`, the largest margin granted
 there: the finite-difference error (Richardson estimate), the `eps·|t|` resolution of the
-values, and the precision of the reference rates next to a horizon (r − r₊) or next to the
-axis (1 − z²). A sample passes when discrepancy ≤ `tol` + allowance. Samples whose
+values, and the precision of the reference rates next to a horizon (``r - r_+``) or next to the
+axis (``1 - z^2``). A sample passes when discrepancy ≤ `tol` + allowance. Samples whose
 allowance alone exceeds `tol` cannot decide the check (the stencil does not resolve the
-rate, e.g. the Lz/sin²θ spike of a near-axis orbit) and are counted in `skipped`, as are
-tail radii that λ cannot resolve (`skipped.tail`). `period_azimuth` compares the polar Δφ
+rate, e.g. the ``L_z/\\sin^2\\theta`` spike of a near-axis orbit) and are counted in `skipped`, as are
+tail radii that ``\\lambda`` cannot resolve (`skipped.tail`). `period_azimuth` compares the polar ``\\Delta\\phi``
 over one polar period with an independent quadrature (NaN when the polar motion does not
-oscillate or Lz = 0). It also checks that `t` (or `v`) increases, that `v − t − r*` and
-`ψ − φ − φ_H` stay constant when both charts exist, and counts non-finite values.
+oscillate or ``L_z = 0``). It also checks that `t` (or `v`) increases, that ``v - t - r_*`` and
+``\\psi - \\phi - \\phi_H`` stay constant when both charts exist, and counts non-finite values.
 
 Returns a NamedTuple: `member` (the case ID), `ok` (no issue other than slow evaluation),
 `slow` (median single evaluation above `slow_eval` seconds), `issues`, the discrepancies
 `radial`, `polar`, `time`, `azimuth` with their `allowance`, `tolerance`, `skipped`,
-`ingoing_consistency` (largest relative drift of `v − t − r*` and `ψ − φ − φ_H`; 0 with a
+`ingoing_consistency` (largest relative drift of ``v - t - r_*`` and ``\\psi - \\phi - \\phi_H``; 0 with a
 single chart), `period_azimuth`, the number of checked `samples`, `eval_median` and
 `eval_max`. A family returns one record per member; members that could not be built are
 listed in `family.Status.member_errors`.

@@ -5,7 +5,7 @@
 """
     kerr_delta(a, r)
 
-Δ(r) = r² − 2r + a² = (r − r₊)(r − r₋), evaluated in the product form, which keeps its
+``\\Delta(r) = r^2 - 2r + a^2 = (r - r_+)(r - r_-)``, evaluated in the product form, which keeps its
 relative precision next to a horizon.
 """
 function kerr_delta(a::Real, r::Real)
@@ -20,7 +20,8 @@ _rminus(a) = 1 - sqrt(1 - a^2)
 """
     kerr_horizons(a)
 
-Horizon radii `(rplus, rminus)` = 1 ± √(1 − a²) for |a| ≤ 1 (G = c = M = 1).
+Horizon radii ``r_\\pm = 1 \\pm \\sqrt{1 - a^2}`` for ``|a| \\leq 1``
+(``G = c = M = 1``), returned as `(rplus, rminus)`.
 """
 function kerr_horizons(a::Real; atol::Real=_classification_atol(float(typeof(a))))
     abs(a) <= 1 + atol || throw(DomainError(a, "Kerr spin must satisfy |a|<=1."))
@@ -56,7 +57,7 @@ _e2m1(energy) = (energy - 1) * (energy + 1)
 """
     kerr_energy_regime(E; atol=0, rtol=0)
 
-`:elliptic`, `:parabolic` or `:hyperbolic` by the sign of E² − 1, the r⁴ coefficient of R
+`:elliptic`, `:parabolic` or `:hyperbolic` by the sign of ``E^2 - 1``, the ``r^4`` coefficient of ``R``
 (negative, zero or positive), for either sign of E; |E| within `atol + rtol·max(1, |E|)` of 1
 is `:parabolic`. The sign of E itself is `kerr_energy_sign`.
 """
@@ -73,7 +74,7 @@ end
 """
     kerr_energy_sign(E)
 
-`+1` for E ≥ 0 and `-1` for E < 0. Future-directed motion with E < 0 exists only inside the
+`+1` for ``E \\geq 0`` and `-1` for ``E < 0``. Future-directed motion with ``E < 0`` exists only inside the
 ergoregion: the Trapped class.
 """
 kerr_energy_sign(energy::Real) = energy < 0 ? -1 : 1
@@ -81,8 +82,9 @@ kerr_energy_sign(energy::Real) = energy < 0 ? -1 : 1
 """
     kerr_radial_momentum(a, E, Lz, r)
 
-P(r) = E(r² + a²) − a Lz. It enters the radial potential, R = P² − Δ[r² + (Lz − aE)² + Q],
-and the rates dt/dλ and dφ/dλ; on the horizon R(r₊) = P(r₊)².
+``P(r) = E(r^2 + a^2) - aL_z``. It enters the radial potential,
+``R = P^2 - \\Delta[r^2 + (L_z - aE)^2 + Q]``, and the Mino-time rates
+``dt/d\\lambda`` and ``d\\phi/d\\lambda``; on the horizon ``R(r_+) = P(r_+)^2``.
 """
 kerr_radial_momentum(a::Real, energy::Real, lz::Real, r::Real) =
     energy * (r - 1) * (r + 1) + (energy * (1 + a^2) - a * lz)   # r² − 1 accurate near r = 1
@@ -90,15 +92,15 @@ kerr_radial_momentum(a::Real, energy::Real, lz::Real, r::Real) =
 """
     kerr_axis_carter_q(a, E)
 
-Carter constant Q = a²(1 − E²) of a timelike geodesic along the spin axis (Lz = 0).
+Carter constant ``Q = a^2(1 - E^2)`` of a timelike geodesic along the spin axis (``L_z = 0``).
 """
 kerr_axis_carter_q(a::Real, energy::Real) = -a^2 * _e2m1(energy)
 
 """
     kerr_axis_radial_potential(a, E, r)
 
-Radial potential on the spin axis (Lz = 0, Q = a²(1 − E²)) in factored form,
-R = (r² + a²)[E²(r² + a²) − Δ].
+Radial potential on the spin axis (``L_z = 0``, ``Q = a^2(1 - E^2)``) in factored form,
+``R = (r^2 + a^2)[E^2(r^2 + a^2) - \\Delta]``.
 """
 function kerr_axis_radial_potential(a::Real, energy::Real, r::Real)
     sigma = r^2 + a^2
@@ -108,9 +110,10 @@ end
 """
     kerr_radial_coefficients(a, E, Lz, Q; energy_atol=0, energy_rtol=0)
 
-Coefficients (c₀, c₁, c₂, c₃, c₄) of R(r) = Σ cₖ rᵏ, in ascending order. c₄ = E² − 1 is
+Coefficients ``(c_0, c_1, c_2, c_3, c_4)`` of ``R(r) = \\sum_{k=0}^4 c_k r^k``,
+in ascending order. ``c_4 = E^2 - 1`` is
 set to zero when `kerr_energy_regime(E; atol=energy_atol, rtol=energy_rtol)` is
-`:parabolic`, so R is built as a cubic; with the default zero tolerances this is E² = 1
+`:parabolic`, so ``R`` is built as a cubic; with the default zero tolerances this is ``E^2 = 1``
 exactly.
 """
 function kerr_radial_coefficients(a::Real, energy::Real, lz::Real, q::Real;
@@ -141,8 +144,8 @@ end
 """
     kerr_radial_polynomial(a, E, Lz, Q; energy_atol=0, energy_rtol=0)
 
-R(r) as a `Polynomial` (Polynomials.jl) built from `kerr_radial_coefficients`; it is a
-cubic when E² = 1.
+``R(r)`` as a `Polynomial` (Polynomials.jl) built from `kerr_radial_coefficients`; it is a
+cubic when ``E^2 = 1``.
 """
 function kerr_radial_polynomial(a::Real, energy::Real, lz::Real, q::Real; kwargs...)
     coefficients = collect(kerr_radial_coefficients(a, energy, lz, q; kwargs...))
@@ -155,10 +158,10 @@ end
 """
     kerr_radial_potential(a, E, Lz, Q, r)
 
-Radial potential of a timelike Kerr geodesic with Carter constant `Q`,
-R = [E(r² + a²) − aLz]² − Δ[r² + (Lz − aE)² + Q]. It is summed from its coefficients
+Radial potential of a timelike Kerr geodesic with Carter constant ``Q``,
+``R = [E(r^2 + a^2) - aL_z]^2 - \\Delta[r^2 + (L_z - aE)^2 + Q]``. It is summed from its coefficients
 (`kerr_radial_coefficients`), which keeps full relative precision at large r, where the
-factored form would cancel two terms of size E²r⁴.
+factored form would cancel two terms of size ``E^2r^4``.
 """
 function kerr_radial_potential(a::Real, energy::Real, lz::Real, q::Real, r::Real)
     c0, c1, c2, c3, c4 = kerr_radial_coefficients(a, energy, lz, q)
@@ -421,8 +424,9 @@ end
 """
     kerr_polar_theta_potential(a, E, Lz, Q, θ; axis_atol=1e-12)
 
-Θ(θ) = Q − cos²θ [a²(1 − E²) + Lz²/sin²θ] = (dθ/dλ)². On the axis (|sin θ| ≤ `axis_atol`) it
-is finite only for Lz = 0, where it equals Q − a²(1 − E²); otherwise it is `-Inf` there.
+``\\Theta_\\theta(\\theta) = Q - \\cos^2\\theta [a^2(1 - E^2) + L_z^2/\\sin^2\\theta]
+= (d\\theta/d\\lambda)^2``. On the axis (``|\\sin\\theta| \\leq`` `axis_atol`) it
+is finite only for ``L_z = 0``, where it equals ``Q - a^2(1 - E^2)``; otherwise it is `-Inf` there.
 """
 function kerr_polar_theta_potential(a::Real, energy::Real, lz::Real, q::Real,
         theta::Real; axis_atol::Real=_tol(_float_type(a, energy, lz, q, theta), 1.0e-12))
@@ -438,7 +442,8 @@ end
 """
     kerr_polar_z_potential(a, E, Lz, Q, z)
 
-(dz/dλ)² for z = cos θ: Q(1 − z²) − z²[Lz² + a²(1 − E²)(1 − z²)], a polynomial in z that
+``(dz/d\\lambda)^2`` for ``z = \\cos\\theta``:
+``Q(1 - z^2) - z^2[L_z^2 + a^2(1 - E^2)(1 - z^2)]``, a polynomial in ``z`` that
 stays regular on the axis.
 """
 function kerr_polar_z_potential(a::Real, energy::Real, lz::Real, q::Real, z::Real)
@@ -450,14 +455,17 @@ end
 """
     kerr_polar_admissibility(a, E, Lz, Q; rtol=4eps(T))
 
-Maximize (dz/dλ)² = Θ(u) = Q(1 − u) − Lz²u + βu(1 − u), u = cos²θ, β = a²(E² − 1), over
-u ∈ [0, 1] in closed form (regular at E = 1 and a = 0). The constants admit polar motion
-(`admissible`) when Θ at one of the examined points is non-negative to within what the
-constants themselves resolve: Σ_θ |∂Θ/∂θ| ulp(θ) over θ = (a, E, Lz, Q), plus `rtol` times
-the size of the terms for the rounding of Θ (T the floating-point type of the constants). A
-negative Q, or a turning point short of the
+Maximize ``(dz/d\\lambda)^2 = Q(1 - u) - L_z^2u + \\beta u(1 - u)``,
+with ``u = \\cos^2\\theta`` and ``\\beta = a^2(E^2 - 1)``, over ``u \\in [0, 1]``
+in closed form (regular at ``E = 1`` and ``a = 0``). The constants admit polar motion
+(`admissible`) when the polar potential at one of the examined points is non-negative
+to within what the constants themselves resolve:
+``\\sum_j |\\partial\\Theta/\\partial c_j|\\,\\mathrm{ulp}(c_j)`` over
+``(c_1,c_2,c_3,c_4) = (a,E,L_z,Q)``, plus `rtol` times
+the size of the terms for the rounding of ``\\Theta`` (`T` the floating-point type of the
+constants). A negative ``Q``, or a turning point short of the
 axis, is therefore not admitted because its scale is small next to other terms. The axis
-u = 1 (Θ = −Lz²) is examined when Lz = 0 and the motion reaches it. The result also carries
+``u = 1`` (``\\Theta = -L_z^2``) is examined when ``L_z = 0`` and the motion reaches it. The result also carries
 `max_value`, `max_cosine_squared`, the `tolerance` of that maximum and the examined
 `candidates`.
 """
@@ -511,8 +519,8 @@ end
 
 The polar sectors these constants allow, as a tuple of Symbols: `:pendular`, `:equatorial`,
 `:equator_attractive`, `:vortical`, `:constant_latitude`, `:axis_crossing` or
-`:axis_constant`. The sign of Q decides, and only Q = 0 itself is equatorial. Where the
-constants allow more than one (Q = 0 with Lz² < a²(E² − 1) allows both `:equatorial` and
+`:axis_constant`. The sign of ``Q`` decides, and only ``Q = 0`` itself is equatorial. Where the
+constants allow more than one (``Q = 0`` with ``L_z^2 < a^2(E^2 - 1)`` allows both `:equatorial` and
 `:equator_attractive`), the keyword `polar_sector` of the constructors chooses the motion.
 """
 function kerr_polar_sector_candidates(a::Real, energy::Real, lz::Real, q::Real)
@@ -666,9 +674,15 @@ end
 """
     kerr_rstar(a, r)
 
-Tortoise coordinate with dr*/dr = (r² + a²)/Δ for r > r₊,
-r* = r + (2r₊/d) log((r − r₊)/2) − (2r₋/d) log((r − r₋)/2),  d = r₊ − r₋,
-with the limit r + 2 log(r − 1) − 2/(r − 1) − 2 log 2 at |a| = 1. Returns `NaN` for r ≤ r₊.
+Tortoise coordinate with ``dr_*/dr = (r^2 + a^2)/\\Delta`` for ``r > r_+``:
+
+```math
+r_* = r + \\frac{2r_+}{d}\\ln\\frac{r-r_+}{2}
+          - \\frac{2r_-}{d}\\ln\\frac{r-r_-}{2}, \\qquad d = r_+ - r_-.
+```
+
+At ``|a| = 1`` its limit is ``r + 2\\ln(r-1) - 2/(r-1) - 2\\ln 2``.
+Returns `NaN` for ``r \\leq r_+``.
 """
 function kerr_rstar(a::Real, r::Real)
     rp = _rplus(a)

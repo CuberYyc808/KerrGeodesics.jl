@@ -5,15 +5,16 @@
 """
     kerr_geo_energy(a, p, e, x)
 
-Energy E of the orbit with APEX parameters `(a, p, e, x)`: r = p/(1 ± e) are roots of the
-radial potential and x = cos of the inclination, Q = (1 − x²)(a²(1 − E²) + Lz²/x²).
+Energy ``E`` of the orbit with APEX parameters ``(a, p, e, x)``: ``r = p/(1 \\pm e)`` are roots of the
+radial potential and ``x`` is the cosine of the inclination,
+``Q = (1 - x^2)(a^2(1 - E^2) + L_z^2/x^2)``.
 """
 kerr_geo_energy(a::Real, p::Real, e::Real, x::Real) = _apex_constants(a, p, e, x).E
 
 """
     kerr_geo_angular_momentum(a, p, e, x)
 
-Axial angular momentum Lz of the orbit with APEX parameters `(a, p, e, x)`; see
+Axial angular momentum ``L_z`` of the orbit with APEX parameters ``(a, p, e, x)``; see
 [`kerr_geo_energy`](@ref).
 """
 kerr_geo_angular_momentum(a::Real, p::Real, e::Real, x::Real) = _apex_constants(a, p, e, x).Lz
@@ -21,8 +22,8 @@ kerr_geo_angular_momentum(a::Real, p::Real, e::Real, x::Real) = _apex_constants(
 """
     kerr_geo_carter_constant(a, p, e, x)
 
-Carter constant Q = (1 − x²)(a²(1 − E²) + Lz²/x²) of the orbit with APEX parameters
-`(a, p, e, x)`; see [`kerr_geo_energy`](@ref).
+Carter constant ``Q = (1 - x^2)(a^2(1 - E^2) + L_z^2/x^2)`` of the orbit with APEX parameters
+``(a, p, e, x)``; see [`kerr_geo_energy`](@ref).
 """
 kerr_geo_carter_constant(a::Real, p::Real, e::Real, x::Real) = _apex_constants(a, p, e, x).Q
 
@@ -30,7 +31,7 @@ kerr_geo_carter_constant(a::Real, p::Real, e::Real, x::Real) = _apex_constants(a
 """
     kerr_geo_velocity_at_infinity(a, p, e, x)
 
-Speed at infinity v∞ = √(E² − 1)/E of a Schwarzschild (a = 0) orbit with e > 1.
+Speed at infinity ``v_\\infty = \\sqrt{E^2 - 1}/E`` of a Schwarzschild (``a = 0``) orbit with ``e > 1``.
 """
 function kerr_geo_velocity_at_infinity(a::Real, p::Real, e::Real, x::Real)
     iszero(a) || throw(ArgumentError("kerr_geo_velocity_at_infinity: the formula holds for a = 0 only"))
@@ -42,7 +43,7 @@ end
 """
     kerr_geo_impact_parameter(a, p, e, x)
 
-Impact parameter b = Lz/√(E² − 1) of a Schwarzschild (a = 0) orbit with e > 1.
+Impact parameter ``b = L_z/\\sqrt{E^2 - 1}`` of a Schwarzschild (``a = 0``) orbit with ``e > 1``.
 """
 function kerr_geo_impact_parameter(a::Real, p::Real, e::Real, x::Real)
     iszero(a) || throw(ArgumentError("kerr_geo_impact_parameter: the formula holds for a = 0 only"))
@@ -55,17 +56,22 @@ end
 """
     kerr_geo_deflection_angle(a, p, e, x=1.0)
 
-Deflection angle ψ = Δφ − π of a Schwarzschild (a = 0) orbit from infinity through the
-pericentre r = p/(1 + e) back to infinity (e ≥ 1; e = 1 is the parabolic orbit). With
-u = 1/r the orbit equation is (du/dφ)² = 2(u₁ − u)(u − u₂)(u₃ − u), u₁ = (1 + e)/p,
-u₂ = (1 − e)/p, u₃ = 1/2 − 2/p; u = u₂ + (u₁ − u₂) sin²χ gives
+Deflection angle ``\\psi = \\Delta\\phi - \\pi`` of a Schwarzschild (``a = 0``) orbit from infinity through the
+pericentre ``r = p/(1 + e)`` back to infinity (``e \\geq 1``; ``e = 1`` is the parabolic orbit). With
+``u = 1/r`` the orbit equation is ``(du/d\\phi)^2 = 2(u_1 - u)(u - u_2)(u_3 - u)``,
+``u_1 = (1 + e)/p``, ``u_2 = (1 - e)/p``, ``u_3 = 1/2 - 2/p``;
+``u = u_2 + (u_1 - u_2)\\sin^2\\chi`` gives
 
-    ψ = 4√(p/Δ) [K(k) − F(χ₀, k)] − π,   Δ = p − 6 + 2e,   k = 4e/Δ,   cos 2χ₀ = 1/e,
+```math
+\\psi = 4\\sqrt{p/\\Delta} [K(k) - F(\\chi_0, k)] - \\pi, \\qquad
+\\Delta = p - 6 + 2e, \\qquad k = 4e/\\Delta, \\qquad \\cos(2\\chi_0) = 1/e.
+```
 
-with K, F in parameter convention. The pericentre is a turning point reached from infinity
-only for u₁ < u₃, i.e. p > 6 + 2e (k < 1); for p ≤ 6 + 2e the orbit is captured and there is
-no deflection angle. A timelike orbit also needs p > 3 + e² (L² = p²/(p − 3 − e²)), which is
-the stronger condition for e > 3. For p → ∞, ψ = 2 asin(1/e) + [6 acos(−1/e) + 2√(e² − 1)]/p + O(1/p²).
+with ``K``, ``F`` in parameter convention. The pericentre is a turning point reached from infinity
+only for ``u_1 < u_3``, i.e. ``p > 6 + 2e`` (``k < 1``); for ``p \\leq 6 + 2e`` the orbit is captured and there is
+no deflection angle. A timelike orbit also needs ``p > 3 + e^2`` (``L^2 = p^2/(p - 3 - e^2)``), which is
+the stronger condition for ``e > 3``. For ``p \\to \\infty``,
+``\\psi = 2\\arcsin(1/e) + [6\\arccos(-1/e) + 2\\sqrt{e^2 - 1}]/p + O(1/p^2)``.
 """
 function kerr_geo_deflection_angle(a::Real, p::Real, e::Real, x::Real=1.0)
     iszero(a) || throw(ArgumentError("kerr_geo_deflection_angle: the closed form holds for a = 0 only"))
@@ -84,16 +90,17 @@ end
     kerr_geo_constants_of_motion(a, p, e, x; precision=nothing)
 
 The constants of motion of the orbit with APEX parameters `(a, p, e, x)`, as
-`Dict("E" => E, "Lz" => Lz, "Q" => Q)`; r = p/(1 ± e) are roots of the radial potential and
-x = cos of the inclination, Q = (1 − x²)(a²(1 − E²) + Lz²/x²). A Schwarzschild (a = 0) scatter
-orbit (e > 1 and p > 6 + 2e, so it returns to infinity) also carries the speed at infinity
-"v∞", the impact parameter "b" and the deflection angle "ψ".
+`Dict("E" => E, "Lz" => Lz, "Q" => Q)`; ``r = p/(1 \\pm e)`` are roots of the radial potential and
+``x`` is the cosine of the inclination, ``Q = (1 - x^2)(a^2(1 - E^2) + L_z^2/x^2)``.
+A Schwarzschild (``a = 0``) scatter orbit (``e > 1`` and ``p > 6 + 2e``, so it returns to infinity)
+also carries the speed at infinity `"v∞"`, the impact parameter `"b"` and the deflection angle `"ψ"`.
 
 The parameters must admit real timelike constants, otherwise a `DomainError` is raised. A root
 of the separatrix polynomial need not satisfy this at large eccentricity: in Schwarzschild
-spacetime `p = 6 + 2e` with `e = 5` gives E² = −1/2. Scattering with `e = 5` exists at larger
-`p`; in Schwarzschild spacetime it requires `p > 3 + e²` as well as `p > 6 + 2e`. The constants are computed in the floating-point type
-of `(a, p, e, x)`; `precision = p` converts them to `BigFloat` of `p` bits.
+spacetime ``p = 6 + 2e`` with ``e = 5`` gives ``E^2 = -1/2``. Scattering with ``e = 5`` exists at larger
+``p``; in Schwarzschild spacetime it requires ``p > 3 + e^2`` as well as ``p > 6 + 2e``. The constants
+are computed in the floating-point type of `(a, p, e, x)`; `precision = p` converts them to
+`BigFloat` of `p` bits.
 """
 function kerr_geo_constants_of_motion(a::Real, p::Real, e::Real, x::Real; precision=nothing)
     precision === nothing || return setprecision(BigFloat, precision) do

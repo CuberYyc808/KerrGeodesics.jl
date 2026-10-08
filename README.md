@@ -4,20 +4,20 @@
 [![GitHub release](https://img.shields.io/github/v/release/CuberYyc808/KerrGeodesics.jl.svg)](https://github.com/CuberYyc808/KerrGeodesics.jl/releases)
 [![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://CuberYyc808.github.io/KerrGeodesics.jl)
 
-Timelike geodesics outside a Kerr black hole. Give the spin `a` and the constants of motion
-`(E, Lz, Q)`: KerrGeodesics.jl finds every orbit these constants allow and returns its
-trajectory, four-velocity and frequencies as functions of Mino time `λ`
-(`G = c = M = 1`, Boyer–Lindquist coordinates, `dτ/dλ = Σ = r² + a² cos²θ`).
+Timelike geodesics outside a Kerr black hole. Give the spin $a$ and the constants of motion
+$(E, L_z, Q)$: KerrGeodesics.jl finds every orbit these constants allow and returns its
+trajectory, four-velocity and frequencies as functions of Mino time $\lambda$
+($G = c = M = 1$, Boyer–Lindquist coordinates, $d\tau/d\lambda = \Sigma = r^2 + a^2\cos^2\theta$).
 
 <p align="center">
   <img src="example/animations/showcase_all.gif" width="100%" alt="56 Kerr geodesics, one for each kind of radial motion">
 </p>
 
 The animation shows 56 orbits, one for each kind of radial motion the package distinguishes,
-row by row in six classes. Each tile draws `(x, y, z) = (r sinθ cosϕ, r sinθ sinϕ, r cosθ)`
-(units of `M`, spin along `z`), with the outer horizon as the black sphere and the ergosphere as
-the wireframe; `ϕ` is the azimuth `φ` (or `ψ = φ + φ_H` for orbits that cross a horizon) and the
-frames show the progression along each trajectory. The constants `(a, E, Lz, Q)` are
+row by row in six classes. Each tile draws $(x, y, z) = (r\sin\theta\cos\varphi, r\sin\theta\sin\varphi, r\cos\theta)$
+(units of $M$, spin along $z$), with the outer horizon as the black sphere and the ergosphere as
+the wireframe; $\varphi$ is the azimuth $\phi$ (or $\psi = \phi + \phi_H$ for orbits that cross a horizon) and the
+frames show the progression along each trajectory. The constants $(a, E, L_z, Q)$ are
 printed on the tiles and recorded in the
 [catalogue notebook](example/KerrGeodesics_56_Orbit_Catalog.ipynb);
 [`example/data/catalogue_registry.tsv`](example/data/catalogue_registry.tsv) lists their
@@ -28,13 +28,13 @@ root structures, allowed intervals and formula families.
 | Stable | bound between two turning points, or on a stable circular or spherical orbit | 6 |
 | Critical | on, or asymptotic to, an unstable or marginally stable circular or spherical orbit (ISCO and ISSO, homoclinic and whirl orbits) | 11 |
 | Plunge | from a turning point into the black hole | 11 |
-| Capture | from infinity into the black hole (`E ≥ 1`) | 16 |
-| Scatter | from infinity through a turning point and back to infinity (`E ≥ 1`) | 6 |
-| Trapped | `E < 0`, inside the ergoregion: out of the past horizon, through a turning point, into the future horizon | 6 |
+| Capture | from infinity into the black hole ($E \geq 1$) | 16 |
+| Scatter | from infinity through a turning point and back to infinity ($E \geq 1$) | 6 |
+| Trapped | $E < 0$, inside the ergoregion: out of the past horizon, through a turning point, into the future horizon | 6 |
 
 Within a class, the orbits differ in how the roots of the radial potential are arranged. The
 grid includes the limiting cases in which the horizon is itself a root and those of an
-extremal black hole (`|a| = 1`).
+extremal black hole ($|a| = 1$).
 
 ## Installation
 
@@ -57,8 +57,8 @@ kg = kerr_geodesic(0.9, 10.0, 0.5, 0.8)             # or spin a and (p, e, x) of
 Here there are two, a stable orbit and the plunge with the same constants, and
 `kerr_geo_members(kg)` lists them. Every orbit is used in the same way.
 
-**Trajectory.** `t`, `r`, `theta`, `phi` and the proper time `tau` as functions of `λ`, on the
-range `Domain.mino`:
+**Trajectory.** $t(\lambda)$, $r(\lambda)$, $\theta(\lambda)$, $\phi(\lambda)$ and the proper time
+$\tau(\lambda)$ are available as `t`, `r`, `theta`, `phi` and `tau`, on the range `Domain.mino`:
 
 ```julia
 λ = 1.0
@@ -68,9 +68,15 @@ kg.Stable.Trajectory.r(λ)                  # likewise t, theta, phi, tau
 kg.Plunge.Trajectory.v(λH)                 # the horizon-regular coordinates v and psi stay finite there
 ```
 
-**Four-velocity.** `Velocity` holds the Mino-time rates `dx^μ/dλ` (`ut`, `ur`, `utheta`, `uphi`)
-and `dtau_dlambda = Σ`; the four-velocity `u^μ = dx^μ/dτ` is their ratio. For a stable orbit
-given by `(a, p, e, x)`, `kerr_geo_four_velocity` returns it directly (`Covariant=true` for `u_μ`).
+**Four-velocity.** `Velocity` holds the Mino-time rates $dx^\mu/d\lambda$ (`ut`, `ur`, `utheta`, `uphi`)
+and $d\tau/d\lambda = \Sigma$ (`dtau_dlambda`). Their ratio gives the four-velocity:
+
+$$
+u^\mu = \frac{dx^\mu}{d\tau} = \frac{1}{\Sigma}\frac{dx^\mu}{d\lambda}.
+$$
+
+For a stable orbit given by $(a, p, e, x)$, `kerr_geo_four_velocity` returns it directly
+(`Covariant=true` for $u_\mu$).
 
 ```julia
 kg.Stable.Velocity.ut(λ) / kg.Stable.Velocity.dtau_dlambda(λ)   # u^t; likewise ur, utheta, uphi
@@ -85,7 +91,9 @@ kg.Stable.Status.apex                      # (a, p, e, x)
 kg.Stable.Roots.radial                     # roots of the radial potential, largest first: apoapsis, periapsis, …
 ```
 
-**Frequencies.**
+**Frequencies.** The Mino-time frequencies are $(\Upsilon_t, \Upsilon_r, \Upsilon_\theta, \Upsilon_\phi)$.
+The Boyer–Lindquist-time orbital frequencies satisfy $\Omega_i = \Upsilon_i/\Upsilon_t$,
+with $i \in \lbrace r, \theta, \phi\rbrace$.
 
 ```julia
 kg.Stable.Status.frequencies                                        # Mino frequencies (ϒt, ϒr, ϒθ, ϒϕ)
@@ -117,17 +125,17 @@ literals `0.9` and `0.95` are `Float64` numbers, whose exact values are
 ```
 
 With `precision=256` these are converted unchanged, so the orbit would be computed for
-a = 0.90000000000000002220… rather than for a = 0.9.
+$a = 0.90000000000000002220\ldots$ rather than for $a = 0.9$.
 
 New in 0.5.0: every orbit is computed in the precision of its input, as above. Bound orbits given
-by `(p, e, x)` keep their turning points `p/(1 ∓ e)`, so they stay bound and accurate up to the
+by $(p, e, x)$ keep their turning points $p/(1 \mp e)$, so they stay bound and accurate up to the
 separatrix.
 
 ## Examples
 
 [`example/KerrGeodesics_Tutorial.ipynb`](example/KerrGeodesics_Tutorial.ipynb) walks through
 the conventions, the classification, one example per class (Stable, Critical, Plunge,
-Capture, Scatter, and Trapped with `E < 0`), polar options, the horizon-regular coordinates,
+Capture, Scatter, and Trapped with $E < 0$), polar options, the horizon-regular coordinates,
 the four-velocity and self-checks (`kerr_geo_diagnose`), the APEX interface and the accuracy
 limits. The 56 orbits above, with their constants, are in
 [`example/KerrGeodesics_56_Orbit_Catalog.ipynb`](example/KerrGeodesics_56_Orbit_Catalog.ipynb).

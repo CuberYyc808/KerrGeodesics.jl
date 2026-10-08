@@ -16,7 +16,7 @@ stable = kg.Stable
 (stable.CaseId, stable.Trajectory.r(0.0), stable.Trajectory.z(0.0))
 ```
 
-With zero initial phases, ``λ = 0`` is at periapsis, ``r = p/(1 + e)``, and at the northern
+With zero initial phases, ``\lambda = 0`` is at periapsis, ``r = p/(1 + e)``, and at the northern
 polar turning point. `initPhases` moves the start along the orbit:
 
 ```@example ex
@@ -24,7 +24,7 @@ shifted = kerr_geodesic(0.9, 10.0, 0.5, 0.8; initPhases = (0.0, π, 0.0, 0.0)).S
 shifted.Trajectory.r(0.0)                       # apoapsis, p/(1 - e)
 ```
 
-A circular equatorial orbit has ``e = 0`` and ``x = ±1``:
+A circular equatorial orbit has ``e = 0`` and ``x = \pm1``:
 
 ```@example ex
 circular = kerr_geodesic(0.9, 8.0, 0.0, 1.0).Stable
@@ -41,7 +41,7 @@ kg = kerr_geodesic(0.7, (0.9171300256198305, 2.2591913519439517, 2.8989944919840
 [(member.CaseId, member.Role, member.Status.name) for member in kg.Critical]
 ```
 
-The homoclinic orbit K4 leaves the spherical orbit, turns at apoapsis at ``λ = 0`` and comes
+The homoclinic orbit K4 leaves the spherical orbit, turns at apoapsis at ``\lambda = 0`` and comes
 back, so every radius off the root is reached twice. `lambda_of_radius` takes the branch:
 
 ```@example ex
@@ -53,7 +53,7 @@ r1 = homoclinic.Trajectory.r(1.0)
 ```
 
 The whirling orbit K5 leaves the spherical orbit inward and crosses the horizon at
-``λ = 0``, where ``v`` vanishes:
+``\lambda = 0``, where ``v`` vanishes:
 
 ```@example ex
 whirl = kg.Critical[3]
@@ -83,8 +83,8 @@ plunge = kerr_geodesic(0.9, (0.94, 0.1, 12.0)).Plunge
 (plunge.CaseId, plunge.Trajectory.r(0.0), plunge.Trajectory.r(λH))
 ```
 
-The plunge starts at its turning point and crosses the horizon at ``λ_H``, where ``v`` and
-``ψ`` vanish and Boyer–Lindquist ``t`` diverges:
+The plunge starts at its turning point and crosses the horizon at ``\lambda_H``, where ``v`` and
+``\psi`` vanish and Boyer–Lindquist ``t`` diverges:
 
 ```@example ex
 (plunge.Trajectory.v(λH), plunge.Trajectory.psi(λH), plunge.Trajectory.t(0.999λH))
@@ -97,8 +97,8 @@ capture = kerr_geo_capture_component(0.9, 1.1, 0.5, 3.0)
 (capture.CaseId, capture.Domain.mino)
 ```
 
-The capture comes in from infinity at ``λ_∞ < 0`` and crosses the horizon at ``λ = 0``. ``t``
-and ``φ`` vanish halfway in Mino time, at `ReferenceZero.t_phi_zero_lambda`:
+The capture comes in from infinity at ``\lambda_\infty < 0`` and crosses the horizon at ``\lambda = 0``. ``t``
+and ``\phi`` vanish halfway in Mino time, at `ReferenceZero.t_phi_zero_lambda`:
 
 ```@example ex
 (capture.ReferenceZero.t_phi_zero_lambda, capture.ReferenceZero.t_phi_zero_radius,
@@ -139,7 +139,7 @@ scatter = kg.Scatter
 (kg.Status.case_ids, scatter.Domain.mino, scatter.ReferenceZero.t_phi_zero_radius)
 ```
 
-The orbit turns at closest approach at ``λ = 0``; each radius is reached once on the way in
+The orbit turns at closest approach at ``\lambda = 0``; each radius is reached once on the way in
 and once on the way out. The asymptotic data give the directions of approach and escape and
 the deflection:
 
@@ -152,7 +152,7 @@ asymptotics = kerr_geo_scatter_asymptotic_diagnostics(scatter)
 ## A trapped orbit
 
 With ``E < 0`` the orbit lives inside the ergoregion. It leaves the past horizon at
-``-λ_H``, turns at ``λ = 0`` and crosses the future horizon at ``λ_H``:
+``-\lambda_H``, turns at ``\lambda = 0`` and crosses the future horizon at ``\lambda_H``:
 
 ```@example ex
 trapped = kerr_geo_trapped(0.9, -0.8, -4.0, 1.0)
@@ -160,8 +160,8 @@ trapped = kerr_geo_trapped(0.9, -0.8, -4.0, 1.0)
 (trapped.CaseId, trapped.Domain.mino, trapped.Trajectory.full(0.0).r)
 ```
 
-``t`` and ``φ`` diverge on both horizons. The outgoing coordinates ``u``, ``χ`` vanish on the
-past horizon and the ingoing ``v``, ``ψ`` on the future one:
+``t`` and ``\phi`` diverge on both horizons. The outgoing coordinates ``u``, ``\chi`` vanish on the
+past horizon and the ingoing ``v``, ``\psi`` on the future one:
 
 ```@example ex
 (trapped.Trajectory.u(-ΛH), trapped.Trajectory.v(ΛH))
@@ -186,8 +186,8 @@ island = kerr_geodesic(a, (0.94, 2rplus * 0.94 / a, 0.0)).Stable
 (island.CaseId, island.Tier, kerr_geo_case_name(island.CaseId))
 ```
 
-At ``a = ±1`` every member belongs to the extremal tier. Reflecting the spin and ``L_z``
-leaves ``r`` unchanged and reverses ``φ``:
+At ``a = \pm1`` every member belongs to the extremal tier. Reflecting the spin and ``L_z``
+leaves ``r`` unchanged and reverses ``\phi``:
 
 ```@example ex
 plus = kerr_geodesic(1.0, (1.2, 2.0, 14.0)).Scatter

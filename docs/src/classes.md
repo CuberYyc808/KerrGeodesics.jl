@@ -2,32 +2,32 @@
 
 ## What decides the motion
 
-In Mino time ``λ``, defined by ``dτ/dλ = Σ = r^2 + a^2\cos^2θ``, the radial and polar
+In Mino time ``\lambda``, defined by ``d\tau/d\lambda = \Sigma = r^2 + a^2\cos^2\theta``, the radial and polar
 motions of a Kerr geodesic separate:
 
 ```math
-\left(\frac{dr}{dλ}\right)^2 = R(r), \qquad \left(\frac{dz}{dλ}\right)^2 = Θ(z), \qquad z = \cos θ,
+\left(\frac{dr}{d\lambda}\right)^2 = R(r), \qquad \left(\frac{dz}{d\lambda}\right)^2 = \Theta(z), \qquad z = \cos \theta,
 ```
 
 ```math
-R(r) = \bigl[E(r^2+a^2) - aL_z\bigr]^2 - Δ\,\bigl[r^2 + (L_z - aE)^2 + Q\bigr],
-\qquad Δ = r^2 - 2r + a^2,
+R(r) = \bigl[E(r^2+a^2) - aL_z\bigr]^2 - \Delta\,\bigl[r^2 + (L_z - aE)^2 + Q\bigr],
+\qquad \Delta = r^2 - 2r + a^2,
 ```
 
 ```math
-Θ(z) = Q\,(1 - z^2) - z^2\bigl[L_z^2 + a^2(1 - E^2)(1 - z^2)\bigr].
+\Theta(z) = Q\,(1 - z^2) - z^2\bigl[L_z^2 + a^2(1 - E^2)(1 - z^2)\bigr].
 ```
 
-An orbit can only be where ``R ≥ 0``. The leading term of ``R`` is ``(E^2 - 1)\,r^4``, and
+An orbit can only be where ``R \geq 0``. The leading term of ``R`` is ``(E^2 - 1)\,r^4``, and
 its sign sets the energy regime, returned by [`kerr_energy_regime`](@ref):
 
 | Regime | Energy | At large ``r`` |
 | :--- | :--- | :--- |
-| `:elliptic` | ``E^2 < 1`` | ``R → -∞``: no orbit reaches infinity |
+| `:elliptic` | ``E^2 < 1`` | ``R \to -\infty``: no orbit reaches infinity |
 | `:parabolic` | ``E^2 = 1`` | ``R`` is a cubic and grows like ``2r^3`` |
-| `:hyperbolic` | ``E^2 > 1`` | ``R → +∞``: orbits come in from infinity |
+| `:hyperbolic` | ``E^2 > 1`` | ``R \to +\infty``: orbits come in from infinity |
 
-Outside the outer horizon ``r_+ = 1 + \sqrt{1 - a^2}``, the region ``R ≥ 0`` splits into
+Outside the outer horizon ``r_+ = 1 + \sqrt{1 - a^2}``, the region ``R \geq 0`` splits into
 intervals bounded by roots of ``R``, by the horizon and by infinity. Each interval is one
 possible orbit, and so is each repeated root on which an orbit can sit at constant radius.
 [`kerr_geodesic`](@ref) finds all of them and builds one *member* for each. Where the real
@@ -44,8 +44,8 @@ number, such as `:A1`, `:K4` or `:C12`.
 | Stable | A | `:stable` | `Stable` | bound between two turning points, or on a stable circular or spherical orbit |
 | Critical | K | `:critical` | `Critical` (a tuple) | on, or asymptotic to, an unstable or marginally stable circular or spherical orbit |
 | Plunge | B | `:plunge` | `Plunge` | from a turning point into the black hole |
-| Capture | C | `:capture` | `Capture` | from infinity into the black hole, ``E ≥ 1`` |
-| Scatter | D | `:scatter` | `Scatter` | from infinity through a turning point and back to infinity, ``E ≥ 1`` |
+| Capture | C | `:capture` | `Capture` | from infinity into the black hole, ``E \geq 1`` |
+| Scatter | D | `:scatter` | `Scatter` | from infinity through a turning point and back to infinity, ``E \geq 1`` |
 | Trapped | N | `:trapped` | `Trapped` | ``E < 0``, inside the ergoregion: out of the past horizon, through a turning point, into the future horizon |
 
 The table is available as [`KERR_GEO_CLASSES`](@ref). [`kerr_geo_class`](@ref) returns the
@@ -93,7 +93,7 @@ Critical members in a tuple ordered by role: on the root, outer, inner.
 ### Plunge (B)
 
 A plunge falls inward from a finite outer turning point. Subextremal members normally put
-that point at ``λ = 0`` and reach the future horizon at finite Mino time; axis infall instead
+that point at ``\lambda = 0`` and reach the future horizon at finite Mino time; axis infall instead
 puts the horizon at zero. Exact-extremal crossing members also use a horizon origin, while
 B-X1 and B-X2 approach the horizon only asymptotically. See [Where the coordinates are zero](@ref)
 for the coordinate origins.
@@ -114,7 +114,7 @@ for the coordinate origins.
 
 Every capture comes in from infinity without a turning point and crosses the future
 horizon. The cases differ in the roots of ``R``, all of which lie inside the horizon; they
-fix the closed form of ``r(λ)``.
+fix the closed form of ``r(\lambda)``.
 
 | Case | Energy | Roots of ``R`` |
 | :--- | :--- | :--- |
@@ -194,7 +194,7 @@ asymptotically.
 | :--- | :--- | :--- |
 | A-X1 | ``E < 1`` | oscillates between two roots outside the horizon |
 | A-X2 | ``E < 1`` | stable spherical orbit |
-| B-X1 | ``E < 1`` | turns at its outer root (``λ = 0``) and approaches the double root on the horizon as ``λ → ±∞`` |
+| B-X1 | ``E < 1`` | turns at its outer root (``\lambda = 0``) and approaches the double root on the horizon as ``\lambda \to \pm\infty`` |
 | B-X2 | ``E < 1`` | as B-X1, with a triple root on the horizon |
 | C-X1 | ``E = 1`` | from infinity toward the double root on the horizon |
 | C-X2 | ``E > 1`` | as C-X1 |
@@ -205,13 +205,13 @@ asymptotically.
 
 The IDs are listed in [`HORIZON_TIER_IDS`](@ref) and [`EXTREMAL_TIER_IDS`](@ref). A member
 records its tier in `member.Tier`: `:primary`, `:horizon` or `:extremal`. At ``|a| = 1`` every
-member has `Tier == :extremal`, including those with ``P(r_+) ≠ 0``, which keep their
+member has `Tier == :extremal`, including those with ``P(r_+) \neq 0``, which keep their
 primary case IDs. A repeated root on the horizon is not Critical: the Critical rule asks for
 ``r_c > r_+``.
 
 ## Polar motion
 
-The polar motion is classified separately, from the roots of ``Θ(z)``. The sign of ``Q``
+The polar motion is classified separately, from the roots of ``\Theta(z)``. The sign of ``Q``
 decides; only ``Q = 0`` itself is the equatorial limit, however small a nonzero ``Q`` is. The
 constants fix the motion except in two situations, where the keyword `polar_sector` chooses:
 with ``Q = 0`` and ``L_z^2 < a^2(E^2 - 1)`` the orbit can lie in the equatorial plane or
@@ -224,11 +224,11 @@ stay in one hemisphere.
 | `:equatorial` | ``Q = 0`` | stays in the equatorial plane |
 | `:equator_attractive` | ``Q = 0``, ``L_z^2 < a^2(E^2 - 1)`` | approaches the equatorial plane asymptotically |
 | `:vortical` | ``Q < 0``, ``E > 1`` | stays in one hemisphere, oscillating between two latitudes |
-| `:constant_latitude` | a double root of ``Θ`` | stays at one latitude off the equator |
-| `:axis_crossing` | ``L_z = 0``, ``Q > a^2(1 - E^2)``, ``Q ≠ 0`` | passes over the poles; ``φ`` gains ``π`` at every pass (the limit ``L_z → 0^+``) |
+| `:constant_latitude` | a double root of ``\Theta`` | stays at one latitude off the equator |
+| `:axis_crossing` | ``L_z = 0``, ``Q > a^2(1 - E^2)``, ``Q \neq 0`` | passes over the poles; ``\phi`` gains ``\pi`` at every pass (the limit ``L_z \to 0^+``) |
 | `:axis_constant` | ``L_z = 0``, ``Q = a^2(1 - E^2)`` | moves along the spin axis |
 
-With ``L_z = Q = 0`` and ``E > 1`` the sector follows the spin. For ``a ≠ 0`` the default is
+With ``L_z = Q = 0`` and ``E > 1`` the sector follows the spin. For ``a \neq 0`` the default is
 `:equatorial` and `polar_sector = :axis_crossing` selects motion over the poles (at ``L_z = 0``
 the equator-attractive motion is that same axis-crossing motion). For ``a = 0`` the only sector
 is `:axis_constant` (radial infall along a fixed direction, case C12), the default with

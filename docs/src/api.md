@@ -3,6 +3,10 @@
 Every exported name, grouped by purpose. [Working with an orbit](@ref) describes the fields
 of the family and member objects in context.
 
+Mathematical symbols follow [Conventions](@ref): ``\lambda`` is Mino time,
+``d\tau/d\lambda = \Sigma``, and ``(E, L_z, Q)`` are the constants per unit rest mass.
+Function signatures and field names use the Julia spellings `Lz`, `theta`, `phi` and `tau`.
+
 ## Building orbits
 
 ```@docs

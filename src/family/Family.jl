@@ -78,17 +78,17 @@ Build the `KerrGeodesicFamily` of spin `a` and constants of motion `(E, Lz, Q)` 
 a NamedTuple with fields `E`, `Lz`, `Q`): every member these constants admit, each in the
 slot of its broad class. The constants are used exactly as given.
 
-The four-argument form takes APEX parameters (semi-latus rectum `p`, eccentricity `e`,
-`x = cos ι`) and converts them to `(E, Lz, Q)`; a spin within `8eps()` of ±1 is taken as
-exactly ±1, and the original input is kept in `Status.input_provenance`. A bound eccentric
-orbit keeps the turning points `p/(1 ∓ e)` in its Stable member; `Status.apex_root_geometry`
+The four-argument form takes APEX parameters (semi-latus rectum ``p``, eccentricity ``e``,
+``x = \\cos\\iota``) and converts them to `(E, Lz, Q)`; a spin within `8eps()` of ``\\pm 1`` is taken as
+exactly ``\\pm 1``, and the original input is kept in `Status.input_provenance`. A bound eccentric
+orbit keeps the turning points ``p/(1 \\mp e)`` in its Stable member; `Status.apex_root_geometry`
 records whether they were used (`accepted`) or why not (`reason`), and
 `Status.component_root_models` the roots each component is built from. With
 `input=:constants` the three numbers are read as `(E, Lz, Q)`.
 
 Returns a `KerrGeodesicFamily`. Each member (a `KerrGeoComponent`) gives the Boyer–Lindquist
-coordinates as functions of Mino time ``λ``, defined by ``dτ/dλ = Σ = r^2 + a^2\\cos^2θ``:
-`m.Trajectory.t(λ)`, `r`, `theta`, `phi`, `tau`, and the rates ``dx^μ/dλ`` in `m.Velocity`.
+coordinates as functions of Mino time ``\\lambda``, defined by ``d\\tau/d\\lambda = \\Sigma = r^2 + a^2\\cos^2\\theta``:
+`m.Trajectory.t(λ)`, `r`, `theta`, `phi`, `tau`, and the rates ``dx^\\mu/d\\lambda`` in `m.Velocity`.
 
 ```julia
 kg = kerr_geodesic(0.9, (0.94, 0.1, 12.0))
@@ -97,7 +97,7 @@ kg.Plunge.Trajectory.r(0.5)
 
 Keywords: `case_id`, `initial_radius`, `radial_sign`, `endpoint_intent` select one member
 (exactly one must match); `polar_sector`, `polar_phase`, `polar_hemisphere` fix the polar
-motion; `reference_radius` places the zero of t and φ on Critical and Capture members;
+motion; `reference_radius` places the zero of ``t`` and ``\\phi`` on Critical and Capture members;
 `axis` (`:north`, `:south`) selects motion along the spin axis, at constant azimuth `phi0`;
 `initPhases` sets the phases of the Stable member; `trapped_component` (`:full`,
 `:outgoing`, `:incoming`) selects the part of the Trapped member, and `disposition_id` is

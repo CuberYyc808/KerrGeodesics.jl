@@ -68,7 +68,7 @@ them in proportion to the number of bits (see [Numerics and accuracy](accuracy.m
 
 Every step is computed in the type of the input: the roots of the radial potential and the
 classification, the elliptic integrals and Jacobi functions (implemented in the package), the
-series, the Chebyshev tables of ``t``, ``φ`` and ``τ`` (their order grows with the number of
+series, the Chebyshev tables of ``t``, ``\phi`` and ``\tau`` (their order grows with the number of
 digits) and the tolerances, which keep their place between the rounding and the physical scale.
 At 256 bits the elliptic functions and the radial roots are accurate to about ``10^{-76}``, the
 orbits to about ``10^{-70}``.
