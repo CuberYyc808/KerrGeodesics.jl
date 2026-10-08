@@ -37,10 +37,10 @@ function _d2_roots(outcome)
     return (rA=roots[1], rB=roots[2], rC=roots[3], rD=roots[4])
 end
 
-# Mino time from the turning point of a scattering leg, in [0, λ∞): within MINO_ENDPOINT_TOL
+# Mino time from the turning point of a scattering leg, in [0, λ∞): within `_mino_endpoint_tol`
 # below 0 it is the turning point
 function _leg_time(s, λ∞)
-    -MINO_ENDPOINT_TOL <= s < λ∞ || throw(DomainError(s,
+    -_mino_endpoint_tol(_float_type(s, λ∞)) <= s < λ∞ || throw(DomainError(s,
         "Mino time from the turning point must lie in [0, λ∞ = $(λ∞))."))
     return max(s, 0.0)
 end
@@ -117,8 +117,9 @@ end
 
 function _d1_positive_phi_radial_infinity(a, lz, leg)
     residues = _d1_radial_residues(a, lz)
-    return residues.c_phi_plus * _three_real_pole(leg, residues.rplus, pi / 2) +
-        residues.c_phi_minus * _three_real_pole(leg, residues.rminus, pi / 2)
+    halfpi = oftype(residues.rplus, π) / 2
+    return residues.c_phi_plus * _three_real_pole(leg, residues.rplus, halfpi) +
+        residues.c_phi_minus * _three_real_pole(leg, residues.rminus, halfpi)
 end
 
 function _d1_radial_phi_dot(a, lz, r)
@@ -252,8 +253,8 @@ function _d2_equatorial_asymptotic_diagnostics(kg::KerrGeoScatter)
     phi_turn_to_infinity = _d2_positive_total_phi_infinity(a, energy, lz, _four_real_leg(energy, roots))
     delta_phi = 2 * phi_turn_to_infinity
     lz_sign = sign(iszero(lz) ? 1.0 : lz)
-    signed_deflection = delta_phi - lz_sign * pi
-    unsigned_deflection = abs(delta_phi) - pi
+    signed_deflection = delta_phi - lz_sign * oftype(delta_phi, π)
+    unsigned_deflection = abs(delta_phi) - oftype(delta_phi, π)
     principal_cosine = -cos(delta_phi)
     principal_angle = acos(_clamp_unit(principal_cosine))
 
@@ -449,8 +450,8 @@ function _d1_parabolic_geometric_diagnostics(kg::KerrGeoScatter)
     principal_angle = acos(_clamp_unit(principal_cosine))
     angular_scale = sqrt(max(lz^2 + max(qcarter, 0.0), 0.0))
     lz_sign = sign(iszero(lz) ? 1.0 : lz)
-    signed_equatorial = generic_inclined ? NaN : delta_phi - lz_sign * pi
-    unsigned_equatorial = generic_inclined ? NaN : abs(delta_phi) - pi
+    signed_equatorial = generic_inclined ? oftype(delta_phi, NaN) : delta_phi - lz_sign * oftype(delta_phi, π)
+    unsigned_equatorial = generic_inclined ? oftype(delta_phi, NaN) : abs(delta_phi) - oftype(delta_phi, π)
 
     return (
         formula=kg.Formula,

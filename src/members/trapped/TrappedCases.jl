@@ -12,15 +12,15 @@ radial root structure (`Roots`, as `kerr_geo_root_structure` returns it), the `P
 P(r₊) (`HorizonMomentum`), the `TurningRadius`, the Mino
 `Domain` between the two horizons, and the `Conditions` and `Status` of the classification.
 """
-struct KerrGeoTrappedClassification
+struct KerrGeoTrappedClassification{T<:Real}
     CaseId::Symbol
     DispositionId::Symbol
     EnergyRegime::Symbol
     MetricLimit::Symbol
     Roots::NamedTuple
     PolarSector::Symbol
-    HorizonMomentum::Float64
-    TurningRadius::Float64
+    HorizonMomentum::T
+    TurningRadius::T
     Domain::NamedTuple
     Conditions::NamedTuple
     Status::NamedTuple
@@ -104,7 +104,7 @@ function kerr_geo_trapped_classify(a::Real, energy::Real, lz::Real, q::Real)
 
     sector = iszero(q) ? :equatorial : :pendular
     zmax2 = _polar_zmax2(a, energy, lz, q, sector)
-    0.0 <= zmax2 < 1.0 + POLAR_ROOT_SLACK || error(
+    0 <= zmax2 < 1 + _polar_root_slack(_float_type(zmax2)) || error(
         "The Class N polar turning value lies outside the physical interval.")
     zmax2 = clamp(zmax2, 0.0, 1.0)
     minimum_stationary_limit = 1.0 + sqrt(max(1.0 - a^2 * zmax2, 0.0))
@@ -155,13 +155,13 @@ end
 
 # r(λ) = r(|λ|) about the turning event (λ < 0 outgoing from the past horizon, λ > 0 incoming),
 # carried as the horizon-relative state of the incoming half with dr/dλ reversed for λ < 0
-struct _TrappedRadius{H}
+struct _TrappedRadius{T,H}
     relative::H
-    lambda_horizon::Float64
+    lambda_horizon::T
 end
-(r::_TrappedRadius)(λ) = r.relative(min(abs(float(λ)), r.lambda_horizon))
-function _radial_state(r::_TrappedRadius, λ)
-    state = _radial_state(r.relative, min(abs(float(λ)), r.lambda_horizon))
+(r::_TrappedRadius{T})(λ) where {T} = r.relative(min(abs(T(λ)), r.lambda_horizon))
+function _radial_state(r::_TrappedRadius{T}, λ) where {T}
+    state = _radial_state(r.relative, min(abs(T(λ)), r.lambda_horizon))
     return λ < 0 ? merge(state, (velocity=-state.velocity,)) : state
 end
 
@@ -177,7 +177,7 @@ function _build_trapped(a, energy, lz, q, classification;
     radial = _trapped_radial_model(classification.DispositionId, energy, classification.Roots)
     residues = _radial_residues(a, energy, lz)
     polar = _polar_solution(
-        a, energy, lz, q, classification.PolarSector, float(polar_phase))
+        a, energy, lz, q, classification.PolarSector, _float_type(a, energy, lz, q)(polar_phase))
     # r(λ) as a gap from r₊ (`_horizon_relative_model`): the turning point can lie far less
     # than ulp(r₊) outside the horizon when P(r₊) → 0
     relative = _horizon_relative_model(a, energy, lz, q, radial)
@@ -191,7 +191,7 @@ function _build_trapped(a, energy, lz, q, classification;
     function lambda_of_radius(r)
         rplus <= r <= radial.turn || throw(DomainError(r, "The radius lies outside [r+, r_turn]."))
         r == rplus && return lambda_horizon
-        r == radial.turn && return 0.0
+        r == radial.turn && return zero(lambda_horizon)
         gap = _wide_sub(_wide(float(r)), relative.horizon)
         return _horizon_lambda_of_gap(relative, gap[1] + gap[2])
     end
@@ -204,7 +204,7 @@ function _build_trapped(a, energy, lz, q, classification;
 
     function check_full(lambda)
         lam = float(lambda)
-        abs(lam) <= lambda_horizon + MINO_ENDPOINT_TOL || throw(DomainError(
+        abs(lam) <= lambda_horizon + _mino_endpoint_tol(_float_type(lam, lambda_horizon)) || throw(DomainError(
             lambda, "Mino time lies outside the full trapped interval."))
         return clamp(lam, -lambda_horizon, lambda_horizon)
     end
@@ -212,9 +212,9 @@ function _build_trapped(a, energy, lz, q, classification;
         throw(DomainError(lambda, "BL t and phi exclude both exact horizon endpoints."));
         check_full(lambda))
     function selected(lam, lambda)
-        selected_component === :outgoing && lam > MINO_ENDPOINT_TOL && throw(DomainError(
+        selected_component === :outgoing && lam > _mino_endpoint_tol(_float_type(lam)) && throw(DomainError(
             lambda, "The outgoing component ends at the radial turning event."))
-        selected_component === :incoming && lam < -MINO_ENDPOINT_TOL && throw(DomainError(
+        selected_component === :incoming && lam < -_mino_endpoint_tol(_float_type(lam)) && throw(DomainError(
             lambda, "The incoming component starts at the radial turning event."))
         return selected_component === :outgoing ? min(lam, 0.0) :
             selected_component === :incoming ? max(lam, 0.0) : lam
@@ -237,26 +237,26 @@ function _build_trapped(a, energy, lz, q, classification;
     end
     function past_regular(lambda)
         lam = check_full(lambda)
-        lam <= MINO_ENDPOINT_TOL || throw(DomainError(
+        lam <= _mino_endpoint_tol(_float_type(lam)) || throw(DomainError(
             lambda, "The retarded chart (u, χ) covers only the outgoing half, λ ≤ 0."))
         u, chi = retarded(lam)
         return (u=u, chi=chi)
     end
     function future_regular(lambda)
         lam = check_full(lambda)
-        lam >= -MINO_ENDPOINT_TOL || throw(DomainError(
+        lam >= -_mino_endpoint_tol(_float_type(lam)) || throw(DomainError(
             lambda, "The advanced chart (v, ψ) covers only the incoming half, λ ≥ 0."))
         return (v=_coords_v(coords, lam), psi=_coords_psi(coords, lam))
     end
     function outgoing_view(lambda)
         lam = check_full_bl(lambda)
-        lam <= MINO_ENDPOINT_TOL || throw(DomainError(
+        lam <= _mino_endpoint_tol(_float_type(lam)) || throw(DomainError(
             lambda, "The outgoing view requires lambda<=0."))
         return merge(full_bl(min(lam, 0.0)), past_regular(min(lam, 0.0)))
     end
     function incoming_view(lambda)
         lam = check_full_bl(lambda)
-        lam >= -MINO_ENDPOINT_TOL || throw(DomainError(
+        lam >= -_mino_endpoint_tol(_float_type(lam)) || throw(DomainError(
             lambda, "The incoming view requires lambda>=0."))
         return merge(full_bl(max(lam, 0.0)), future_regular(max(lam, 0.0)))
     end

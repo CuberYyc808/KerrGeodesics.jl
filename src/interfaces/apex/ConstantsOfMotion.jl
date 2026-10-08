@@ -83,11 +83,11 @@ function kerr_geo_deflection_angle(a::Real, p::Real, e::Real, x::Real=1.0)
     Δ = p - 6 + 2e
     k = 4e / Δ
     χ0 = acos(1 / e) / 2
-    return 4 * sqrt(p / Δ) * (Elliptic.K(k) - Elliptic.F(χ0, k)) - π
+    return 4 * sqrt(p / Δ) * (_K(k) - _F(χ0, k)) - π
 end
 
 """
-    kerr_geo_constants_of_motion(a, p, e, x)
+    kerr_geo_constants_of_motion(a, p, e, x; precision=nothing)
 
 The constants of motion of the orbit with APEX parameters `(a, p, e, x)`, as
 `Dict("E" => E, "Lz" => Lz, "Q" => Q)`; ``r = p/(1 \\pm e)`` are roots of the radial potential and
@@ -98,9 +98,21 @@ also carries the speed at infinity `"v∞"`, the impact parameter `"b"` and the 
 The parameters must admit real timelike constants, otherwise a `DomainError` is raised. A root
 of the separatrix polynomial need not satisfy this at large eccentricity: in Schwarzschild
 spacetime ``p = 6 + 2e`` with ``e = 5`` gives ``E^2 = -1/2``. Scattering with ``e = 5`` exists at larger
-``p``; in Schwarzschild spacetime it requires ``p > 3 + e^2`` as well as ``p > 6 + 2e``.
+``p``; in Schwarzschild spacetime it requires ``p > 3 + e^2`` as well as ``p > 6 + 2e``. The constants
+are computed in the floating-point type of `(a, p, e, x)`; `precision = p` converts them to
+`BigFloat` of `p` bits.
 """
-function kerr_geo_constants_of_motion(a::Real, p::Real, e::Real, x::Real)
+function kerr_geo_constants_of_motion(a::Real, p::Real, e::Real, x::Real; precision=nothing)
+    precision === nothing || return setprecision(BigFloat, precision) do
+        kerr_geo_constants_of_motion(BigFloat(a), BigFloat(p), BigFloat(e), BigFloat(x))
+    end
+    T = _float_type(a, p, e, x)
+    return _with_precision(T, _input_precision(a, p, e, x)) do
+        _kerr_geo_constants_of_motion(T(a), T(p), T(e), T(x))
+    end
+end
+
+function _kerr_geo_constants_of_motion(a, p, e, x)
     c = _apex_constants(a, p, e, x)
     constants = Dict("E" => c.E, "Lz" => c.Lz, "Q" => c.Q)
     if iszero(a) && e > 1 && p > 6 + 2e

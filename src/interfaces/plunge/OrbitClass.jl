@@ -13,7 +13,7 @@ function radial_roots(a, E, L, Q)
     coe2 = - (Q + L^2 + a^2 * (1 - E^2))
     coe1 = 2 * (a * E - L)^2 + 2 * Q
     coe0 = - a^2 * Q
-    radial_zeros = roots(Polynomial([coe0, coe1, coe2, coe3, coe4]))
+    radial_zeros = _polynomial_roots([coe0, coe1, coe2, coe3, coe4])
     return radial_zeros
 end
 
@@ -26,7 +26,7 @@ y = z² = cos²θ; zp = Inf when a²(1 − E²) = 0.
 function polar_roots(a, E, L, Q)
     c = a^2 * (1 - E^2)
     roots = _polar_quadratic_roots(c, L, Q)
-    return roots.u_small, c > 0 ? roots.u_big : Inf
+    return roots.u_small, c > 0 ? roots.u_big : oftype(roots.u_small, Inf)
 end
 
 """
@@ -65,8 +65,9 @@ function classify_orbit(a, E, L, Q; atol=1e-15)
     if isodd(count(paired))
         paired[argmin(i -> paired[i] ? abs(imag(raw[i])) : Inf, eachindex(raw))] = false
     end
-    real_roots = Float64[real(raw[i]) for i in eachindex(raw) if !paired[i]]
-    complex_roots = ComplexF64[raw[i] for i in eachindex(raw) if paired[i]]
+    T = real(eltype(raw))
+    real_roots = T[real(raw[i]) for i in eachindex(raw) if !paired[i]]
+    complex_roots = Complex{T}[raw[i] for i in eachindex(raw) if paired[i]]
 
     if length(real_roots) == 4
         sort!(real_roots)

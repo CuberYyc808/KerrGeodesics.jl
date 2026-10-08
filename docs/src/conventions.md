@@ -44,6 +44,11 @@ with ``r = r(\lambda')``, ``z = z(\lambda')`` along the orbit and ``\lambda_0`` 
 and `radial_tau` return; over a monotone leg they equal ``\int f(r)\,dr/\sqrt{R(r)}`` with
 ``f = (r^2+a^2)P/\Delta``, ``aP/\Delta - aE``, ``r^2`` (see [Radius as the variable](@ref)).
 
+At ``L_z = 0`` the orbit passes over the spin axis, where ``\phi`` is undefined. ``\phi`` is the
+limit ``L_z \to 0^+`` (``x \to 0^+``): it gains ``\pi`` at every pass over the axis, so the Cartesian
+position continues to the opposite meridian, and the azimuthal frequency ``\Upsilon_\phi`` includes
+``\Upsilon_\theta``.
+
 ## Constants of motion and APEX parameters
 
 The constants are the energy ``E``, the axial angular momentum ``L_z`` and the Carter
@@ -66,6 +71,17 @@ At ``a = 0`` these labels have no distinction relative to the black-hole spin.
 converts ``(p, e, x)`` to ``(E, L_z, Q)`` and continues as for constants; a spin within
 ``8\epsilon`` of ``\pm1`` is taken as exactly ``\pm1`` there, and the input is kept in
 `Status.input_provenance`.
+
+For a bound eccentric orbit (``|a| < 1``, ``0 < e < 1``, ``0 < E < 1``) the turning points
+``p/(1 \mp e)`` are part of the input, and the Stable member keeps them: its roots are
+``r_1 = p/(1-e)``, ``r_2 = p/(1+e)`` and the two roots of the quadratic factor
+``R(r)/\bigl((r - r_1)(r - r_2)\bigr)`` of the same constants. Near the separatrix the
+constants alone, rounded to the working precision, can merge ``r_2`` and ``r_3`` into a
+repeated root, and the bound orbit would be classified as critical. The other members use
+the roots of the constants. `Status.apex_root_geometry` records whether the turning points
+were used (`accepted`) or, if not, why (`reason`, e.g. `:gap_unresolved` when ``r_2 - r_3``
+is within rounding), and `Status.component_root_models` gives the root model of each
+component.
 
 ## Where the coordinates are zero
 

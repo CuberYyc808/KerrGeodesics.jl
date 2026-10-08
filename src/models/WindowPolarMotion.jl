@@ -27,7 +27,7 @@ function _hyperbolic_polar_roots(a, energy, lz, q)
         sqrt(-roots.cu_big)/sqrt(beta)
     negative_amplitude = positive_large ? sqrt(roots.cu_big)/sqrt(beta) :
         sqrt(q)/sqrt(-roots.cu_big)
-    0 < amplitude <= sqrt(1 + POLAR_ROOT_SLACK) || error("Generic inclined hyperbolic polar root z_+ is outside (0,1].")
+    0 < amplitude <= sqrt(1 + _polar_root_slack(_float_type(amplitude))) || error("Generic inclined hyperbolic polar root z_+ is outside (0,1].")
     zplus = min(zplus, 1.0)
     negative_amplitude > 0 || error("Generic inclined hyperbolic polar root z_- must be negative.")
     spread = cminus - cplus                  # beta (z_+ - z_-) = -c z_+ + c z_-
@@ -47,12 +47,14 @@ equator moving north. `polar_phase` is the phase at λ = 0.
 """
 function _window_polar_motion(a, energy, lz, q, polar_phase)
     if iszero(q)
-        return (inclined=false, z=λ -> 0.0, uz=λ -> 0.0, theta=λ -> pi / 2,
-                phi=λ -> lz * λ, t=λ -> (a * lz - a^2 * energy) * λ, tau=λ -> 0.0,
+        T = _float_type(a, energy, lz, q)
+        o = zero(T)
+        return (inclined=false, z=λ -> o, uz=λ -> o, theta=λ -> T(π) / 2,
+                phi=λ -> lz * λ, t=λ -> (a * lz - a^2 * energy) * λ, tau=λ -> o,
                 phidot=λ -> lz, tdot=λ -> a * lz - a^2 * energy, rootdata=nothing,
-                primitive=λ -> ((a * lz - a^2 * energy) * λ, lz * λ, 0.0),
-                position=λ -> (0.0, 0.0, 1.0),
-                metadata=(sector=:equatorial, phase=0.0, phase_convention=:not_applicable))
+                primitive=λ -> ((a * lz - a^2 * energy) * λ, lz * λ, o),
+                position=λ -> (o, o, one(T)),
+                metadata=(sector=:equatorial, phase=o, phase_convention=:not_applicable))
     end
     # polar engine (PolarEngine.jl): z = √z₊ cn(phase + ωλ) for E > 1, phase 0 at the
     # northern turning point; at E = 1 (exactly, `kerr_energy_regime`) the phase is shifted

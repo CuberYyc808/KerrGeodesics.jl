@@ -44,6 +44,12 @@ period and the spacing of double-precision numbers at that value:
 stable.Status.precision
 ```
 
+## Arbitrary precision
+
+Everything above holds in the floating-point type of the input. In `BigFloat` the tolerances,
+the series and the Chebyshev orders follow the number of digits; see
+[Arbitrary precision](arbitrary_precision.md).
+
 ## Limits of double precision
 
 Accuracy can be limited both by the conditioning of Float64 inputs and by rounding in
@@ -77,6 +83,18 @@ quadrature gives relative discrepancies in ``t`` of about ``8 \times 10^{-10}`` 
 ``\lambda = -10^{-8}`` and ``5 \times 10^{-8}`` at ``\lambda = -10^{-10}``, with the horizon at zero.
 This concerns the divergent Boyer–Lindquist coordinate, not an error bound for the regular
 coordinates ``v`` and ``\psi``.
+
+**Near the separatrix.** As ``p`` approaches the separatrix ``p_s``, the radial roots ``r_2``
+and ``r_3`` merge and the frequencies become sensitive to the constants. For APEX input the
+Stable member keeps the turning points (see [Conventions](conventions.md)), so the relative
+error of ``\Upsilon_r`` grows about as ``\varepsilon/(p - p_s)``; for a tuple of constants it grows about as
+``\varepsilon/(p - p_s)^2``, because the rounding of the constants also moves ``r_2``. In Float64,
+comparison with independent 120-digit references for 436 orbits (``|a| \leq 0.99``,
+``e = 0.1, 0.5, 0.8``, all inclinations) gives a largest relative error of ``\Upsilon_r`` of
+``1.4 \times 10^{-10}``, ``1.2 \times 10^{-9}``, ``1.9 \times 10^{-8}``, ``2.2 \times 10^{-7}`` and
+``1.1 \times 10^{-6}`` at ``p - p_s = 10^{-6}, 10^{-7}, 10^{-8}, 10^{-9}, 10^{-10}``; the largest
+errors are at ``a = 0.99``, where the constants themselves carry a few units of rounding.
+Closer to the separatrix, or for tighter requirements, use `BigFloat`.
 
 **Very small nonzero spin.** Some combinations approaching the Schwarzschild limit lose
 precision through cancellation. This is an implementation limitation in addition to

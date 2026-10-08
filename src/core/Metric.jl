@@ -23,9 +23,9 @@ _rminus(a) = 1 - sqrt(1 - a^2)
 Horizon radii ``r_\\pm = 1 \\pm \\sqrt{1 - a^2}`` for ``|a| \\leq 1``
 (``G = c = M = 1``), returned as `(rplus, rminus)`.
 """
-function kerr_horizons(a::Real; atol::Real=DEFAULT_CLASSIFICATION_ATOL)
+function kerr_horizons(a::Real; atol::Real=_classification_atol(float(typeof(a))))
     abs(a) <= 1 + atol || throw(DomainError(a, "Kerr spin must satisfy |a|<=1."))
-    spin = clamp(float(a), -1.0, 1.0)
+    spin = clamp(float(a), -1, 1)
     return (rplus=_rplus(spin), rminus=_rminus(spin))
 end
 
@@ -36,7 +36,7 @@ end
 (1 − |a| ≤ `near_extremal_threshold`) or `:subextremal`, tested in that order.
 """
 function kerr_metric_limit(a::Real;
-        atol::Real=DEFAULT_CLASSIFICATION_ATOL,
+        atol::Real=_classification_atol(float(typeof(a))),
         near_extremal_threshold::Real=1.0e-6)
     abs(a) <= 1 + atol || throw(DomainError(a, "Kerr spin must satisfy |a|<=1."))
     abs(a) <= atol && return :schwarzschild
@@ -119,13 +119,14 @@ exactly.
 function kerr_radial_coefficients(a::Real, energy::Real, lz::Real, q::Real;
         energy_atol::Real=DEFAULT_ENERGY_ATOL,
         energy_rtol::Real=DEFAULT_ENERGY_RTOL)
+    T = _float_type(a, energy, lz, q)
     regime = kerr_energy_regime(energy; atol=energy_atol, rtol=energy_rtol)
-    c4 = regime === :parabolic ? 0.0 : _e2m1(energy)
+    c4 = regime === :parabolic ? zero(T) : T(_e2m1(energy))
     return (
-        -a^2 * q,
-        2 * (a * energy - lz)^2 + 2q,
-        -(q + lz^2 - a^2 * _e2m1(energy)),
-        2.0,
+        T(-a^2 * q),
+        T(2 * (a * energy - lz)^2 + 2q),
+        T(-(q + lz^2 - a^2 * _e2m1(energy))),
+        T(2),
         c4,
     )
 end
@@ -133,7 +134,7 @@ end
 # R(1+x), formed from P(1) and Delta(1). Unlike translating the expanded
 # r-polynomial, this preserves P(1)^2 when two roots approach the extremal horizon.
 function _radial_shifted_coefficients(a,energy,lz,q)
-    p=kerr_radial_momentum(a,energy,lz,1.0)
+    p=kerr_radial_momentum(a,energy,lz,one(_float_type(a,energy,lz,q)))
     d=(a-1)*(a+1)
     k=1+(lz-a*energy)^2+q
     return (p^2-d*k,4energy*p-2d,4energy^2+2energy*p-k-d,
@@ -193,6 +194,7 @@ complex): at most eight steps, stopping when the step is within 4 eps of `z` or 
 derivative is below rounding relative to the size of its terms.
 """
 function _polish_root(coefficients, z; order::Int=0, evaluator=nothing)
+    T = real(float(typeof(z)))
     c = coefficients
     for _ in 1:order
         c = ntuple(i -> i * c[i + 1], length(c) - 1)
@@ -202,10 +204,10 @@ function _polish_root(coefficients, z; order::Int=0, evaluator=nothing)
         az = abs(z)
         scale = sum(abs(dc[i]) * az^(i - 1) for i in eachindex(dc))
         value,dp = evaluator===nothing ? (evalpoly(z,c),evalpoly(z,dc)) : evaluator(z)
-        abs(dp) <= eps(Float64) * scale && break
+        abs(dp) <= eps(T) * scale && break
         step = value / dp
         z -= step
-        abs(step) <= 4 * eps(Float64) * max(1.0, abs(z)) && break
+        abs(step) <= 4 * eps(T) * max(1.0, abs(z)) && break
     end
     return z
 end
@@ -282,7 +284,7 @@ end
 function _wide_rplus(a)
     x = _wide_mul(_two_sum(1.0, -float(a)), _two_sum(1.0, float(a)))      # 1 − a², exactly paired
     root = sqrt(x[1])
-    root_low = iszero(root) ? 0.0 : (fma(-root, root, x[1]) + x[2]) / (2root)   # |a| = 1: r₊ = 1
+    root_low = iszero(root) ? zero(root) : (fma(-root, root, x[1]) + x[2]) / (2root)   # |a| = 1: r₊ = 1
     return _wide_add(_wide(1.0), _two_sum(root, root_low)), 2 * (root + root_low)
 end
 
@@ -335,24 +337,47 @@ end
 # one root at a time slides into the cluster instead. Started from the companion roots of
 # R(1 + x); a double root is approached by two estimates, which the repeated-root
 # classification then takes together.
-function _refine_roots(evaluator, z::Vector{ComplexF64})
+function _refine_roots(evaluator, z::Vector{Complex{T}}) where {T}
     n = length(z)
     # Nearly equal roots can need more than 64 sweeps to separate.
     for _ in 1:1000
-        largest = 0.0
+        largest = zero(T)
         for i in 1:n
             value, slope = evaluator(z[i])
             iszero(value) && continue
             newton = value / slope
-            pull = sum((inv(z[i] - z[j]) for j in 1:n if j != i); init=zero(ComplexF64))
+            pull = sum((inv(z[i] - z[j]) for j in 1:n if j != i); init=zero(Complex{T}))
             step = newton / (1 - newton * pull)
             isfinite(step) || continue
             z[i] -= step
-            largest = max(largest, abs(step) / max(abs(z[i]), floatmin()))
+            largest = max(largest, abs(step) / max(abs(z[i]), floatmin(T)))
         end
-        largest <= 4eps(Float64) && break
+        largest <= 4eps(T) && break
     end
     return z
+end
+
+# Roots of a real polynomial (ascending coefficients) in the floating-point type T of the
+# coefficients: the companion-matrix roots of the coefficients rounded to Float64, each
+# polished by Newton's method in T. A step is taken only while it exceeds the rounding of the
+# root, so a root that is already accurate to eps(T) is returned as found.
+function _polynomial_roots(coefficients)
+    T = float(eltype(coefficients))
+    c = collect(T, coefficients)
+    while length(c) > 1 && iszero(c[end])
+        pop!(c)
+    end
+    dc = [k * c[k + 1] for k in 1:length(c) - 1]
+    estimates = roots(Polynomial(Float64.(c)))
+    return map(estimates) do z0
+        z = Complex{T}(z0)
+        for _ in 1:8 + 2 * ceil(Int, log2(precision(T) / 53))
+            step = evalpoly(z, c) / evalpoly(z, dc)
+            (isfinite(step) && abs(step) > 4eps(T) * abs(z)) || break
+            z -= step
+        end
+        z
+    end
 end
 
 function _derivative_scales(coefficients, r)
@@ -368,16 +393,17 @@ function _derivative_scales(coefficients, r)
 end
 
 """
-    kerr_root_multiplicity_at(a, E, Lz, Q, r; atol=ROOT_ATOL, rtol=ROOT_RTOL,
+    kerr_root_multiplicity_at(a, E, Lz, Q, r; atol=1e-12, rtol=1e-12,
                               energy_atol=0, energy_rtol=0)
 
 Multiplicity of the radius `r` as a root of R: the number of consecutive values R, R′, R″,
 R‴, R⁗ at `r`, starting from R, that vanish within `atol + rtol·max(1, s)`, where `s` is the
-sum of the magnitudes of that derivative's terms (0 when R(r) ≠ 0).
+sum of the magnitudes of that derivative's terms (0 when R(r) ≠ 0). The default tolerances
+are 1e-12 in Float64, carried to other floating-point types by `_tol`.
 """
 function kerr_root_multiplicity_at(a::Real, energy::Real, lz::Real, q::Real, r::Real;
-        atol::Real=ROOT_ATOL,
-        rtol::Real=ROOT_RTOL,
+        atol::Real=_root_atol(_float_type(a, energy, lz, q, r)),
+        rtol::Real=_root_rtol(_float_type(a, energy, lz, q, r)),
         energy_atol::Real=DEFAULT_ENERGY_ATOL,
         energy_rtol::Real=DEFAULT_ENERGY_RTOL)
     kwargs = (; energy_atol=energy_atol, energy_rtol=energy_rtol)
@@ -403,11 +429,11 @@ end
 is finite only for ``L_z = 0``, where it equals ``Q - a^2(1 - E^2)``; otherwise it is `-Inf` there.
 """
 function kerr_polar_theta_potential(a::Real, energy::Real, lz::Real, q::Real,
-        theta::Real; axis_atol::Real=1.0e-12)
+        theta::Real; axis_atol::Real=_tol(_float_type(a, energy, lz, q, theta), 1.0e-12))
     sine = sin(theta)
     cosine2 = cos(theta)^2
     if abs(sine) <= axis_atol
-        _zero_lz(a, energy, lz, q) || return -Inf
+        _zero_lz(a, energy, lz, q) || return -_float_type(a, energy, lz, q, theta)(Inf)
         return q + cosine2 * a^2 * _e2m1(energy)
     end
     return q - cosine2 * (lz^2 / sine^2 - a^2 * _e2m1(energy))
@@ -427,7 +453,7 @@ function kerr_polar_z_potential(a::Real, energy::Real, lz::Real, q::Real, z::Rea
 end
 
 """
-    kerr_polar_admissibility(a, E, Lz, Q; rtol=4eps())
+    kerr_polar_admissibility(a, E, Lz, Q; rtol=4eps(T))
 
 Maximize ``(dz/d\\lambda)^2 = Q(1 - u) - L_z^2u + \\beta u(1 - u)``,
 with ``u = \\cos^2\\theta`` and ``\\beta = a^2(E^2 - 1)``, over ``u \\in [0, 1]``
@@ -436,30 +462,32 @@ in closed form (regular at ``E = 1`` and ``a = 0``). The constants admit polar m
 to within what the constants themselves resolve:
 ``\\sum_j |\\partial\\Theta/\\partial c_j|\\,\\mathrm{ulp}(c_j)`` over
 ``(c_1,c_2,c_3,c_4) = (a,E,L_z,Q)``, plus `rtol` times
-the size of the terms for the rounding of ``\\Theta``. A negative ``Q``, or a turning point short of the
+the size of the terms for the rounding of ``\\Theta`` (`T` the floating-point type of the
+constants). A negative ``Q``, or a turning point short of the
 axis, is therefore not admitted because its scale is small next to other terms. The axis
 ``u = 1`` (``\\Theta = -L_z^2``) is examined when ``L_z = 0`` and the motion reaches it. The result also carries
 `max_value`, `max_cosine_squared`, the `tolerance` of that maximum and the examined
 `candidates`.
 """
 function kerr_polar_admissibility(a::Real, energy::Real, lz::Real, q::Real;
-        rtol::Real=4eps(Float64))
+        rtol::Real=4eps(_float_type(a, energy, lz, q)))
+    T = _float_type(a, energy, lz, q)
     beta = a^2 * _e2m1(energy)
     slope = beta - q - lz^2
-    ulp(x) = iszero(x) ? 0.0 : eps(abs(float(x)))
+    ulp(x) = iszero(x) ? zero(T) : eps(abs(T(x)))
     function candidate(u)
         w = u * (1 - u)
         value = q * (1 - u) - lz^2 * u + beta * w
         reach = abs(1 - u) * ulp(q) + 2abs(lz) * u * ulp(lz) +
             2abs(a) * abs(_e2m1(energy)) * w * ulp(a) + 2a^2 * abs(energy) * w * ulp(energy)
         terms = abs(q) * (1 - u) + lz^2 * u + abs(beta) * w
-        return (u=float(u), value=value, tolerance=reach + rtol * terms)
+        return (u=T(u), value=T(value), tolerance=T(reach + rtol * terms))
     end
-    candidates = [candidate(0.0)]
+    candidates = [candidate(zero(T))]
     # the axis u = 1 (value −Lz²) counts when Lz = 0 and motion reaches it: Q + β ≥ 0
     if !_zero_lz(a, energy, lz, q) || q + beta >= -(ulp(q) + 2abs(a * _e2m1(energy)) * ulp(a) +
             2a^2 * abs(energy) * ulp(energy) + rtol * (abs(q) + abs(beta)))
-        push!(candidates, candidate(1.0))
+        push!(candidates, candidate(one(T)))
     end
     if !iszero(beta)
         stationary = slope / (2 * beta)
@@ -532,7 +560,7 @@ whose tiny imaginary parts must not be mistaken for a conjugate pair.)
 """
 function _nonreal_roots(structure)
     n = structure.complex_root_count
-    raw = sort(ComplexF64.(collect(structure.raw_roots)); by=z -> -abs(imag(z)))
+    raw = sort(complex.(float.(collect(structure.raw_roots))); by=z -> -abs(imag(z)))
     return raw[1:min(n, length(raw))]
 end
 
@@ -572,6 +600,7 @@ function _polar_quadratic_roots(a, energy, lz, q)
     # coefficients (Θ(1) = −Lz²) survive in the rounded roots.
     s = _wide_add(_wide_sub(_wide_mul(ll, ll), beta), qq)
     c1, s1, q1 = c[1] + c[2], s[1] + s[2], float(q)
+    T = typeof(c1)
     if c1 < 0 < q1 || q1 < 0 < c1
         # disc = s² + 4|c q| has no cancellation; hypot keeps √disc when c q is subnormal
         sq = _wide(hypot(s1, 2 * sqrt(abs(c1)) * sqrt(abs(q1))))
@@ -579,12 +608,12 @@ function _polar_quadratic_roots(a, energy, lz, q)
     else
         d = _wide_sub(_wide_mul(s, s), _wide_mul(_wide(4.0), _wide_mul(c, qq)))
         disc = d[1] + d[2]
-        sq = disc > 0 ? _wide_sqrt(d) : _wide(0.0)
+        sq = disc > 0 ? _wide_sqrt(d) : _wide(zero(T))
     end
     big = _wide_mul(_wide(0.5), _wide_add(s, signbit(s1) ? _wide_neg(sq) : sq))   # |big| ≥ |s|/2
     big1 = big[1] + big[2]
-    u_small = iszero(big1) ? 0.0 : q1 / big1
-    u_big = iszero(c1) ? copysign(Inf, big1) : (u = _wide_div(big, c); u[1] + u[2])
+    u_small = iszero(big1) ? zero(T) : q1 / big1
+    u_big = iszero(c1) ? copysign(T(Inf), big1) : (u = _wide_div(big, c); u[1] + u[2])
     return (c=c1, disc=disc, u_small=u_small, u_big=u_big, cu_small=c1 * u_small, cu_big=big1)
 end
 
@@ -592,14 +621,15 @@ end
 _polar_quadratic_roots(c, lz, q) = _polar_quadratic_roots_from_sum(c, q + lz^2 + c, q)
 
 function _polar_quadratic_roots_from_sum(c, s, q)
+    T = _float_type(c, s, q)
     disc = s^2 - 4 * c * q
     # c and q of opposite signs: disc = s² + 4|c q| has no cancellation, and hypot keeps its
     # square root when s² or c q falls below the normal range (q down to the subnormals)
     sq = c < 0 < q || q < 0 < c ? hypot(s, 2 * sqrt(abs(c)) * sqrt(abs(q))) :
         sqrt(max(disc, 0.0))
     big = (s + copysign(sq, s)) / 2               # |big| >= |s|/2, no cancellation
-    u_small = iszero(big) ? 0.0 : q / big
-    u_big = iszero(c) ? copysign(Inf, big) : big / c
+    u_small = iszero(big) ? zero(T) : q / big
+    u_big = iszero(c) ? copysign(T(Inf), big) : big / c
     return (c=c, disc=disc, u_small=u_small, u_big=u_big,
         cu_small=c * u_small, cu_big=big)
 end
@@ -610,7 +640,7 @@ function _polar_vortical_geometry(a, energy, lz, q)
     roots = _polar_quadratic_roots(a, energy, lz, q)
     beta = -roots.c
     b = beta - q - lz^2
-    ulp(x) = iszero(x) ? 0.0 : eps(abs(float(x)))
+    ulp(x) = iszero(x) ? zero(b) : eps(abs(oftype(b, x)))
     dbeta = 2abs(a * _e2m1(energy)) * ulp(a) + 2a^2 * abs(energy) * ulp(energy)
     reach = abs(2b + 4q) * dbeta + abs(4beta - 2b) * ulp(q) +
         abs(4lz * b) * ulp(lz)
@@ -626,12 +656,12 @@ function _polar_vortical_geometry(a, energy, lz, q)
         reading=exact ? :exact : repeated ? :within_input_ulp : :exact)
 end
 
-function _polar_vortical_geometry(beta, lz, q; rtol=CONSTANT_LATITUDE_RTOL)
+function _polar_vortical_geometry(beta, lz, q; rtol=_constant_latitude_rtol(_float_type(beta, lz, q)))
     bb, ll, qq = _wide.(float.((beta, lz, q)))
     b = _wide_sub(_wide_sub(bb, qq), _wide_mul(ll, ll))
     d = _wide_add(_wide_mul(b, b), _wide_mul(_wide(4.0), _wide_mul(bb, qq)))
     slope, disc = b[1] + b[2], d[1] + d[2]
-    ulp(x) = iszero(x) ? 0.0 : eps(abs(float(x)))
+    ulp(x) = iszero(x) ? zero(slope) : eps(abs(oftype(slope, x)))
     reach = abs(2slope + 4q) * ulp(beta) + abs(4beta - 2slope) * ulp(q) +
         abs(4lz * slope) * ulp(lz)
     return (root_sum=slope / beta, discriminant=disc / beta^2,
@@ -666,10 +696,39 @@ function kerr_rstar(a::Real, r::Real)
         f1 = log(u) - 1 / u
         f3 = -1 / u^2 - 2r / u^3
         f5 = -6 / u^4 - 24r / u^5
-        return r + 2 * (f1 + d^2 / 24 * f3 + d^4 / 1920 * f5) - 2 * log(2)
+        series = f1 + d^2 / 24 * f3 + d^4 / 1920 * f5
+        series += _rstar_series_tail(r, u, d)
+        return r + 2 * series - 2 * log(oftype(series, 2))
     end
     return r + 2 * rp / d * log((r - rp) / 2) -
            2 * rm / d * log((r - rm) / 2)
+end
+
+# The far-field expansions of r* and φ_H in d = r₊ − r₋ for u = r − 1 > 200d: odd powers k
+# of d/2, each term at most (d/2u)² ≈ 2⁻¹⁷·³ of the previous one. The first three terms
+# (k = 1, 3, 5) are written out above (Float64); `_far_terms(T)` odd terms reach eps(T), and
+# the tails below add the terms k = 7, 9, … (none in Float64).
+_far_terms(::Type{T}) where {T} = cld(precision(T) - 2, 17)
+# r* (inside 2 × series): f⁽ᵏ⁾(1) (d/2)^(k−1)/k!, f(x) = x log(r − x), f⁽ᵏ⁾(1) = −(k−1)!/uᵏ − k(k−2)!/u^(k−1)
+function _rstar_series_tail(r, u, d)
+    T = _float_type(r, u, d)
+    tail = zero(T)
+    for j in 4:_far_terms(T)
+        k = 2j - 1
+        fk = -factorial(big(k - 1)) / T(u)^k - k * factorial(big(k - 2)) / T(u)^(k - 1)
+        tail += T(fk * (T(d) / 2)^(k - 1) / factorial(big(k)))
+    end
+    return tail
+end
+# φ_H / a: −(d/2)^(k−1)/(k uᵏ)
+function _azimuth_series_tail(u, d)
+    T = _float_type(u, d)
+    tail = zero(T)
+    for j in 4:_far_terms(T)
+        k = 2j - 1
+        tail -= (T(d) / 2)^(k - 1) / (k * T(u)^k)
+    end
+    return tail
 end
 
 # Two-sided tortoise coordinate (inside r₊ as well), the horizon azimuth φ_H(r) with
@@ -679,19 +738,21 @@ function _rstar_all(a, r)
     r > rp && return kerr_rstar(a, r)
     rm = _rminus(a)
     d = rp - rm
-    inner = iszero(rm) ? 0.0 : 2 * rm / d * log(abs(r - rm) / 2)
+    inner = iszero(rm) ? zero(float(r)) : 2 * rm / d * log(abs(r - rm) / 2)
     return r + 2 * rp / d * log(abs(r - rp) / 2) - inner
 end
 
 function _horizon_azimuth(a, r)
     horizons = kerr_horizons(a)
     separation = horizons.rplus - horizons.rminus
-    kerr_metric_limit(a) === :schwarzschild && return 0.0
+    kerr_metric_limit(a) === :schwarzschild && return zero(_float_type(a, r))
     u = r - 1
     if abs(u) > 200separation
         # (a/d)[g(rp) - g(rm)] with g(x) = log|r - x|, expanded about x = 1; the extremal
         # limit is -a/(r - 1).
-        return a * (-1 / u - separation^2 / 12 / u^3 - separation^4 / 80 / u^5)
+        series = -1 / u - separation^2 / 12 / u^3 - separation^4 / 80 / u^5
+        series += _azimuth_series_tail(u, separation)
+        return a * series
     end
     return a / separation * log(abs((r - horizons.rplus) /
         (r - horizons.rminus)))
@@ -711,7 +772,7 @@ function _radial_residues(a, energy, lz)
         pminus=pminus,
         c_phi_plus=a * pplus / separation,
         c_phi_minus=-a * pminus / separation,
-        c_t_plus=2.0 * horizons.rplus * pplus / separation,
-        c_t_minus=-2.0 * horizons.rminus * pminus / separation,
+        c_t_plus=2 * horizons.rplus * pplus / separation,
+        c_t_minus=-2 * horizons.rminus * pminus / separation,
     )
 end

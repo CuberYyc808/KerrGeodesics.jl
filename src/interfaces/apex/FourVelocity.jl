@@ -15,7 +15,7 @@ Compute the four-velocity for a particle on a Kerr geodesic using Mino time para
 - `initPhases` : tuple of initial radial and polar phases (qr0, qθ0)
 - `index` : "Contravariant" or "Covariant"
 """
-function kerr_geo_velocity_mino(a, p, e, x, initPhases::Tuple{Float64,Float64}, index::String)
+function kerr_geo_velocity_mino(a, p, e, x, initPhases::Tuple{Real,Real}, index::String)
     # Constants of motion
     consts = kerr_geo_constants_of_motion(a, p, e, x)
     En, L, Q = consts["E"], consts["Lz"], consts["Q"]
@@ -34,27 +34,34 @@ function kerr_geo_velocity_mino(a, p, e, x, initPhases::Tuple{Float64,Float64}, 
     kr = ((r1 - r2)*(r3 - r4)) / ((r1 - r3)*(r2 - r4))
     kz = a^2*(1 - En^2)*zm^2 / zp^2
 
+    # complete integrals and Jacobi parameter records, formed once for the orbit
+    Kr, Kz = _K(kr), _K(kz)
+    Jr, Jz = _jacobi_parameter(kr), _jacobi_parameter(kz)
+
     # Fundamental frequencies
-    Υr = π/(2 * Elliptic.K(kr)) *
+    Υr = π/(2 * Kr) *
         _sqrt_nonnegative((1 - En^2)*(r1 - r3)*(r2 - r4))
-    Υθ = (π * zp)/(2 * Elliptic.K(kz))
+    Υθ = (π * zp)/(2 * Kz)
 
     qr0, qθ0 = initPhases
 
     qr(λ) = λ * Υr + qr0
-    qz(λ) = λ * Υθ + qθ0 + π / 2
+    qz(λ) = λ * Υθ + qθ0 + oftype(Υθ, π) / 2
 
     # Radial motion functions
-    r(qr) = (r3*(r1 - r2)*Elliptic.Jacobi.sn(Elliptic.K(kr)/π*qr, kr)^2 - r2*(r1 - r3)) /
-            ((r1 - r2)*Elliptic.Jacobi.sn(Elliptic.K(kr)/π*qr, kr)^2 - (r1 - r3))
-    rprime(qr) = (2*(r1 - r2)*(r1 - r3)*(r2 - r3)*Elliptic.K(kr)*Elliptic.Jacobi.cn(qr*Elliptic.K(kr)/π, kr)*
-                Elliptic.Jacobi.dn(qr*Elliptic.K(kr)/π, kr)*Elliptic.Jacobi.sn(qr*Elliptic.K(kr)/π, kr)) /
-                (π*((-r1 + r3) + (r1 - r2)*Elliptic.Jacobi.sn(qr*Elliptic.K(kr)/π, kr)^2)^2)
+    r(qr) = (r3*(r1 - r2)*_sn(Kr/π*qr, Jr)^2 - r2*(r1 - r3)) /
+            ((r1 - r2)*_sn(Kr/π*qr, Jr)^2 - (r1 - r3))
+    function rprime(qr)
+        sn, cn, dn = _jacobi_sncndn(qr*Kr/π, Jr)
+        return (2*(r1 - r2)*(r1 - r3)*(r2 - r3)*Kr*cn*dn*sn) / (π*((-r1 + r3) + (r1 - r2)*sn^2)^2)
+    end
 
     # Polar motion functions
-    z(qθ) = zm * Elliptic.Jacobi.sn(Elliptic.K(kz)*2*qθ/π, kz)
-    zprime(qθ) = (2*zm*Elliptic.K(kz)*Elliptic.Jacobi.cn(2*qθ*Elliptic.K(kz)/π, kz)*
-                Elliptic.Jacobi.dn(2*qθ*Elliptic.K(kz)/π, kz))/π
+    z(qθ) = zm * _sn(Kz*2*qθ/π, Jz)
+    function zprime(qθ)
+        _, cn, dn = _jacobi_sncndn(2*qθ*Kz/π, Jz)
+        return (2*zm*Kz*cn*dn)/π
+    end
 
     # Auxiliary functions
     Δ(qr) = r(qr)^2 + a^2 - 2*r(qr)

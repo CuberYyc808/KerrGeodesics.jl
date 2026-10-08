@@ -98,7 +98,7 @@ end
 # t grows by ϒt·2π/ϒr per radial period, so after one period t is known to one ulp of that
 # at best: ~1e3 M for |E − 1| ~ 1e-13 (apoapsis ~1e13 M), whatever the method
 function _stable_precision(frequencies)
-    period_t = frequencies.ϒt * 2pi / frequencies.ϒr
+    period_t = frequencies.ϒt * (2 * oftype(frequencies.ϒt, π)) / frequencies.ϒr
     return (t_radial_period=period_t, t_ulp_per_period=eps(period_t))
 end
 

@@ -92,26 +92,27 @@ function _interior_double_model(case_id, a, energy, lz, d, s, outer)
 end
 
 function _parabolic_double_model(case_id, a, energy, lz, d, s)
+    rt2 = sqrt(_float_type(a, energy, lz, d, s)(2))
     bb = s - d
     y(r) = sqrt(max(r - s, 0.0))
     # I0 is measured from infinity: for bb > 0, atan(y/√bb) − π/2 = −atan(√bb/y)
     function basis(r)
         yy = y(r)
-        i0 = bb > 0 ? -sqrt(2 / bb) * atan(sqrt(bb) / yy) : sqrt(2.0) * _qf(bb, 1.0, yy)
-        i1 = d * i0 + sqrt(2.0) * yy
-        i2 = d^2 * i0 + sqrt(2.0) *
+        i0 = bb > 0 ? -sqrt(2 / bb) * atan(sqrt(bb) / yy) : rt2 * _qf(bb, 1.0, yy)
+        i1 = d * i0 + rt2 * yy
+        i2 = d^2 * i0 + rt2 *
             ((2d + bb) * yy + yy^3 / 3)
         return (I0=i0, I1=i1, I2=i2)
     end
     pole(h, r) = begin
         yy = y(r)
-        sqrt(2.0) * (_qf(bb, 1.0, yy) - _qf(s - h, 1.0, yy)) /
+        rt2 * (_qf(bb, 1.0, yy) - _qf(s - h, 1.0, yy)) /
             (d - h)
     end
     # r at Mino time δ after the infinity endpoint: y = √bb cot(√bb δ/√2) for bb > 0,
     # √(−bb) coth(√(−bb) δ/√2) for bb < 0
-    radius(δ) = s + (bb > 0 ? bb / tan(sqrt(bb) * δ / sqrt(2.0))^2 :
-        -bb / tanh(sqrt(-bb) * δ / sqrt(2.0))^2)
+    radius(δ) = s + (bb > 0 ? bb / tan(sqrt(bb) * δ / rt2)^2 :
+        -bb / tanh(sqrt(-bb) * δ / rt2)^2)
     return (
         kind=case_id === :C6 ? :parabolic_double_d_below_simple :
             :parabolic_double_simple_below_d,
@@ -253,18 +254,19 @@ function _interior_triple_model(a, energy, lz, d, outer)
 end
 
 function _parabolic_triple_model(a, energy, lz, d)
+    rt2 = sqrt(_float_type(a, energy, lz, d)(2))
     v(r) = inv(sqrt(r - d))
     function basis(r)
         vv = v(r)
         return (
-            I0=-sqrt(2.0) * vv,
-            I1=-sqrt(2.0) * (d * vv - inv(vv)),
-            I2=-sqrt(2.0) * (d^2 * vv - 2d / vv - inv(3vv^3)),
+            I0=-rt2 * vv,
+            I1=-rt2 * (d * vv - inv(vv)),
+            I2=-rt2 * (d^2 * vv - 2d / vv - inv(3vv^3)),
         )
     end
     pole(h, r) = begin
         vv = v(r)
-        -sqrt(2.0) * (vv - _qf(1.0, d - h, vv)) / (d - h)
+        -rt2 * (vv - _qf(1.0, d - h, vv)) / (d - h)
     end
     # r at Mino time δ after the infinity endpoint (where I0 = 0): v = δ/√2
     radius(δ) = d + 2 / δ^2

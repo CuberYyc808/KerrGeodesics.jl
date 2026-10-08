@@ -35,6 +35,9 @@ kg = kerr_geodesic(0.9, 10.0, 0.5, 0.8)
 kg.Status.case_ids
 ```
 
+For `(p, e, x)` input, `kg.Status.component_root_models` gives the roots each component is built
+from (`:apex_turning_points` or `:constants`; see [Conventions](conventions.md)).
+
 Constants that allow no motion outside the horizon give a family with no members,
 `Status.supported == false` and a `Status.reason`.
 

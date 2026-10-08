@@ -108,6 +108,29 @@ kerr_geo_frequencies(0.9, 10.0, 0.5, 0.8; Time="BoyerLindquist")    # Ωr, Ωθ,
 kerr_geo_sample(kg.Stable, range(0, 20; length=10_000))   # vectors t, r, theta, phi, tau and the rates ut, ur, utheta, uphi
 ```
 
+**Precision.** Everything is computed in `Float64` by default. For more digits, pass `BigFloat`
+numbers or `precision = p` (bits); see
+[Arbitrary precision](https://CuberYyc808.github.io/KerrGeodesics.jl/stable/arbitrary_precision/).
+
+```julia
+kg = kerr_geodesic(9//10, (19//20, 3, 4); precision=256)
+```
+
+The rationals `9//10` and `19//20` are exactly 0.9 and 0.95, rounded once to 256 bits. The
+literals `0.9` and `0.95` are `Float64` numbers, whose exact values are
+
+```
+0.9  → 0.90000000000000002220446049250313080847263336181640625
+0.95 → 0.9499999999999999555910790149937383830547332763671875
+```
+
+With `precision=256` these are converted unchanged, so the orbit would be computed for
+$a = 0.90000000000000002220\ldots$ rather than for $a = 0.9$.
+
+New in 0.5.0: every orbit is computed in the precision of its input, as above. Bound orbits given
+by $(p, e, x)$ keep their turning points $p/(1 \mp e)$, so they stay bound and accurate up to the
+separatrix.
+
 ## Examples
 
 [`example/KerrGeodesics_Tutorial.ipynb`](example/KerrGeodesics_Tutorial.ipynb) walks through

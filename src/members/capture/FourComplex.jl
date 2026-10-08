@@ -13,7 +13,8 @@ function _four_complex_parameters(energy, structure)
     s = imag(upper_roots[2])
     delta = u - v
     scale = max(1.0, abs(u), abs(v), w, s)
-    delta < -128 * eps(Float64) * scale || error(
+    T = typeof(scale)
+    delta < -128 * eps(T) * scale || error(
         "The C5 Jacobi form requires distinct real parts of the two complex radial-root pairs.")
     w > 0 && s > 0 || error("Complex radial-root heights must be positive.")
 
@@ -44,7 +45,7 @@ function _four_complex_parameters(energy, structure)
         delta^2 - s^2 * c * (d - c),
         w^2 - s^2 * lambda1 * lambda2,
     ))) / max(1.0, delta^2, w^2, s^2)
-    relation_residual <= 5.0e-11 || error(
+    relation_residual <= _tol(T, 5.0e-11) || error(
         "The four-complex-root Jacobi parameters violate their defining identities (relative residual $(relation_residual) > 5e-11).")
     return (
         u=u, w=w, v=v, s=s, delta=delta,
@@ -58,11 +59,12 @@ function _four_complex_partial_fractions(numerator, denominator)
     n0, n1coef, n2coef = numerator
     p0, p1, p2 = denominator
     scale = max(1.0, abs(p0), abs(p1), abs(p2))
-    abs(p0) > 128 * eps(Float64) * scale || error(
+    T = typeof(scale)
+    abs(p0) > 128 * eps(T) * scale || error(
         "Four-complex-root pole transform is at its zero-constant limit.")
     p2 > 0 || error("Four-complex-root pole quadratic must have positive leading coefficient.")
     discriminant = p1^2 - 4 * p2 * p0
-    tolerance = 512 * eps(Float64) * scale^2
+    tolerance = 512 * eps(T) * scale^2
     discriminant >= -tolerance || error(
         "Four-complex-root pole characteristics are not real.")
     root = sqrt(max(discriminant, 0.0))
@@ -72,7 +74,7 @@ function _four_complex_partial_fractions(numerator, denominator)
 
     if root <= sqrt(tolerance)
         characteristic = -p1 / (2 * p0)
-        abs(characteristic) > 128 * eps(Float64) || error(
+        abs(characteristic) > 128 * eps(T) || error(
             "Repeated pole characteristic is zero.")
         first = -remainder1 / (p0 * characteristic)
         second = remainder0 / p0 - first
@@ -87,7 +89,7 @@ function _four_complex_partial_fractions(numerator, denominator)
         "Four-complex-root pole roots must be positive in z squared.")
     characteristic1 = inv(x1)
     characteristic2 = inv(x2)
-    abs(characteristic1 - characteristic2) > 128 * eps(Float64) *
+    abs(characteristic1 - characteristic2) > 128 * eps(T) *
         max(1.0, abs(characteristic1), abs(characteristic2)) || error(
         "Distinct pole characteristics collapsed numerically.")
     sum0 = remainder0 / p0
@@ -118,7 +120,7 @@ function _four_complex_even_primitive(data, z, m, m1)
 end
 
 function _four_complex_odd_primitive(data, z, m)
-    abs(data.constant) <= 64 * eps(Float64) || error(
+    abs(data.constant) <= 64 * eps(typeof(float(data.constant))) || error(
         "Odd four-complex-root pole decomposition acquired a polynomial part.")
     if data.kind === :distinct
         return sum(coefficient * _odd_h1(

@@ -63,7 +63,7 @@ function _b2_model(energy, roots)
     phi_of_r(r) = asin(sqrt(clamp((r - x1) / b, 0.0, 1.0)))
     function basis(r)
         phi = phi_of_r(r)
-        pin = _ellip_pi(phi, 1.0, n, n1)
+        pin = _ellip_pi(phi, one(phi), n, n1)
         i0 = scale * pin
         i1 = scale * (x3 * pin - c * phi)
         i2 = scale * (x3^2 * pin - 2 * x3 * c * phi +
@@ -74,13 +74,13 @@ function _b2_model(energy, roots)
         phi = phi_of_r(r)
         nh = b / (h - x1)
         return scale / (x1 - h) * (
-            -n / (nh - n) * _ellip_pi(phi, 1.0, n, n1) +
-            nh / (nh - n) * _ellip_pi(phi, 1.0, nh, (h - x2) / (h - x1)))
+            -n / (nh - n) * _ellip_pi(phi, one(phi), n, n1) +
+            nh / (nh - n) * _ellip_pi(phi, one(phi), nh, (h - x2) / (h - x1)))
     end
     i0_turn = basis(x2).I0
     function radius(δ)
         k = sqrt(1 - n)
-        angle = clamp(k * (i0_turn - δ) / scale, 0.0, pi / 2)
+        angle = clamp(k * (i0_turn - δ) / scale, 0, oftype(k, π) / 2)
         tangent = tan(angle) / k
         s2 = tangent^2 / (1 + tangent^2)
         return x1 + b * s2
@@ -235,7 +235,7 @@ function _b6_model(energy, roots)
 end
 
 _simple_root_data(structure) =
-    (sort(Float64[root.radius for root in structure.real_roots]), _nonreal_roots(structure))
+    (sort([root.radius for root in structure.real_roots]), _nonreal_roots(structure))
 
 """The radial model of B1–B6 from the classified root structure."""
 function _plunge_radial_model(case_id, energy, structure)

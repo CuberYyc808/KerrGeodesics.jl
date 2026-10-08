@@ -53,10 +53,10 @@ function _kin_radial_rates(k::_KinematicState,λ)
 end
 function _kin_utheta(k::_KinematicState, λ)
     s = sqrt(_kin_sin2(k, λ))
-    return iszero(s) ? NaN : -_kin_uz(k, λ) / s            # (on the axis θ is a chart pole)
+    return iszero(s) ? oftype(s, NaN) : -_kin_uz(k, λ) / s    # (on the axis θ is a chart pole)
 end
 _kin_ut(k::_KinematicState, λ) = _kin_radial_rates(k,λ)[1] + k.a * k.L - k.a^2 * k.E * _kin_sin2(k, λ)
-_kin_uphi(k::_KinematicState, λ) = _kin_radial_rates(k,λ)[2] + (iszero(k.L) ? 0.0 : k.L / _kin_sin2(k, λ))
+_kin_uphi(k::_KinematicState, λ) = _kin_radial_rates(k,λ)[2] + (iszero(k.L) ? zero(k.L) : k.L / _kin_sin2(k, λ))
 _kin_dtau(k::_KinematicState, λ) = k.r(λ)^2 + k.a^2 * _kin_z(k, λ)^2
 # g_{μν} u^μ u^ν + 1 with the proper-time velocity u = (dx/dλ)/Σ
 function _kin_normalization(k::_KinematicState, λ)

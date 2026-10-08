@@ -89,12 +89,12 @@ on the member's concrete closures.
 """
 function kerr_geo_sample(m::KerrGeoComponent, λs)
     tr, u = m.Trajectory, m.Velocity
-    return _sample(collect(Float64, λs), tr.t, tr.r, tr.theta, tr.phi, tr.tau, u.ut, u.ur,
-        u.utheta, u.uphi)
+    return _sample(collect(typeof(m.ConstantsOfMotion.E), λs), tr.t, tr.r, tr.theta, tr.phi,
+        tr.tau, u.ut, u.ur, u.utheta, u.uphi)
 end
 
 # (the barrier is specialized on the nine functions it calls, not on the whole records)
-function _sample(λs::Vector{Float64}, t, r, theta, phi, tau, ut, ur, utheta, uphi)
+function _sample(λs::Vector{<:Real}, t, r, theta, phi, tau, ut, ur, utheta, uphi)
     out = (lambda=λs, t=similar(λs), r=similar(λs), theta=similar(λs), phi=similar(λs),
         tau=similar(λs), ut=similar(λs), ur=similar(λs), utheta=similar(λs), uphi=similar(λs))
     for (i, λ) in pairs(λs)
@@ -116,10 +116,22 @@ Base.@nospecializeinfer @noinline function _member(class::Symbol, case_id::Symbo
         @nospecialize(velocity), @nospecialize(potentials), @nospecialize(residuals),
         @nospecialize(status), @nospecialize(spectral))
     role = class === :critical ? kerr_geo_critical_role(case_id) : :none
-    return KerrGeoComponent{class}(case_id, tier, role, component, constants, roots,
-        reference, domain, trajectory, velocity, potentials, residuals,
-        _merge_member_fields((status, (spectral=spectral,))))
+    T = _float_type(values(constants)...)
+    p = precision(T(constants.E))
+    return KerrGeoComponent{class}(case_id, tier, role, component, _retype(T, constants),
+        _retype(T, roots), _retype(T, reference), _retype(T, domain),
+        _precision_wrap(T, p, trajectory), _precision_wrap(T, p, velocity),
+        _precision_wrap(T, p, potentials), _precision_wrap(T, p, residuals),
+        _retype(T, _merge_member_fields((status, (spectral=spectral,)))))
 end
+
+# the numbers of a member's records in its floating-point type T (literal 0.0, ±Inf and NaN
+# of the builders included); integers, symbols and functions are kept
+_retype(::Type{T}, x::AbstractFloat) where {T} = T(x)
+_retype(::Type{T}, x::Complex{<:AbstractFloat}) where {T} = Complex{T}(x)
+_retype(::Type{T}, x::Union{Tuple,NamedTuple}) where {T} = map(v -> _retype(T, v), x)
+_retype(::Type{T}, x::AbstractVector{<:AbstractFloat}) where {T} = T.(x)
+_retype(::Type, x) = x
 
 function Base.show(io::IO, m::KerrGeoComponent{C}) where {C}
     print(io, "KerrGeo", kerr_geo_class(C).name, "Component(", m.CaseId,

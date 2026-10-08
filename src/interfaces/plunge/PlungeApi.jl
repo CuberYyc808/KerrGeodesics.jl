@@ -59,20 +59,39 @@ For the Real2 root class, `radial_start=:inner_turning` puts the start event (λ
 future horizon r₊ itself. Boyer-Lindquist t and φ diverge logarithmically there, so t and φ
 measured from that event are not defined: `t` and `phi` (and u = t − r*, v = t + r* built
 from t) return NaN for every λ; r and θ remain available.
+
+The plunge is computed in the floating-point type of `(a, E, Lz, Q)`; `precision = p` converts
+them to `BigFloat` of `p` bits, and the returned functions evaluate at that precision.
 """
-function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
+function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real; precision=nothing, kwargs...)
+    precision === nothing || return setprecision(BigFloat, precision) do
+        kerr_geo_plunge(BigFloat(a), BigFloat(energy), BigFloat(lz), BigFloat(q); kwargs...)
+    end
+    T = _float_type(a, energy, lz, q)
+    prec = _input_precision(a, energy, lz, q)
+    kg = _with_precision(T, prec) do
+        _kerr_geo_plunge(T(a), T(energy), T(lz), T(q); kwargs...)
+    end
+    # functions of λ evaluate at the precision the orbit was built with
+    return KerrGeoPlunge(kg.OrbitClass, kg.OrbitalParameters, kg.ConstantsOfMotion,
+        kg.Parametrization, kg.Roots, kg.InitialPhases, _precision_wrap(T, prec, kg.Trajectory),
+        _precision_wrap(T, prec, kg.Velocity), _precision_wrap(T, prec, kg.Potentials),
+        _precision_wrap(T, prec, kg.Residuals), kg.Status)
+end
+
+function _kerr_geo_plunge(a, energy, lz, q;
         initPhases=nothing,
         radial_phase=nothing,
         theta_phase=nothing,
         initial_radius=nothing,
-        initial_theta=pi / 2,
+        initial_theta=oftype(a, π) / 2,
         radial_start=:turning_point,
         t0=0.0,
         phi0=0.0,
         real2_horizon_offset=1e-4,
         time_origin=:input_t0,
         horizon_time_origin_offset=real2_horizon_offset)
-
+    T = typeof(a)
     roots, root_class = classify_orbit(a, energy, lz, q)
 
     zm, zp = polar_roots(a, energy, lz, q)
@@ -93,18 +112,16 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
         lambda_theta0 = phases[3]
     end
 
-    t_bl, r, theta, phi_bl = generic_plunge_orbit(
-        a, energy, lz, q;
-        initPhases=phases,
-        real2_horizon_offset=real2_horizon_offset,
-    )
+    orbit = _plunge_orbit(a, energy, lz, q; initPhases=phases)
+    t_bl, r, theta, phi_bl = orbit.t, orbit.r, orbit.theta, orbit.phi
     lambda_radial_endpoint, lambda_horizon_from_turning_point, lambda_of_radius = lambda_of_r(a, energy, lz, q)
     rplus = _rplus(a)
     horizon_lambda_from_start = lambda_horizon_from_turning_point - lambda_r0
     # a start event on the horizon (Real2 :inner_turning) has no Boyer-Lindquist t, φ
     on_horizon = iszero(horizon_lambda_from_start)
-    t_raw = on_horizon ? (λ -> NaN) : t_bl
-    phi = on_horizon ? (λ -> NaN) : phi_bl
+    t_raw = on_horizon ? (λ -> T(NaN)) : t_bl
+    phi = on_horizon ? (λ -> T(NaN)) : phi_bl
+    v_raw = on_horizon ? (λ -> T(NaN)) : orbit.v
     radial_endpoint_lambda_from_start = lambda_radial_endpoint - lambda_r0
     duration_metadata = (
         start_lambda=0.0,
@@ -120,12 +137,15 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
         direct_anchor_values=Float64[],
     )
     horizon_time_shift = 0.0
+    ut, ur, uz, uphi = generic_plunge_velocity(a, energy, lz, q; initPhase=(lambda_r0, lambda_theta0))
+    # near-horizon series: 10 terms in Float64, proportionally more for more digits
+    series_order = _nterms(T, 10)
     if time_origin == :input_t0
         horizon_time_shift = 0.0
     elseif time_origin == :future_horizon_v_zero
         time_origin_anchor = _estimate_future_horizon_v_anchor(
-            a, energy, lz, q, root_class, theta, t_raw, lambda_of_radius, lambda_r0;
-            order=10,
+            a, energy, lz, q, root_class, theta, uz, t_raw, v_raw, lambda_of_radius, lambda_r0;
+            order=series_order,
             horizon_offset=horizon_time_origin_offset,
         )
         horizon_time_shift = -time_origin_anchor.vH
@@ -139,10 +159,9 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
         phases[3],
         phases[4],
     )
-    ut, ur, uz, uphi = generic_plunge_velocity(a, energy, lz, q; initPhase=(lambda_r0, lambda_theta0))
     utheta(lambda) = begin
         s = sin(theta(lambda))
-        abs(s) < sqrt(eps(Float64)) ? NaN : -uz(lambda) / s
+        abs(s) < sqrt(eps(T)) ? T(NaN) : -uz(lambda) / s
     end
     rstar(lambda) = kerr_rstar(a, r(lambda))
     u(lambda) = t(lambda) - rstar(lambda)
@@ -161,8 +180,9 @@ function kerr_geo_plunge(a::Real, energy::Real, lz::Real, q::Real;
     end
     near_horizon_series = if root_class == "Real2"
         _build_near_horizon_uv_series(
-            a, energy, lz, q, theta, t, lambda_of_radius, lambda_r0;
-            order=10,
+            a, energy, lz, q, theta, uz, λ -> v_raw(λ) + horizon_time_shift, lambda_of_radius,
+            lambda_r0;
+            order=series_order,
             horizon_offset=real2_horizon_offset,
         )
     else

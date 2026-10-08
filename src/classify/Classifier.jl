@@ -26,7 +26,7 @@ component.
 """
 kerr_geo_classification_pipeline() = CLASSIFICATION_PIPELINE
 
-_root_close(x, y; atol=ROOT_ATOL, rtol=ROOT_RTOL) =
+_root_close(x, y; atol=_root_atol(_float_type(x, y)), rtol=_root_rtol(_float_type(x, y))) =
     abs(x - y) <= atol + rtol * max(1.0, abs(x), abs(y))
 
 # Whether a repeated root of multiplicity m sits at r, and where. Exterior (r ≥ r₊, or a
@@ -62,12 +62,12 @@ function _accept_repeated(a, energy, lz, q, r, m, raw_roots, rplus, located)
 end
 
 function _repeated_root_candidates(a, energy, lz, q, polynomial, raw_roots, rplus;
-        atol=ROOT_ATOL, rtol=ROOT_RTOL)
+        atol=_root_atol(_float_type(a, energy, lz, q)), rtol=_root_rtol(_float_type(a, energy, lz, q)))
     candidates = NamedTuple[]
     diagnostics = NamedTuple[]
     derivative_polynomial = derivative(polynomial)
     for derivative_order in 1:max(0, degree(polynomial) - 1)
-        for value in roots(derivative_polynomial)
+        for value in _polynomial_roots(coeffs(derivative_polynomial))
             imag_tolerance = atol + rtol * max(1.0, abs(real(value)))
             abs(imag(value)) <= imag_tolerance || continue
             radius = float(real(value))
@@ -126,7 +126,7 @@ function _repeated_root_candidates(a, energy, lz, q, polynomial, raw_roots, rplu
 end
 
 """
-    kerr_geo_root_structure(a, E, Lz, Q; atol=ROOT_ATOL, rtol=ROOT_RTOL)
+    kerr_geo_root_structure(a, E, Lz, Q; atol=1e-12, rtol=1e-12)
 
 Roots of the radial potential R(r): the raw complex roots, the real roots with their
 multiplicities and R, R′, R″, R‴ residuals, and their split into roots below, on and
@@ -136,12 +136,14 @@ located as a simple root of R^(m−1). Each root records its `reading`: `:exact`
 `:within_input_ulp` (outside the horizon, constants within one ulp per component of the
 repeated-root manifold; inside, a cluster whose replacement changes R(r₊) by less than
 the input reach). Nonexact repeated readings describe the repeated-root model, not a
-strict solution of the exact supplied constants. All roots are refined
-together in double-double; distinct roots are not merged on proximity.
+strict solution of the exact supplied constants. All roots are refined together in twice
+the working precision (double-double for Float64); distinct roots are not merged on
+proximity. The default tolerances are 1e-12 in Float64, carried to other floating-point
+types by `_tol`.
 """
 function kerr_geo_root_structure(a::Real, energy::Real, lz::Real, q::Real;
-        atol::Real=ROOT_ATOL,
-        rtol::Real=ROOT_RTOL)
+        atol::Real=_root_atol(_float_type(a, energy, lz, q)),
+        rtol::Real=_root_rtol(_float_type(a, energy, lz, q)))
     horizons = kerr_horizons(a)
     coefficients = kerr_radial_coefficients(a, energy, lz, q)
     polynomial = kerr_radial_polynomial(a, energy, lz, q)
@@ -150,8 +152,10 @@ function kerr_geo_root_structure(a::Real, energy::Real, lz::Real, q::Real;
     # starts rotated off the real axis: from real starts the iteration on a real polynomial
     # stays real and cannot reach a complex pair that the companion matrix returned as two
     # close real roots; real roots return to the axis
-    raw_roots = _refine_roots(evaluator,
-        ComplexF64[(1 + z) * complex(1, 2.0^-26) for z in roots(Polynomial(collect(shifted)))])
+    # (companion roots of the coefficients rounded to Float64, refined in the working precision)
+    T = _float_type(a, energy, lz, q)
+    raw_roots = _refine_roots(evaluator, Complex{T}[(1 + Complex{T}(z)) * complex(1, T(2)^-26)
+        for z in roots(Polynomial(Float64.(collect(shifted))))])
     repeated, near_repeated = _repeated_root_candidates(
         a, energy, lz, q, polynomial, raw_roots, horizons.rplus; atol=atol, rtol=rtol)
 
@@ -229,8 +233,9 @@ end
 # double-double: it keeps its digits next to a turning point, where the factored form loses
 # them to the rounding of r − root. A repeated root read from the constants (within one input
 # ulp, or an interior cluster merged below rounding) defines the member's model, so then
-# R = c ∏(r − xᵢ) over the classified roots (complex ones as (r − ρ)² + η²). Members' dr/dλ,
-# residuals and radial tables use it.
+# R = c ∏(r − xᵢ) over the classified roots (complex ones as (r − ρ)² + η²). So does the
+# APEX turning-point geometry (`_apex_root_geometry`), whose roots define the Stable member's
+# model. Members' dr/dλ, residuals and radial tables use it.
 function _radial_potential_from_roots(a, energy, lz, q, structure)
     # all roots read exactly: R of the given constants, in double-double
     if all(item -> get(item, :reading, :exact) === :exact, structure.real_roots)
@@ -239,7 +244,7 @@ function _radial_potential_from_roots(a, energy, lz, q, structure)
     end
     lead = kerr_radial_coefficients(a, energy, lz, q)[structure.degree + 1]
     reals = map(item -> (item.radius, item.multiplicity), structure.real_roots)
-    pairs = Tuple{Float64,Float64}[(real(z), imag(z)) for z in _nonreal_roots(structure) if imag(z) > 0]
+    pairs = [(real(z), imag(z)) for z in _nonreal_roots(structure) if imag(z) > 0]
     return function (r)
         value = lead
         for (x, k) in reals
@@ -265,7 +270,7 @@ function _interval_probe(lower, upper, rplus)
 end
 
 function _allowed_intervals(a, energy, lz, q, root_structure;
-        atol=ROOT_ATOL, rtol=ROOT_RTOL)
+        atol=_root_atol(_float_type(a, energy, lz, q)), rtol=_root_rtol(_float_type(a, energy, lz, q)))
     rplus = kerr_horizons(a).rplus
     exterior = root_structure.exterior
     boundaries = [rplus; [item.radius for item in exterior]; Inf]
@@ -372,7 +377,7 @@ function _root_endpoint(item; kind=:radial_root, included=true)
 end
 
 _horizon_endpoint(rplus) = KerrGeoRadialEndpoint(:outer_horizon, rplus, false, 0)
-_infinity_endpoint() = KerrGeoRadialEndpoint(:infinity, Inf, false, 0)
+_infinity_endpoint(::Type{T}) where {T} = KerrGeoRadialEndpoint(:infinity, T(Inf), false, 0)
 
 # A repeated root reached only asymptotically is an open end of the component.
 _asymptotic_root(item, kind) = _root_endpoint(item; kind=kind, included=false)
@@ -400,14 +405,14 @@ function _case_bounds(case_id, structure, rplus)
         return _horizon_endpoint(rplus),
             _asymptotic_root(exterior[1], :unstable_repeated_root), :horizon_to_repeated_root
     elseif case_id in (:K7, :K10)
-        return _asymptotic_root(exterior[end], :unstable_repeated_root), _infinity_endpoint(),
+        return _asymptotic_root(exterior[end], :unstable_repeated_root), _infinity_endpoint(typeof(rplus)),
             :repeated_root_to_infinity
     elseif case_id in (:B1, :B2, :B3, :B4, :B5, :B6, :B7, :B8, :B9)
         return _horizon_endpoint(rplus), _root_endpoint(exterior[1]), :horizon_to_finite
     elseif case_id in (:C1, :C2, :C3, :C4, :C5, :C6, :C7, :C8, :C9, :C10, :C11, :C12)
-        return _horizon_endpoint(rplus), _infinity_endpoint(), :horizon_to_infinity
+        return _horizon_endpoint(rplus), _infinity_endpoint(typeof(rplus)), :horizon_to_infinity
     elseif case_id in (:D1, :D2)
-        return _root_endpoint(exterior[end]), _infinity_endpoint(), :finite_to_infinity
+        return _root_endpoint(exterior[end]), _infinity_endpoint(typeof(rplus)), :finite_to_infinity
     end
     error("No component bounds are defined for $(case_id).")
 end
@@ -528,7 +533,9 @@ function _component_for_case(case_id, structure, rplus, energy_regime, polar_sec
     )
 end
 
-function _component_matches_interval(component, interval; atol=ROOT_ATOL, rtol=ROOT_RTOL)
+function _component_matches_interval(component, interval;
+        atol=_root_atol(typeof(component.LowerEndpoint.Radius)),
+        rtol=_root_rtol(typeof(component.LowerEndpoint.Radius)))
     root_kinds = (:radial_root, :repeated_root, :stable_repeated_root,
         :marginal_repeated_root, :unstable_repeated_root)
     lower_match = component.LowerEndpoint.Kind == interval.lower_kind ||
@@ -552,7 +559,7 @@ function _unassigned_component(interval, regime, polar_sector, base_tags, struct
         KerrGeoRadialEndpoint(:radial_root, interval.lower, true,
             interval.lower_multiplicity)
     upper = interval.upper_kind === :infinity ?
-        _infinity_endpoint() :
+        _infinity_endpoint(typeof(rplus)) :
         KerrGeoRadialEndpoint(:radial_root, interval.upper, true,
             interval.upper_multiplicity)
     broad = _has_critical_end(lower, upper, structure.real_roots, rplus) ? :critical :
@@ -596,7 +603,9 @@ function _unassigned_component(interval, regime, polar_sector, base_tags, struct
     )
 end
 
-function _contains_initial_radius(component, radius; atol=ROOT_ATOL, rtol=ROOT_RTOL)
+function _contains_initial_radius(component, radius;
+        atol=_root_atol(typeof(component.LowerEndpoint.Radius)),
+        rtol=_root_rtol(typeof(component.LowerEndpoint.Radius)))
     lower = component.LowerEndpoint.Radius
     upper = component.UpperEndpoint.Radius
     lower_ok = radius > lower || (component.LowerEndpoint.Included &&
@@ -671,15 +680,17 @@ function _classify(a::Real, energy::Real, lz::Real, q::Real;
         initial_radius=nothing,
         radial_sign=nothing,
         endpoint_intent=nothing,
-        atol::Real=ROOT_ATOL,
-        rtol::Real=ROOT_RTOL)
+        atol::Real=_root_atol(_float_type(a, energy, lz, q)),
+        rtol::Real=_root_rtol(_float_type(a, energy, lz, q)),
+        structure=nothing)
     all(isfinite, (a, energy, lz, q)) || throw(DomainError(
         (a, energy, lz, q), "a, E, Lz and Q must be finite."))
     metric = kerr_metric_limit(a)
     horizons = kerr_horizons(a)
     regime = kerr_energy_regime(energy)
-    structure = kerr_geo_root_structure(
-        a, energy, lz, q; atol=atol, rtol=rtol)
+    # the roots of the constants, unless the input supplies its own geometry (APEX turning points)
+    structure === nothing && (structure = kerr_geo_root_structure(
+        a, energy, lz, q; atol=atol, rtol=rtol))
     intervals = _allowed_intervals(
         a, energy, lz, q, structure; atol=atol, rtol=rtol)
     polar = kerr_polar_admissibility(a, energy, lz, q)

@@ -23,7 +23,7 @@ end
 # asin near 1 loses half the digits when r_A is far away, E → 1⁺)
 function _four_real_amplitude(leg, r)
     roots = leg.roots
-    r >= roots.rD - RADIUS_TOL || error("The radius lies below the outer turning point r_D.")
+    r >= roots.rD - _radius_tol(_float_type(r, roots.rD)) || error("The radius lies below the outer turning point r_D.")
     return atan(sqrt(max((roots.rC - roots.rA) * (r - roots.rD), 0.0) /
         ((roots.rD - roots.rC) * (r - roots.rA))))
 end

@@ -13,29 +13,38 @@ Piecewise Chebyshev series of `ncomp` functions on the pieces `breaks[i]..breaks
 (worst component): the coefficient tail or the misfit at off-node points, whichever is
 larger.
 """
-struct ChebPieces
-    breaks::Vector{Float64}
-    coefs::Vector{Vector{Vector{Float64}}}      # coefs[component][piece]
-    achieved::Vector{Float64}
+struct ChebPieces{T}
+    breaks::Vector{T}
+    coefs::Vector{Vector{Vector{T}}}      # coefs[component][piece]
+    achieved::Vector{T}
 end
 
+# The order of every piece: 32 in Float64, growing with the number of digits (a smooth
+# function's coefficients decay geometrically, so the order needed is proportional to them)
 const _CHEB_N = 32
+_cheb_n(::Type{T}) where {T} = _CHEB_N * cld(precision(T), 53)
 
-_cheb_nodes(n) = n == _CHEB_N ? _CHEB_NODES : [cospi(j / n) for j in 0:n]  # x_j on [-1, 1], x_0 = 1
+# The bisection depth: 60 in Float64, growing with the number of bits like the order (a
+# feature as narrow as the rounding of the type must still be reachable by bisection)
+_cheb_maxdepth(::Type{T}) where {T} = 60 * cld(precision(T), 53)
+
+# x_j = cos(πj/n) on [-1, 1], x_0 = 1, and the DCT table cos(πjk/n), held as constants for
+# Float64 and the default order (the DCT below is the build cost of every table: n² cosines
+# per component and piece otherwise); for other types they are formed in the call
+_cheb_nodes(::Type{T}, n) where {T} = [cospi(T(j) / n) for j in 0:n]
+_cheb_nodes(::Type{Float64}, n) = n == _CHEB_N ? _CHEB_NODES : [cospi(j / n) for j in 0:n]
 const _CHEB_NODES = [cospi(j / _CHEB_N) for j in 0:_CHEB_N]
 
-# cos(π j k / n), tabulated for the default order (the DCT below is the build cost of
-# every table: n² cosines per component and piece otherwise)
-_dct_table(n) = [cospi(j * k / n) for j in 0:n, k in 0:n]
-const _DCT_TABLE = _dct_table(_CHEB_N)
+_dct_table(::Type{T}, n) where {T} = [cospi(T(j * k) / n) for j in 0:n, k in 0:n]
+_dct_table(::Type{Float64}, n) = n == _CHEB_N ? _DCT_TABLE : [cospi(j * k / n) for j in 0:n, k in 0:n]
+const _DCT_TABLE = [cospi(j * k / _CHEB_N) for j in 0:_CHEB_N, k in 0:_CHEB_N]
 
 # DCT-I: values at the n+1 Chebyshev points -> coefficients of Σ c_k T_k
-function _cheb_coefficients(values::AbstractVector{Float64})
+function _cheb_coefficients(values::AbstractVector{T}, C=_dct_table(T, length(values) - 1)) where {T}
     n = length(values) - 1
-    C = n == _CHEB_N ? _DCT_TABLE : _dct_table(n)
-    c = zeros(n + 1)
+    c = zeros(T, n + 1)
     @inbounds for k in 0:n
-        s = 0.5 * (values[1] + (isodd(k) ? -1 : 1) * values[n + 1])
+        s = (values[1] + (isodd(k) ? -1 : 1) * values[n + 1]) / 2
         for j in 1:n-1
             s += values[j + 1] * C[j + 1, k + 1]
         end
@@ -46,8 +55,8 @@ function _cheb_coefficients(values::AbstractVector{Float64})
     return c
 end
 
-@inline function _clenshaw(c::Vector{Float64}, x::Float64)
-    b1 = 0.0; b2 = 0.0
+@inline function _clenshaw(c::Vector{T}, x::T) where {T}
+    b1 = zero(T); b2 = zero(T)
     @inbounds for k in length(c):-1:2
         b1, b2 = muladd(2x, b1, c[k] - b2), b1
     end
@@ -56,8 +65,8 @@ end
 
 # Divided Clenshaw recurrence: (f(x)-f(y))/(x-y), without subtracting
 # two primitives. The physical x-y is supplied separately after rescaling.
-@inline function _clenshaw_divided(c::Vector{Float64}, x::Float64, y::Float64)
-    b1=0.0; b2=0.0; d1=0.0; d2=0.0
+@inline function _clenshaw_divided(c::Vector{T}, x::T, y::T) where {T}
+    b1=zero(T); b2=zero(T); d1=zero(T); d2=zero(T)
     @inbounds for k in length(c):-1:2
         d1,d2=muladd(2x,d1,2b1-d2),d1
         b1,b2=muladd(2y,b1,c[k]-b2),b1
@@ -69,6 +78,7 @@ end
 # the nodes alias (e.g. T_64 on 33 points looks constant) or a feature narrower than the
 # node spacing shows up as a misfit there.
 const _CHEB_CHECK = (-0.8763, -0.3371, 0.2197, 0.6639)
+_cheb_check(::Type{T}) where {T} = T.(_CHEB_CHECK)
 
 # One piece: sample, and return the chopped coefficients, the excess and the achieved
 # accuracy. The excess is the largest ratio (error estimate) / (allowed error) over the
@@ -76,9 +86,8 @@ const _CHEB_CHECK = (-0.8763, -0.3371, 0.2197, 0.6639)
 # off-node misfit, and the allowed error is tol × local size (or `absfloor[k]`), or the
 # abscissa-rounding noise, or the rounding of the values themselves `abserr[k]`, whichever is
 # larger. The piece is resolved when the excess is ≤ 1. `nothing` for non-finite samples.
-function _fit_piece(f, a, b, ncomp, tol, absfloor, abserr, n)
-    xs = _cheb_nodes(n)
-    vals = Matrix{Float64}(undef, n + 1, ncomp)
+function _fit_piece(f, a::T, b::T, ncomp, tol, absfloor, abserr, n, xs, C) where {T}
+    vals = Matrix{T}(undef, n + 1, ncomp)
     for (j, x) in enumerate(xs)
         # (the end nodes are the interval ends exactly: f may be defined on [a, b] only)
         v = f(j == 1 ? b : j == n + 1 ? a : (a + b) / 2 + (b - a) / 2 * x)
@@ -88,28 +97,32 @@ function _fit_piece(f, a, b, ncomp, tol, absfloor, abserr, n)
             vals[j, k] = vk
         end
     end
-    checks = map(x -> f((a + b) / 2 + (b - a) / 2 * x), _CHEB_CHECK)
+    checkpoints = _cheb_check(T)
+    checks = map(x -> f((a + b) / 2 + (b - a) / 2 * x), checkpoints)
     # the value-rounding floor of this piece: a constant, or a function of x (the larger of its
     # values at the two ends; it varies slowly along a piece)
     floorv = abserr isa Function ? max.(abserr(a), abserr(b)) : abserr
-    out = Vector{Vector{Float64}}(undef, ncomp)
-    excess = 0.0
-    achieved = 0.0
+    out = Vector{Vector{T}}(undef, ncomp)
+    excess = zero(T)
+    achieved = zero(T)
+    # the plateau window and threshold of the Float64 order (n − 14 : n − 7 of 32), scaled
+    window = n - div(14n, _CHEB_N):n - div(7n, _CHEB_N)
+    flat = _tol(T, 1.0e-9)
     for k in 1:ncomp
-        c = _cheb_coefficients(view(vals, :, k))
+        c = _cheb_coefficients(view(vals, :, k), C)
         own = maximum(abs, view(vals, :, k))
         scale = max(own, absfloor[k])
         # Rounding of the abscissa itself limits what any piece can resolve: a relative
         # error eps in x moves f by eps·|x|·|f'|. Where f is that steep the tail is noise.
-        slope = 0.0
+        slope = zero(T)
         for j in 2:n+1
             slope += (j - 1)^2 * abs(c[j])
         end
-        noise = 8eps() * max(abs(a), abs(b)) * slope * 2 / (b - a)
-        bound = max(tol * scale, noise, floorv[k], floatmin())
+        noise = 8eps(T) * max(abs(a), abs(b)) * slope * 2 / (b - a)
+        bound = max(tol * scale, noise, floorv[k], floatmin(T))
         tail = maximum(abs, view(c, n-2:n+1))
-        misfit = 0.0
-        for (x, v) in zip(_CHEB_CHECK, checks)
+        misfit = zero(T)
+        for (x, v) in zip(checkpoints, checks)
             isfinite(v[k]) || return nothing
             misfit = max(misfit, abs(_clenshaw(c, x) - v[k]))
         end
@@ -118,9 +131,9 @@ function _fit_piece(f, a, b, ncomp, tol, absfloor, abserr, n)
         # size (rounding in f itself; bisection cannot improve on it). Measured against the
         # component's own values, not the floor: a small but unresolved feature must not
         # pass for rounding noise.
-        plateau = estimate <= 1.0e-9 * own && maximum(abs, view(c, n-14:n-7)) <= 4tail
-        excess = max(excess, plateau ? min(1.0, estimate / bound) : estimate / bound)
-        achieved = max(achieved, estimate / max(scale, floatmin()))
+        plateau = estimate <= flat * own && maximum(abs, view(c, window)) <= 4tail
+        excess = max(excess, plateau ? min(one(T), estimate / bound) : estimate / bound)
+        achieved = max(achieved, estimate / max(scale, floatmin(T)))
         cut = max(bound, tail) / 8
         m = n + 1
         while m > 1 && abs(c[m]) <= cut
@@ -132,9 +145,12 @@ function _fit_piece(f, a, b, ncomp, tol, absfloor, abserr, n)
 end
 
 """
-    chebfit(f, breaks; ncomp=1, tol=1e-14, absfloor, abserr, maxdepth=60, maxpieces=2000)
+    chebfit(f, breaks; ncomp=1, tol=1e-14, absfloor, abserr, maxdepth, maxpieces=2000)
 
-Fit `f(x)` (returning `ncomp` values) on each interval of `breaks`, bisecting every
+Fit `f(x)` (returning `ncomp` values) on each interval of `breaks`, in the floating-point type
+T of `breaks` with pieces of order `_cheb_n(T)`, at most `_cheb_maxdepth(T)` bisections deep
+(60 in Float64), and the tolerance `tol` carried to T by
+`_tol` (1e-14 in Float64), bisecting every
 interval until its error estimate (Chebyshev tail, and the misfit at four off-node points)
 is below `tol` times the local size of the function (or `absfloor[k]`), or below `abserr`,
 the rounding of the sampled values themselves where the caller knows it (a tuple, or a
@@ -146,19 +162,23 @@ rounding noise of the abscissa, is kept as it is: bisection cannot improve it. A
 still unresolved when the depth, the piece budget or the minimum width is exhausted raises
 an error. `achieved` of the result records each piece's estimate.
 """
-function chebfit(f, breaks::AbstractVector{<:Real}; ncomp::Int=1, tol=1.0e-14,
-        absfloor=zeros(ncomp), abserr=zeros(ncomp), maxdepth::Int=60, maxpieces::Int=2000,
-        n::Int=_CHEB_N)
-    outb = Float64[float(breaks[1])]
-    outc = [Vector{Float64}[] for _ in 1:ncomp]
-    achieved = Float64[]
-    stack = Tuple{Float64,Float64,Int}[]
+function chebfit(f, breaks::AbstractVector{<:Real}; ncomp::Int=1,
+        tol=_tol(float(eltype(breaks)), 1.0e-14), absfloor=zeros(float(eltype(breaks)), ncomp),
+        abserr=zeros(float(eltype(breaks)), ncomp),
+        maxdepth::Int=_cheb_maxdepth(float(eltype(breaks))), maxpieces::Int=2000,
+        n::Int=_cheb_n(float(eltype(breaks))))
+    T = float(eltype(breaks))
+    xs, C = _cheb_nodes(T, n), _dct_table(T, n)
+    outb = T[T(breaks[1])]
+    outc = [Vector{T}[] for _ in 1:ncomp]
+    achieved = T[]
+    stack = Tuple{T,T,Int}[]
     for i in length(breaks)-1:-1:1
-        push!(stack, (float(breaks[i]), float(breaks[i + 1]), 0))
+        push!(stack, (T(breaks[i]), T(breaks[i + 1]), 0))
     end
     while !isempty(stack)
         a, b, depth = pop!(stack)
-        fit = _fit_piece(f, a, b, ncomp, tol, absfloor, abserr, n)
+        fit = _fit_piece(f, a, b, ncomp, tol, absfloor, abserr, n, xs, C)
         excess = fit === nothing ? Inf : fit[2]
         if excess > 1
             splittable = depth < maxdepth && length(outb) + length(stack) < maxpieces &&
@@ -179,9 +199,9 @@ function chebfit(f, breaks::AbstractVector{<:Real}; ncomp::Int=1, tol=1.0e-14,
         end
         push!(achieved, fit[3])
     end
-    return ChebPieces(outb, outc, achieved)
+    return ChebPieces{T}(outb, outc, achieved)
 end
-chebfit(f, a::Real, b::Real; kwargs...) = chebfit(f, [a, b]; kwargs...)
+chebfit(f, a::Real, b::Real; kwargs...) = chebfit(f, [float(a), float(b)]; kwargs...)
 
 npieces(p::ChebPieces) = length(p.breaks) - 1
 
@@ -203,11 +223,11 @@ end
     t = (2x - a - b) / (b - a);
     (_clenshaw(p.coefs[1][i], t), _clenshaw(p.coefs[2][i], t), _clenshaw(p.coefs[3][i], t)))
 
-function _cheb_increment(p::ChebPieces, left, right, k)
-    left==right && return 0.0
+function _cheb_increment(p::ChebPieces{T}, left, right, k) where {T}
+    left==right && return zero(T)
     right<left && return -_cheb_increment(p,right,left,k)
     first=_piece_index(p,left); last=_piece_index(p,right)
-    value=0.0
+    value=zero(T)
     for i in first:last
         a=p.breaks[i]; b=p.breaks[i+1]
         lo=i==first ? left : a; hi=i==last ? right : b
@@ -217,12 +237,12 @@ function _cheb_increment(p::ChebPieces, left, right, k)
     return value
 end
 
-function _cheb_increment_delta(p::ChebPieces, left, delta, k)
-    iszero(delta) && return 0.0
+function _cheb_increment_delta(p::ChebPieces{T}, left, delta, k) where {T}
+    iszero(delta) && return zero(T)
     right = left + delta
     lo, hi = minmax(left, right)
     first = _piece_index(p, lo); last = _piece_index(p, hi)
-    value = 0.0
+    value = zero(T)
     for i in first:last
         a = p.breaks[i]; b = p.breaks[i + 1]
         if first == last
@@ -244,10 +264,10 @@ function _cheb_increment_delta(p::ChebPieces, left, delta, k)
 end
 
 # ∫ Σ c_k T_k dx on [-1, 1] as a series vanishing at x = -1
-function _cheb_integral(c::Vector{Float64}, halfwidth)
+function _cheb_integral(c::Vector{T}, halfwidth) where {T}
     n = length(c)
-    C = zeros(n + 1)
-    ext(k) = k < n ? c[k + 1] : 0.0
+    C = zeros(T, n + 1)
+    ext(k) = k < n ? c[k + 1] : zero(T)
     for k in 1:n
         C[k + 1] = (ext(k - 1) * (k == 1 ? 2 : 1) - ext(k + 1)) / (2k)
     end
@@ -261,11 +281,11 @@ end
 
 Primitives of every component, continuous across pieces and zero at `p.breaks[1]`.
 """
-function chebintegrate(p::ChebPieces)
+function chebintegrate(p::ChebPieces{T}) where {T}
     ncomp = length(p.coefs)
-    out = [Vector{Vector{Float64}}(undef, npieces(p)) for _ in 1:ncomp]
+    out = [Vector{Vector{T}}(undef, npieces(p)) for _ in 1:ncomp]
     for k in 1:ncomp
-        offset = 0.0
+        offset = zero(T)
         for i in 1:npieces(p)
             h = (p.breaks[i + 1] - p.breaks[i]) / 2
             C = _cheb_integral(p.coefs[k][i], h)
@@ -274,7 +294,7 @@ function chebintegrate(p::ChebPieces)
             out[k][i] = C
         end
     end
-    return ChebPieces(copy(p.breaks), out, copy(p.achieved))
+    return ChebPieces{T}(copy(p.breaks), out, copy(p.achieved))
 end
 
 """Worst achieved accuracy and piece count of several tables: `(achieved, pieces)`."""

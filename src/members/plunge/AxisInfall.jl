@@ -40,7 +40,7 @@ end
 function _odd_argument(n, m, s)
     u = sqrt(max(1 - m * s^2, 0.0))
     a0 = m - n
-    return u, a0, abs(a0) <= 32 * eps(Float64) * max(1.0, abs(m), abs(n))
+    return u, a0, abs(a0) <= 32 * eps(_float_type(m, n, s)) * max(1.0, abs(m), abs(n))
 end
 
 function _odd_h1(n, m, s)
@@ -73,7 +73,7 @@ function _axis_kerr_radial_model(a, energy)
     m = 2 / denominator
     m1 = (spin * k - 1) / denominator
     L = _axis_landen(m, m1)
-    chi(r) = atan(r / spin) - pi / 4
+    chi(r) = atan(r / spin) - oftype(r / spin, π) / 4
     function basis(r)
         amplitude = chi(r)
         s = sin(amplitude)
@@ -102,7 +102,7 @@ function _axis_kerr_radial_model(a, energy)
     lambda_primitive(r) = _axis_legendre_f(chi(r), m, m1) / omega
     function radius_from_primitive(value)
         s = clamp(_axis_sin_from_f(omega * value, L, m), -1.0, 1.0)
-        return spin * tan(asin(s) + pi / 4)
+        return spin * tan(asin(s) + oftype(s, π) / 4)
     end
     return (
         kind=:axis_legendre_reduction,
@@ -259,20 +259,22 @@ function _axis_infall_member(a::Real, energy::Real, component;
     axis in (:north, :south) || error("Specify axis=:north or axis=:south.")
     broad_class = component.BroadClass
 
-    spin = float(a)
-    evalue = float(energy)
+    T = _float_type(a, energy)
+    spin = T(a)
+    evalue = T(energy)
+    o = zero(T)
     qaxis = kerr_axis_carter_q(spin, evalue)
     rplus = kerr_horizons(spin).rplus
     (; lambda_start, radius, mino, start_radius, formula_kind) =
         _axis_radial_parts(spin, evalue, rplus)
 
     function check_regular(lambda)
-        lam = float(lambda)
+        lam = T(lambda)
         lambda_start < lam <= 0 ||
-            (evalue < 1 && abs(lam - lambda_start) <= MINO_ENDPOINT_TOL) ||
+            (evalue < 1 && abs(lam - lambda_start) <= _mino_endpoint_tol(_float_type(lam, lambda_start))) ||
             throw(DomainError(lambda,
                 "Mino time must lie between λ = $(lambda_start) and the future horizon λ = 0."))
-        return clamp(lam, lambda_start, 0.0)
+        return clamp(lam, lambda_start, o)
     end
     function check_bl(lambda)
         lam = check_regular(lambda)
@@ -283,10 +285,10 @@ function _axis_infall_member(a::Real, energy::Real, component;
     end
     r_of(lambda) = radius(-lambda)                   # δ = −λ is the Mino time before the horizon
     r(lambda) = r_of(check_regular(lambda))
-    z0 = axis === :north ? 1.0 : -1.0
+    z0 = axis === :north ? one(T) : -one(T)
     theta(lambda) = (check_regular(lambda); acos(z0))
     z(lambda) = (check_regular(lambda); z0)
-    phi(lambda) = (check_regular(lambda); float(phi0))
+    phi(lambda) = (check_regular(lambda); T(phi0))
     lambda_reference = if reference_radius === nothing
         evalue < 1 ? lambda_start : 0.5 * lambda_start
     else
@@ -297,7 +299,7 @@ function _axis_infall_member(a::Real, energy::Real, component;
     rref = isfinite(start_radius) && lambda_reference == lambda_start ?
         start_radius : r(lambda_reference)
     # the polar motion is the constant z = ±1: its t and φ rates vanish (Lz = 0), dτ/dλ = a²
-    polar = (formula=lambda -> (z=z0, uz=0.0, sin2=0.0, theta=acos(z0), phi=0.0, t=0.0,
+    polar = (formula=lambda -> (z=z0, uz=o, sin2=o, theta=acos(z0), phi=o, t=o,
             tau=spin^2 * float(lambda)),
         metadata=(sector=:axis_constant, axis=axis))
     coords = _engine_coordinates(spin, evalue, 0.0, qaxis, r_of, _polar_primitive(polar);
@@ -318,7 +320,7 @@ function _axis_infall_member(a::Real, energy::Real, component;
         formula_kind === :schwarzschild_axis_elementary && return -(evalue + lam) * rv^2
         return -sqrt(max(radial_potential(rv), 0.0))
     end
-    vanishing(lambda) = (check_regular(lambda); 0.0)
+    vanishing(lambda) = (check_regular(lambda); o)
     # dt/dλ = E Σ²/Δ on the axis (Σ = r² + a²), and the proper-time velocity for the norm
     ut(lambda) = (rv = r(check_bl(lambda)); evalue * (rv^2 + spin^2)^2 / kerr_delta(spin, rv))
     function normalization_residual(lambda)

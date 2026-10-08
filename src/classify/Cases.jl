@@ -38,11 +38,11 @@ end
 One end of an allowed radial interval: its `Kind` (`:radial_root`, `:outer_horizon` or
 `:infinity`), `Radius`, whether the interval includes it (`Included`: true for a turning
 point; false for the horizon, infinity and a repeated root approached asymptotically), and
-the `Multiplicity` of the root there.
+the `Multiplicity` of the root there. `T` is the floating-point type of the constants.
 """
-struct KerrGeoRadialEndpoint
+struct KerrGeoRadialEndpoint{T<:Real}
     Kind::Symbol
-    Radius::Float64
+    Radius::T
     Included::Bool
     Multiplicity::Int
 end
@@ -58,12 +58,12 @@ sharing its constants (`PairedCaseIds`, `FamilyMemberCaseIds`), the `PolarSector
 accompanying polar motion, and `Tags`, `SupportStatus` and `Metadata` (roots, radial
 derivatives at the endpoints).
 """
-struct KerrGeoRadialComponent
+struct KerrGeoRadialComponent{T<:Real}
     CaseId::Union{Nothing,Symbol}
     BroadClass::Symbol
     EnergyRegime::Symbol
-    LowerEndpoint::KerrGeoRadialEndpoint
-    UpperEndpoint::KerrGeoRadialEndpoint
+    LowerEndpoint::KerrGeoRadialEndpoint{T}
+    UpperEndpoint::KerrGeoRadialEndpoint{T}
     Connectivity::Symbol
     RadialOrientation::Symbol
     FormulaFamily::Symbol
@@ -84,13 +84,13 @@ The result of `kerr_geo_classify`: the input `Parameters` and `ConstantsOfMotion
 out (`ExcludedCaseIds`), the `PolarMetadata`, `Tags`, the case chosen by the selection
 keywords (`SelectedCase`, `SelectionHint`) and a `Status`.
 """
-struct KerrGeoClassification
+struct KerrGeoClassification{T<:Real}
     Parameters::NamedTuple
     ConstantsOfMotion::NamedTuple
     EnergyRegime::Symbol
     MetricLimit::Symbol
-    Roots::Vector{ComplexF64}
-    Components::Vector{KerrGeoRadialComponent}
+    Roots::Vector{Complex{T}}
+    Components::Vector{KerrGeoRadialComponent{T}}
     CaseIds::Tuple{Vararg{Symbol}}
     ExcludedCaseIds::Tuple{Vararg{Symbol}}
     PolarMetadata::NamedTuple
@@ -99,6 +99,9 @@ struct KerrGeoClassification
     SelectionHint::NamedTuple
     Status::NamedTuple
 end
+KerrGeoClassification(parameters, constants, regime, limit, roots::Vector{Complex{T}},
+    components::AbstractVector, rest...) where {T} =
+    KerrGeoClassification{T}(parameters, constants, regime, limit, roots, components, rest...)
 
 # catalogue order of a case ID: class order of KERR_GEO_CLASSES, then number
 _case_order(id::Symbol) = (findfirst(row -> row.letter == first(String(id)), KERR_GEO_CLASSES),

@@ -6,13 +6,15 @@
 
 # F(φ|m) for φ ∈ [0, π/2] from s = sin²φ, c = cos²φ and m1 = 1 − m, in Carlson's form
 # √s R_F(c, c + m1 s, 1): no angle and no K are formed, so φ → π/2 and m → 1 lose nothing.
-_legendre_f(s, c, m1) = sqrt(s) * _carlson_rf(c, c + m1 * s, 1.0)
+_legendre_f(s, c, m1) = sqrt(s) * _carlson_rf(c, c + m1 * s, one(m1))
 
-struct _HorizonMinoMap{F} <: Function
+struct _HorizonMinoMap{T,F} <: Function
     radial::F
-    horizon::Float64
-    lambda_horizon::Float64
+    horizon::T
+    lambda_horizon::T
 end
+_HorizonMinoMap(radial::F, horizon, lambda_horizon) where {F} =
+    _HorizonMinoMap{_float_type(horizon, lambda_horizon),F}(radial, horizon, lambda_horizon)
 (map::_HorizonMinoMap)(r) = r == map.horizon ? map.lambda_horizon : map.radial(r)
 
 function lambda_of_r_real(a, E, roots; gaps=(roots[2] - _rplus(a), _rplus(a) - roots[1]))
@@ -42,7 +44,7 @@ function lambda_of_r_complex(a, E, roots; gaps=(roots[1] - _rplus(a), _rplus(a) 
     # X − x for X = √(x² + η²), without cancellation; m1 = ((A + B)² − (r1 − r2)²)/(4AB)
     excess(X, x) = x > 0 ? η^2 / (X + x) : X - x
     m1 = (excess(A, r1 - ρ) + excess(B, ρ - r2)) * (A + B + r1 - r2) / (4 * A * B)
-    K = _carlson_rf(0.0, m1, 1.0)
+    K = _carlson_rf(zero(m1), m1, one(m1))
     norm = sqrt(-_e2m1(E) * A * B)
     # from r1 down to r1 − d1 = r2 + d2: θ = π/2 + asin y, sin²θ = 1 − y², cos θ = −y, and
     # F(θ) = 2K − F(π − θ) above π/2
