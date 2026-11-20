@@ -15,17 +15,42 @@ function _horizon_divdiff(F, rp, rm)
     ρ0 = (rp + rm) / 2
     g(δ) = (F(ρ0 + δ) - F(ρ0 - δ)) / (2δ)
     δ = T(1e-3)
+    k, c, D = _richardson_weights(T)
+    value = c[k + 1] * g(δ / 2^k)
+    for j in k-1:-1:0
+        value += c[j + 1] * g(δ / 2^j)
+    end
+    return value / D
+end
+
+# The weights of g(δ/2^j), j = 0…k, extrapolated to δ = 0 in δ², as integer numerators c over
+# one denominator D (k = 2: (64g(δ/4) − 20g(δ/2) + g(δ))/45)
+function _richardson_weights(::Type{T}) where {T}
     k = cld(floor(Int, -log10(eps(T))), 6) - 1
-    # weights of g(δ/2^j) extrapolated to δ = 0 in δ²: integer numerators over one denominator
-    # (k = 2: (64g(δ/4) − 20g(δ/2) + g(δ))/45)
     w = [prod(big(4)^j // (big(4)^j - big(4)^i) for i in 0:k if i != j; init=big(1) // 1)
         for j in 0:k]
     D = lcm(denominator.(w))
-    value = T(numerator(w[k + 1] * D)) * g(δ / 2^k)
-    for j in k-1:-1:0
-        value += T(numerator(w[j + 1] * D)) * g(δ / 2^j)
+    return k, [T(numerator(w[j + 1] * D)) for j in 0:k], T(D)
+end
+
+# _horizon_divdiff as a fixed rule Σᵢ wᵢ F(ρᵢ): the nodes ρᵢ and weights wᵢ
+function _horizon_divdiff_rule(rp, rm)
+    T = _float_type(rp, rm)
+    if rp - rm > _tol(T, 1e-6)
+        w = 1 / (rp - rm)
+        return T[rp, rm], T[w, -w]
     end
-    return value / T(D)
+    ρ0 = (rp + rm) / 2
+    δ = T(1e-3)
+    k, c, D = _richardson_weights(T)
+    nodes, weights = T[], T[]
+    for j in 0:k
+        δj = δ / 2^j
+        w = c[j + 1] / (2δj * D)
+        push!(nodes, ρ0 + δj, ρ0 - δj)
+        push!(weights, w, -w)
+    end
+    return nodes, weights
 end
 
 # -------------------------------------------------------------------

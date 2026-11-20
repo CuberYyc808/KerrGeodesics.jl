@@ -85,6 +85,23 @@ u = kerr_geo_four_velocity(0.9, 10.0, 0.5, 0.8)
 [component(1.0) for component in u]
 ```
 
+[`kerr_geo_orbit_phases`](@ref) returns the same orbit as a typed record evaluated by its
+radial and polar phases, ``q_r = \Upsilon_r\lambda`` from the periapsis and
+``q_\theta = \Upsilon_\theta\lambda`` from the polar turning point:
+[`kerr_geo_radial_motion`](@ref) gives ``r``, ``dr/d\lambda`` and the radial parts of ``t`` and
+``\phi`` with their phase derivatives, [`kerr_geo_polar_motion`](@ref) the same for
+``z = \cos\theta``. Both take a vector of phases as well, and fill preallocated arrays with
+`kerr_geo_radial_motion!` and `kerr_geo_polar_motion!`.
+
+```@example apex
+o = kerr_geo_orbit_phases(0.9, 10.0, 0.5, 0.8)
+kerr_geo_radial_motion(o, 1.0)
+```
+
+```@example apex
+kerr_geo_polar_motion(o, 1.0)
+```
+
 ## Finite-window plunge
 
 [`kerr_geo_plunge`](@ref) builds an ``E < 1`` plunge from the constants in one of three root
