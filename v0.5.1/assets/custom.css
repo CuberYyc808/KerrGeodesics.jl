@@ -1,0 +1,5 @@
+/* Keep inline formulas in table cells on one line. */
+table td .katex,
+table th .katex {
+    white-space: nowrap;
+}
