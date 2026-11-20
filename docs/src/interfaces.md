@@ -60,6 +60,13 @@ meta = kerr_geo_orbit_type_metadata(0.9, 10.0, 0.5, 0.8)
 (meta.family, meta.labels, meta.stability, meta.energy_regime)
 ```
 
+[`kerr_geo_orbit_supported`](@ref) tells whether [`kerr_geo_orbit`](@ref) builds an APEX
+point:
+
+```@example apex
+(kerr_geo_orbit_supported(0.9, 10.0, 0.5, 0.8), kerr_geo_orbit_supported(0.9, 3.0, 0.5, 0.8))
+```
+
 ## The closed-form bound orbit
 
 [`kerr_geo_orbit`](@ref) returns the stable orbit, or the constant-radius Critical orbit with

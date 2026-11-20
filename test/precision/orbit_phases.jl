@@ -1,5 +1,6 @@
 # Mino-time averages against quadrature of their definitions; the orbit evaluated by its phases
-# against the Dict of kerr_geo_orbit (in Float64 and in BigFloat); finite values at x = 0.
+# against the Dict of kerr_geo_orbit (in Float64 and in BigFloat); finite values at x = 0;
+# kerr_geo_orbit_supported against kerr_geo_orbit succeeding.
 
 const AVERAGE_ORBITS = [(0.9, 6.0, 0.7, 0.5), (0.998, 5.281, 0.0, 4.8e-4), (0.7, 12.0, 0.5, -0.6),
     (0.5, 9.0, 0.0, 0.0), (0.0, 10.0, 0.2, 0.5), (-0.6, 10.0, 0.4, 0.3)]
@@ -238,4 +239,46 @@ vector_allocations(o, out, q) = (kerr_geo_polar_motion!(out, o, q); @allocated k
             @test relerr(getfield(pol, k), getfield(ref[2], k)) <= 1e-60
         end
     end
+end
+
+# a grid with x = ±1, the separatrix neighbourhood, circular orbits inside the ISSO, E ≥ 1 and
+# parameters outside the domain
+function predicate_grid()
+    grid = Tuple{Float64,Float64,Float64,Float64}[]
+    for a in (0.0, 0.5, 0.9, -0.7, 0.999, 1.0), x in (-1.0, -0.5, -0.0, 0.0, 0.5, 1.0, 1 - 1e-13),
+            e in (0.0, 1e-13, 0.3, 0.9, 1.0, 1.2), p in (0.5, 1.5, 3.0, 4.0, 6.0, 10.0, 20.0)
+        push!(grid, (a, p, e, x))
+    end
+    for a in (0.0, 0.9, -0.7), x in (-1.0, 0.0, 0.5, 1.0), e in (0.0, 0.3, 0.9)
+        ps = try e == 0 ? kerr_geo_isso(a, x) : kerr_geo_separatrix(a, e, x) catch; continue end
+        for s in (-1e-6, -1e-12, -1e-15, 0.0, 1e-15, 1e-12, 1e-6)
+            push!(grid, (a, ps * (1 + s), e, x))
+        end
+        if e == 0
+            rph = KerrGeodesics.kerr_geo_photon_sphere_radius(a, x)
+            ri = kerr_geo_ibso(a, x)
+            for t in (0.1, 0.5, 0.9)
+                push!(grid, (a, ri + t * (ps - ri), 0.0, x), (a, rph + t * (ri - rph), 0.0, x))
+            end
+        end
+    end
+    append!(grid, [(1.1, 10.0, 0.3, 0.5), (0.5, -1.0, 0.3, 0.5), (0.5, 10.0, -0.1, 0.5),
+        (0.5, 10.0, -1e-13, 0.5), (0.5, 10.0, 0.3, 1.1), (0.5, 10.0, 0.0, 1 + 1e-13), (0.5, 10.0, 1.5, 0.5)])
+    return grid
+end
+
+@testset "kerr_geo_orbit_supported" begin
+    builds(c) = try kerr_geo_orbit(c...); true catch err; err isa Union{ArgumentError,DomainError} || rethrow(); false end
+    nsupported = 0
+    for c in predicate_grid()
+        s = kerr_geo_orbit_supported(c...)
+        @test s isa Bool
+        @test s == builds(c)
+        nsupported += s
+    end
+    @test nsupported > 100
+    # within the tolerance of e = 0 inside the ISSO: circular for the classification, but only
+    # e = 0 is a constant-radius orbit
+    @test kerr_geo_orbit_supported(0.5, 4.0, 0.0, 0.5) && !kerr_geo_orbit_supported(0.5, 4.0, 1e-13, 0.5)
+    @test_throws ArgumentError kerr_geo_orbit(0.5, 4.0, 1e-13, 0.5)
 end

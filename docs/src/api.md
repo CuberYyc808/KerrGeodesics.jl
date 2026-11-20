@@ -155,6 +155,7 @@ kerr_geo_constants_of_motion
 kerr_geo_frequencies
 kerr_geo_mino_averages
 kerr_geo_orbit
+kerr_geo_orbit_supported
 kerr_geo_orbit_phases
 KerrGeoOrbitPhases
 kerr_geo_radial_motion
