@@ -50,3 +50,84 @@ stable(a, p, e, x; bits=nothing) = bits === nothing ?
         @test maximum(abs.(after .- before)) <= 1e-4 * maximum(abs.(before))
     end
 end
+
+# The jump of φ across one pass over the axis at λc, and the jump of the Cartesian velocity there
+# relative to its size (both from one-sided differences at distance δ)
+function axis_pass(m, λc; δ=1e-6)
+    X(λ) = (r = m.Trajectory.r(λ); θ = m.Trajectory.theta(λ); φ = m.Trajectory.phi(λ);
+        (r * sin(θ) * cos(φ), r * sin(θ) * sin(φ), r * cos(θ)))
+    jump = m.Trajectory.phi(λc + δ) - m.Trajectory.phi(λc - δ)
+    before = (X(λc - δ) .- X(λc - 2δ)) ./ δ
+    after = (X(λc + 2δ) .- X(λc + δ)) ./ δ
+    return jump, maximum(abs.(after .- before)) / maximum(abs.(before))
+end
+
+# the Mino times in (lo, hi) where sin θ vanishes: the minima of sin²θ on a grid, refined
+function axis_passes(m, lo, hi; n=2000)
+    s2(λ) = sin(m.Trajectory.theta(λ))^2
+    λs = range(lo, hi; length=n)
+    v = s2.(λs)
+    passes = Float64[]
+    for i in 2:n-1
+        v[i] <= v[i-1] && v[i] < v[i+1] || continue
+        a, b = λs[i-1], λs[i+1]
+        for _ in 1:200                      # golden-section search for the minimum
+            c = b - (b - a) / Base.MathConstants.golden
+            d = a + (b - a) / Base.MathConstants.golden
+            s2(c) < s2(d) ? (b = d) : (a = c)
+        end
+        push!(passes, (a + b) / 2)
+    end
+    return passes
+end
+
+@testset "Lz = 0: φ is continuous over the axis in every member class" begin
+    # each case: member, Mino window (inside the domain of the member); φ jumps by +π at every
+    # pass and the Cartesian path is smooth
+    window(m) = (d = m.Domain.mino; lo = max(d[1], -1.0); hi = min(d[2], 3.0);
+        (lo + 0.01 * (hi - lo), hi - 0.01 * (hi - lo)))
+    cases = (
+        ("Stable", kerr_geodesic(0.9, 8.0, 0.1, 0.0).Stable),
+        ("Stable a < 0", kerr_geodesic(-0.9, 8.0, 0.1, 0.0).Stable),
+        ("Plunge", kerr_geo_plunge_component(0.5, 0.97, 0.0, 12.0)),
+        ("Plunge", kerr_geo_plunge_component(0.9, 0.95, 0.0, 3.0)),
+        ("Scatter", kerr_geo_scatter_component(0.9, 1.1, 0.0, 40.0)),
+        # Q = 0: z = ±sech, one pass at u = 0, here inside the capture window
+        ("Capture Q = 0", kerr_geo_capture_component(0.9, 1.1, 0.0, 0.0;
+            polar_sector=:axis_crossing, polar_phase=0.3)),
+    )
+    for (label, m) in cases
+        lo, hi = window(m)
+        passes = axis_passes(m, lo, hi)
+        @test !isempty(passes)
+        for λc in passes
+            jump, kink = axis_pass(m, λc)
+            @test abs(jump - π) <= 1e-4
+            @test kink <= 1e-3                  # a missing π reverses the horizontal velocity: O(1)
+        end
+        # away from the passes φ changes by much less than π between neighbouring samples
+        λs = range(lo, hi; length=4000)
+        φ = [m.Trajectory.phi(λ) for λ in λs]
+        steps = abs.(diff(φ))
+        @test count(>(1.0), steps) == length(passes)
+    end
+end
+
+@testset "Lz = 0: kerr_geo_orbit at x = ±0.0" begin
+    # x = −0.0 is the limit x → 0⁻: φ jumps by −π over the axis and ϒϕ includes −ϒθ
+    a, p, e = 0.9, 8.0, 0.1
+    fp, fm = kerr_geo_frequencies(a, p, e, 0.0), kerr_geo_frequencies(a, p, e, -0.0)
+    op, om = kerr_geo_orbit(a, p, e, 0.0), kerr_geo_orbit(a, p, e, -0.0)
+    φp, φm = op["Trajectory"][4], om["Trajectory"][4]
+    λc = π / fp["ϒθ"]
+    @test φp(λc + 1e-7) - φp(λc - 1e-7) ≈ π atol = 1e-5
+    @test φm(λc + 1e-7) - φm(λc - 1e-7) ≈ -π atol = 1e-5
+    # the polar part of ϒϕ is ±ϒθ
+    @test (fp["ϒϕ"] - fm["ϒϕ"]) / 2 ≈ fp["ϒθ"] rtol = 1e-13
+    # the orbit at x = −0.0 agrees with the Stable member near the axis on the negative side
+    s = kerr_geodesic(a, p, e, -1e-12).Stable
+    @test all(λ -> abs(φm(λ) - s.Trajectory.phi(λ)) <= 1e-9, (0.3, 1.0, 2.3))
+    # x = +0.0 is unchanged: the same as the Stable member at x = 0
+    s0 = kerr_geodesic(a, p, e, 0.0).Stable
+    @test all(λ -> abs(φp(λ) - s0.Trajectory.phi(λ)) <= 1e-12, (0.3, 1.0, 2.3))
+end

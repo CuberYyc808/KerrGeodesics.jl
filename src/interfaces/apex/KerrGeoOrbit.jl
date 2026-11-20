@@ -210,8 +210,10 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
     Dθc = _D(kθ)
     Δtθ(qθ) = En * a^2 * zm^2 / zp * (_D(ψθ(qθ), kθ) - Dθc * 2 * ((qθ+halfπ)/π))
     # Lz = 0 (zm = 1): the Lz → 0⁺ limit. Lz/zp Π(zm²|kθ) → π/2, and Lz/zp Π(zm², ψ|kθ) gains π
-    # at every pass over the axis, qθ = 0 mod π (half of it on the pass itself)
-    Δϕθ(qθ) = iszero(Lz) ? halfπ * (fld(qθ, 2halfπ) + cld(qθ, 2halfπ)) - qθ :
+    # at every pass over the axis, qθ = 0 mod π (half of it on the pass itself). x = −0.0 is the
+    # limit x → 0⁻, the same with the opposite sign, as in ϒϕ (`_polar_side`)
+    side = _polar_side(x)
+    Δϕθ(qθ) = iszero(Lz) ? side * (halfπ * (fld(qθ, 2halfπ) + cld(qθ, 2halfπ)) - qθ) :
         -Lz/zp * elliptic_pi_θ(zm^2, kθ, qθ)
 
     ellip_diff_pi_r(h, k, q) = _Pi(h, k)/π -
@@ -236,7 +238,7 @@ function kerr_geo_orbit_generic(a::Real, p::Real, e::Real, x::Real; initPhases =
 
     dtθ(qθ) = En * a^2 * zm^2 / zp * (sin(ψθ(qθ))^2 * dψθ(qθ) / sqrt(1 - kθ * sin(ψθ(qθ))^2) -
         2 * Dθc / π)
-    dϕθ(qθ) = iszero(Lz) ? -one(o) : (-(2 * Lz * _Pi(zm^2, kθ) / π) + (Lz * dψθ(qθ)) / (sqrt(1 - kθ * sin(ψθ(qθ))^2) * (1 - zm^2 * sin(ψθ(qθ))^2))) / zp
+    dϕθ(qθ) = iszero(Lz) ? -side * one(o) : (-(2 * Lz * _Pi(zm^2, kθ) / π) + (Lz * dψθ(qθ)) / (sqrt(1 - kθ * sin(ψθ(qθ))^2) * (1 - zm^2 * sin(ψθ(qθ))^2))) / zp
 
     qt0, qr0, qθ0, qϕ0 = initPhases
 
@@ -289,6 +291,9 @@ with E < 1 (the ISCO or ISSO, an unstable circular or spherical orbit), in close
   `"a"`, `"p"`, `"e"`, `"Cosθ_inc"`, `"Type"`, `"InitialPhases"`, `"Parametrization"`;
 - `"Stability"`; a constant-radius Critical orbit has `"ϒr" = 0` and, when unstable,
   `"RadialLyapunovExponent"` = √(R''/2), the Mino-time growth rate of a radial perturbation.
+
+At `x = 0` (`Lz = 0`) `ϕ` is the limit `x → 0⁺`: it gains `π` at every pass over the axis
+(`x = -0.0` gives `x → 0⁻`, a step of `-π`), as `"ϒϕ"` in [`kerr_geo_frequencies`](@ref).
 
 `initPhases = (qt0, qr0, qθ0, qϕ0)`. The orbit is computed in the floating-point type of
 `(a, p, e, x)`; `precision = p` converts them to `BigFloat` of `p` bits, and the returned
