@@ -153,6 +153,7 @@ kerr_rstar
 ```@docs
 kerr_geo_constants_of_motion
 kerr_geo_frequencies
+kerr_geo_mino_averages
 kerr_geo_orbit
 kerr_geo_stable
 KerrGeoStable

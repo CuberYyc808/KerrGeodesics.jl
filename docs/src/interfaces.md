@@ -25,6 +25,14 @@ kerr_geo_constants_of_motion(0.9, 10.0, 0.5, 0.8)
 kerr_geo_frequencies(0.9, 10.0, 0.5, 0.8; Time = "Mino")
 ```
 
+[`kerr_geo_mino_averages`](@ref) gives the averages over Mino time behind the frequencies, such
+as ``\langle L_z/\sin^2\theta\rangle`` and ``\langle\cos^2\theta\rangle`` over the polar cycle and
+the radial parts of ``\Upsilon_t`` and ``\Upsilon_\phi``, in closed form:
+
+```@example apex
+kerr_geo_mino_averages(0.9, 10.0, 0.5, 0.8)
+```
+
 The landmarks of bound motion are functions of the inclination: the innermost stable
 spherical orbit [`kerr_geo_isso`](@ref) (the ISCO [`kerr_geo_isco`](@ref) for
 equatorial orbits), the innermost bound spherical orbit [`kerr_geo_ibso`](@ref), and the

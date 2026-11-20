@@ -401,3 +401,65 @@ function _kerr_geo_frequencies(a, p, e, x, Time)
         error("Unknown Time option: $Time. Use \"Mino\", \"BoyerLindquist\", or \"Proper\".")
     end
 end
+
+"""
+    kerr_geo_mino_averages(a, p, e, x; precision=nothing)
+
+Averages over Mino time of the bound orbit `(a, p, e, x)`, 0 ≤ e < 1, as a `NamedTuple` in the
+floating-point type of the input. With ``\\Delta = r^2 - 2r + a^2``, ``z = \\cos\\theta``,
+``\\langle\\cdot\\rangle_r`` the average over a radial cycle and ``\\langle\\cdot\\rangle_\\theta``
+over a polar cycle:
+
+- `z2_theta` = ``\\langle z^2\\rangle_\\theta = z_m^2 D(k_\\theta)/K(k_\\theta)``;
+- `lz_over_sin2_theta` = ``\\langle L_z/(1 - z^2)\\rangle_\\theta``;
+- `phi_r` = ``\\langle a(E(r^2 + a^2) - aL_z)/\\Delta\\rangle_r``;
+- `t_r` = ``\\langle (r^2 + a^2)(E(r^2 + a^2) - aL_z)/\\Delta\\rangle_r``;
+- `t_theta` = ``\\langle -a^2 E (1 - z^2)\\rangle_\\theta``;
+- `r2` = ``\\langle r^2\\rangle_r``.
+
+They split the Mino frequencies of [`kerr_geo_frequencies`](@ref) as
+``\\Upsilon_\\phi = `` `lz_over_sin2_theta + phi_r` ``- aE`` and
+``\\Upsilon_t = `` `t_r + t_theta` ``+ aL_z``, and ``\\langle\\Sigma\\rangle = `` `r2 + a^2 z2_theta`.
+At `x = 0` (``L_z = 0``) `lz_over_sin2_theta` is the limit ``x \\to 0^+``, ``\\Upsilon_\\theta``:
+the orbit passes over the axis, where ``L_z/(1 - z^2)`` concentrates (`x = -0.0` gives
+``x \\to 0^-``, ``-\\Upsilon_\\theta``). The averages are the closed forms in complete elliptic
+integrals behind `kerr_geo_frequencies`, with its accuracy and cost; `precision = p` computes
+them in `BigFloat` of `p` bits.
+"""
+function kerr_geo_mino_averages(a::Real, p::Real, e::Real, x::Real; precision=nothing)
+    precision === nothing || return setprecision(BigFloat, precision) do
+        kerr_geo_mino_averages(BigFloat(a), BigFloat(p), BigFloat(e), BigFloat(x))
+    end
+    T = _float_type(a, p, e, x)
+    return _with_precision(T, _input_precision(a, p, e, x)) do
+        _kerr_geo_mino_averages(T(a), T(p), T(e), T(x))
+    end
+end
+
+function _kerr_geo_mino_averages(a, p, e, x)
+    0 <= e < 1 || throw(DomainError(e,
+        "Mino-time averages are defined for bound orbits, 0 ≤ e < 1."))
+    c = _apex_constants(a, p, e, x)
+    EnLQ = (c.E, c.Lz, c.Q)
+    roots = kerr_geo_radial_roots(a, p, e, x; En=c.E, Lz=c.Lz, Q=c.Q)
+    ρ1, ρ2, ρ3, ρ4 = roots
+    # (z₊, z₋) of kerr_geo_polar_roots from the same constants
+    zpzm = (sqrt(a^2 * c.ν + c.L^2), sqrt(1 - x^2))
+    zp, zm = zpzm
+    kθ = a^2 * c.ν * (zm / zp)^2
+    kr = (ρ1 - ρ2) / (ρ1 - ρ3) * (ρ3 - ρ4) / (ρ2 - ρ4)
+    hr = (ρ1 - ρ2) / (ρ1 - ρ3)
+    Kr = _K(kr)
+    # ⟨r²⟩ as in kerr_geo_proper_frequency_factor
+    r2 = (ρ3 * (ρ1 + ρ2 + ρ3) - ρ1 * ρ2 +
+          (ρ1 + ρ2 + ρ3 + ρ4) * (ρ2 - ρ3) * _complete_pi(hr, (ρ2 - ρ3) / (ρ1 - ρ3), kr) / Kr +
+          (ρ1 - ρ3) * (ρ2 - ρ4) * _E(kr) / Kr) / 2
+    # the radial parts of ϒϕ and ϒt carry −aE and +aLz: ϒϕ = ⟨Φr⟩ − aE + ⟨Lz/(1 − z²)⟩ and
+    # ϒt = ⟨Tr⟩ + aLz + ⟨−a²E(1 − z²)⟩
+    return (z2_theta = zm^2 * _D(kθ) / _K(kθ),
+        lz_over_sin2_theta = kerr_geo_mino_frequency_ϕ_θ(a, p, e, x, EnLQ, zpzm),
+        phi_r = kerr_geo_mino_frequency_ϕ_r(a, p, e, x, EnLQ, roots) + a * c.E,
+        t_r = kerr_geo_mino_frequency_t_r(a, p, e, x, EnLQ, roots) - a * c.Lz,
+        t_theta = kerr_geo_mino_frequency_t_θ(a, p, e, x, EnLQ, zpzm),
+        r2 = r2)
+end
