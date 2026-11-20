@@ -130,28 +130,29 @@ function _axis_crossing_polar_solution(a, energy, lz, q, polar_phase;
     c = -a^2 * _e2m1(energy)                      # Θ = q(1 − z²) − c z²(1 − z²) for Lz = 0
     if c >= 0
         q >= c || error("Lz=0 axis crossing with E<=1 requires Q>=a^2(1-E^2).")
-        return _elliptic_polar_solution(a, energy, 0.0, q; kind=:cd, A=1.0,
+        return _elliptic_polar_solution(a, energy, lz, q; kind=:cd, A=1.0,
             one_minus_A=0.0, m=c / q, m1=(q - c) / q, omega=sqrt(q), u0=float(polar_phase),
             metadata=meta)
     end
     beta = -c
     beta + q > 0 || error("Axis-crossing motion with E>1 requires Q>-a^2(E^2-1).")
     if q > 0
-        return _elliptic_polar_solution(a, energy, 0.0, q; kind=:cn, A=1.0,
+        return _elliptic_polar_solution(a, energy, lz, q; kind=:cn, A=1.0,
             one_minus_A=0.0, m=beta / (beta + q), m1=q / (beta + q), omega=sqrt(beta + q),
             complementary_modulus=sqrt(q)/sqrt(beta+q),
             u0=float(polar_phase), metadata=meta)
     elseif q < 0
-        return _elliptic_polar_solution(a, energy, 0.0, q; kind=:dn, A=1.0,
+        return _elliptic_polar_solution(a, energy, lz, q; kind=:dn, A=1.0,
             one_minus_A=0.0, m=(beta + q) / beta, m1=-q / beta, omega=sqrt(beta),
             u0=float(polar_phase), sign=hemisphere === :north ? 1.0 : -1.0,
             metadata=meta)
     end
     # q = 0: z = ±sech(u), elementary primitives; the single pass over the axis at u = 0 adds
-    # +π to φ (the Lz → 0⁺ limit, as in `_elliptic_polar_solution`)
+    # +π to φ (the Lz → 0⁺ limit, as in `_elliptic_polar_solution`; −π for Lz = −0.0)
     omega = sqrt(beta)
     u0 = float(polar_phase)
     signz = hemisphere === :north ? 1.0 : -1.0
+    side = _polar_side(lz)
     primitive(u) = (t=-a^2 * energy * (u - tanh(u)) / omega, tau=a^2 * tanh(u) / omega)
     p0 = primitive(u0)
     formula = function(lambda)
@@ -161,7 +162,7 @@ function _axis_crossing_polar_solution(a, energy, lz, q, polar_phase;
         p = primitive(u)
         sin2=tanh(u)^2
         return (z=z, uz=-signz * omega * sech * tanh(u), sin2=sin2,
-            theta=atan(sqrt(sin2), z), phi=oftype(z, π) / 2 * (sign(u) - sign(u0)),
+            theta=atan(sqrt(sin2), z), phi=side * (oftype(z, π) / 2 * (sign(u) - sign(u0))),
             t=p.t - p0.t, tau=p.tau - p0.tau)
     end
     return (formula=formula, metadata=merge(meta, (modulus=1.0, omega=omega,

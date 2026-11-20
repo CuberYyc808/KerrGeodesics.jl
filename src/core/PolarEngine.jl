@@ -21,7 +21,8 @@
 #
 # Lz = 0: the orbit passes over the axis, where φ is undefined. φ is the Lz → 0⁺ limit of the
 # spike (x → 0⁺), a step of +π at every pass: Lz/(ω√(εB)) → 1 in every sector (Lz² = ε(Q − cA)/A
-# at the turning root A), and atan(√(B/ε) y) → (π/2) sign(y).
+# at the turning root A), and atan(√(B/ε) y) → (π/2) sign(y). Lz = −0.0 is the limit Lz → 0⁻,
+# a step of −π (`_polar_side`), as in the APEX frequencies at x = −0.0.
 #
 # Close to the equator (small |Q| with Lz² < a²(E² − 1)) the parameter m approaches 1 and
 # K ≈ ½ log(16/k'²) is fixed by k'² = 1 − m, which a rounded m no longer carries. Every
@@ -82,10 +83,10 @@ end
 function _polar_spike_increment(kind, L, left, delta, A, B, epsilon, lz_over_omega)
     right = left + delta
     jl = _ellipj_reduced(left, L); jr = _ellipj_reduced(right, L)
-    if iszero(lz_over_omega)                # Lz → 0⁺: +π per pass over the axis
+    if iszero(lz_over_omega)                # Lz → 0^±: ±π per pass over the axis
         yl = _polar_spike(kind, jl, A, L)[1][1]
         yr = _polar_spike(kind, jr, A, L)[1][1]
-        return oftype(yl, π) / 2 * (sign(yr) - sign(yl))
+        return _polar_side(lz_over_omega) * (oftype(yl, π) / 2 * (sign(yr) - sign(yl)))
     end
     mid = _ellipj_reduced(left + delta / 2, L)
     step = _ellipj_reduced(delta / 2, L)
@@ -175,8 +176,8 @@ function _elliptic_polar_solution(a, energy, lz, q; kind::Symbol, A, one_minus_A
     lz_over_omega = lz / omega
     spike_scale = !iszero(lz) && B > 0 ? sqrt(B / ε) : zero(T)
     spike_denom = !iszero(lz) && B > 0 ? sqrt(ε * B) : one(T)
-    @inline spike_of_y(y) = iszero(lz) ? T(π) / 2 * Base.sign(y) : lz_over_omega *
-        (B > 0 ? atan(spike_scale * y) / spike_denom : y / ε)
+    @inline spike_of_y(y) = iszero(lz) ? _polar_side(lz) * (T(π) / 2 * Base.sign(y)) :
+        lz_over_omega * (B > 0 ? atan(spike_scale * y) / spike_denom : y / ε)
     # its values at the ends of [0, K] are exact (y = 0 and 1/k' for cd, 1 for cn, dn): an
     # evaluated y at u = K would carry the rounding of K
     y_ends = kind === :cd ? (zero(T), 1 / sqrt(T(m1))) : (zero(T), one(T))

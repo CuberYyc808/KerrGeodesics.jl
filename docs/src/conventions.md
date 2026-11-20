@@ -47,7 +47,9 @@ and `radial_tau` return; over a monotone leg they equal ``\int f(r)\,dr/\sqrt{R(
 At ``L_z = 0`` the orbit passes over the spin axis, where ``\phi`` is undefined. ``\phi`` is the
 limit ``L_z \to 0^+`` (``x \to 0^+``): it gains ``\pi`` at every pass over the axis, so the Cartesian
 position continues to the opposite meridian, and the azimuthal frequency ``\Upsilon_\phi`` includes
-``\Upsilon_\theta``.
+``\Upsilon_\theta``. A negative zero, ``L_z = -0.0`` or ``x = -0.0``, gives the limit from the
+other side: ``\phi`` gains ``-\pi`` at every pass and ``\Upsilon_\phi`` includes
+``-\Upsilon_\theta``, in the members and in the APEX functions alike.
 
 ## Constants of motion and APEX parameters
 

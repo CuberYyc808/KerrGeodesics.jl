@@ -48,6 +48,7 @@ include("models/ApexConstants.jl")
 include("members/Kinematics.jl")
 include("members/Component.jl")
 include("members/Assembly.jl")
+include("members/EngineAccess.jl")
 include("members/critical/Models.jl")
 include("members/critical/CriticalMembers.jl")
 include("members/stable/Landmarks.jl")
@@ -188,5 +189,10 @@ export kerr_geo_horizon_stable,
        kerr_geo_horizon_scatter
 
 export kerr_geo_diagnose
+
+export EngineCoordinates,
+       engine_coordinates,
+       horizon_relative_state,
+       horizon_relative_rstar
 
 end

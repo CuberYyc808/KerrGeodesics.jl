@@ -766,23 +766,29 @@ _spectral_summary(e::RadialEngine) = _spectral_summary(s.prim for s in e.segment
 """Mean radial rates over one period (periodic engines)."""
 _radial_mean_rates(e::RadialEngine) = e.totals ./ e.period
 
-"""
-    EngineCoordinates
-
-The coordinates of one member: radial engine part + polar primitive (`polar_primitive(λ)`
-gives the polar (t, φ, τ) increments). One object holds, once, the radius function, the polar
-primitive, the potential, the engine's build parameters, the origin of the regular chart and
-the lazily built radial engine (built on the first t/φ/τ call and published atomically, so
-concurrent first calls are safe), so that the closures of a member capture one small object
-instead of trees of closures. Evaluate it with
-`_coords_t`, `_coords_phi`, `_coords_tau`, `_coords_tphitau`, `_coords_v`, `_coords_psi`,
-`_coords_radial`, `_coords_spectral`; `_regular_chart(c, σ, λ_ref)` gives further regular charts.
-"""
 # the lazily built radial engine of one member
 mutable struct _EngineCache{E}
     @atomic engine::Union{Nothing,E}
 end
 
+# EngineCoordinates is evaluated internally with `_coords_t`, `_coords_phi`, `_coords_tau`,
+# `_coords_tphitau`, `_coords_v`, `_coords_psi`, `_coords_radial`, `_coords_spectral`;
+# `_regular_chart(c, σ, λ_ref)` gives further regular charts.
+"""
+    EngineCoordinates
+
+The coordinate engine of one member: the radius function `r_of(λ)`, the polar primitive
+(`polar_primitive(λ)` gives the polar `(t, φ, τ)` increments), the radial potential, the
+build parameters of the radial engine and the origins of the Boyer–Lindquist and
+horizon-regular charts. The radial engine itself is built on the first `t`, `φ` or `τ`
+evaluation and published atomically, so concurrent first calls are safe. The closures in a
+member's `Trajectory` capture this one object.
+
+[`engine_coordinates`](@ref) returns the `EngineCoordinates` of a member. Its fields
+`a`, `E`, `L`, `Q` are the spin and the constants of motion and `r_of` is the radius
+function `r(λ)`; [`horizon_relative_state`](@ref) reads the horizon-relative radial state off
+`r_of`. The other fields are internal and may change between releases.
+"""
 struct EngineCoordinates{T,F,P,V}
     a::T; E::T; L::T; Q::T
     r_of::F
