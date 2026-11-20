@@ -184,6 +184,18 @@ kerr_geo_scatter
 KerrGeoScatter
 ```
 
+## Coordinate engine
+
+The coordinate engine of a member and the horizon-relative radial state, for code that
+evaluates a member close to the future horizon.
+
+```@docs
+EngineCoordinates
+engine_coordinates
+horizon_relative_state
+horizon_relative_rstar
+```
+
 ## Diagnostics
 
 ```@docs
