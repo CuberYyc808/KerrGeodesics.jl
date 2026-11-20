@@ -61,10 +61,12 @@ meta = kerr_geo_orbit_type_metadata(0.9, 10.0, 0.5, 0.8)
 ```
 
 [`kerr_geo_orbit_supported`](@ref) tells whether [`kerr_geo_orbit`](@ref) builds an APEX
-point:
+point, and [`kerr_geo_orbit_shape`](@ref) gives the shape it takes from ``(e, x)`` alone, with
+its tolerance and without the landmarks:
 
 ```@example apex
-(kerr_geo_orbit_supported(0.9, 10.0, 0.5, 0.8), kerr_geo_orbit_supported(0.9, 3.0, 0.5, 0.8))
+(kerr_geo_orbit_supported(0.9, 10.0, 0.5, 0.8), kerr_geo_orbit_supported(0.9, 3.0, 0.5, 0.8),
+ kerr_geo_orbit_shape(0.5, 0.8), kerr_geo_orbit_shape(0.0, -1.0))
 ```
 
 ## The closed-form bound orbit

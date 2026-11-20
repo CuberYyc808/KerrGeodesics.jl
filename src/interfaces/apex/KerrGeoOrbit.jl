@@ -52,6 +52,30 @@ function kerr_geo_orbit_supported(a::Real, p::Real, e::Real, x::Real)
     end
 end
 
+# e = 0 and |x| = 1 within the tolerance of kerr_geo_orbit and kerr_geo_orbit_type_metadata
+function _apex_shape(::Type{T}, e, x) where {T}
+    tol = _tol(T, 1e-12)
+    return isapprox(e, 0; atol=tol), isapprox(abs(x), 1; atol=tol)
+end
+
+"""
+    kerr_geo_orbit_shape(e, x) -> Symbol
+
+The shape of the orbit with eccentricity `e` and inclination `x` as [`kerr_geo_orbit`](@ref)
+takes it: `:circular` (e = 0, |x| = 1), `:eccentric` (e ≠ 0, |x| = 1), `:inclined` (e = 0,
+|x| ≠ 1, a spherical orbit) or `:generic` (e ≠ 0, |x| ≠ 1). e = 0 and |x| = 1 hold within the
+tolerance of `kerr_geo_orbit` and [`kerr_geo_orbit_type_metadata`](@ref), 1e-12 in `Float64`
+and the same place between rounding and 1 in other precisions, in the floating-point type of
+`(e, x)`. No separatrix, ISSO or photon orbit is computed.
+"""
+function kerr_geo_orbit_shape(e::Real, x::Real)
+    T = _float_type(e, x)
+    circular, equatorial = _with_precision(T, _input_precision(e, x)) do
+        _apex_shape(T, T(e), T(x))
+    end
+    return circular ? (equatorial ? :circular : :inclined) : (equatorial ? :eccentric : :generic)
+end
+
 # A constant-radius Critical orbit: ϒr = 0 (the radial phase does not advance), with its
 # stability, and for an unstable one the Mino-time growth rate √(R''(p)/2) of a radial
 # perturbation (δr'' = R''(p) δr/2).
@@ -340,7 +364,7 @@ function kerr_geo_orbit(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0
         "formulas hold for e ≤ 1. Use kerr_geodesic(a, p, e, x).Scatter."))
     prec = _input_precision(a, p, e, x)
     orbit = _with_precision(T, prec) do
-        if isapprox(e, 0; atol = _tol(T, 1e-12)) && isapprox(abs(x), 1; atol = _tol(T, 1e-12))
+        if _apex_shape(T, e, x) == (true, true)
             kerr_geo_orbit_circular(a, p, e, x; initPhases = initPhases)
         else
             kerr_geo_orbit_generic(a, p, e, x; initPhases = initPhases)

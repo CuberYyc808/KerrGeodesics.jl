@@ -1,6 +1,7 @@
 # Mino-time averages against quadrature of their definitions; the orbit evaluated by its phases
 # against the Dict of kerr_geo_orbit (in Float64 and in BigFloat); finite values at x = 0;
-# kerr_geo_orbit_supported against kerr_geo_orbit succeeding.
+# kerr_geo_orbit_supported against kerr_geo_orbit succeeding; kerr_geo_orbit_shape against
+# kerr_geo_orbit_type_metadata.
 
 const AVERAGE_ORBITS = [(0.9, 6.0, 0.7, 0.5), (0.998, 5.281, 0.0, 4.8e-4), (0.7, 12.0, 0.5, -0.6),
     (0.5, 9.0, 0.0, 0.0), (0.0, 10.0, 0.2, 0.5), (-0.6, 10.0, 0.4, 0.3)]
@@ -281,4 +282,23 @@ end
     # e = 0 is a constant-radius orbit
     @test kerr_geo_orbit_supported(0.5, 4.0, 0.0, 0.5) && !kerr_geo_orbit_supported(0.5, 4.0, 1e-13, 0.5)
     @test_throws ArgumentError kerr_geo_orbit(0.5, 4.0, 1e-13, 0.5)
+end
+
+@testset "kerr_geo_orbit_shape" begin
+    nshape = 0
+    for c in predicate_grid()
+        shape = kerr_geo_orbit_shape(c[3], c[4])
+        @test shape in (:circular, :eccentric, :inclined, :generic)
+        meta = try kerr_geo_orbit_type_metadata(c...) catch; nothing end
+        meta === nothing && continue
+        @test (meta.shape == "Circular") == (shape in (:circular, :inclined))
+        @test (meta.inclination == "Equatorial") == (shape in (:circular, :eccentric))
+        nshape += 1
+    end
+    @test nshape > 1000
+    @test kerr_geo_orbit_shape(1e-13, 1 - 1e-13) == :circular
+    @test kerr_geo_orbit_shape(2e-12, -1.0) == :eccentric
+    @test kerr_geo_orbit_shape(0.0, 0.5) == :inclined
+    @test kerr_geo_orbit_shape(0.3, -0.5) == :generic
+    @test kerr_geo_orbit_shape(big(1e-13), 1.0) == :eccentric      # tolerance of 256-bit BigFloat
 end
