@@ -9,9 +9,13 @@ like stable ones; their radial phase does not advance, so ϒr = 0 (`_constant_ra
 """
 function _apex_orbit_gate(a, p, e, x)
     meta = kerr_geo_orbit_type_metadata(a, p, e, x)
-    meta.family == "Stable" && return meta
+    _apex_orbit_buildable(meta, e) && return meta
+    if meta.family == "Critical" && meta.shape == "Circular" && meta.energy_regime == "Elliptic"
+        throw(ArgumentError("kerr_geo_orbit: (a, p, e, x) = $((a, p, e, x)) lies at or inside " *
+            "the ISSO with e ≠ 0, where p/(1 ± e) bound no radial motion; the constant-radius " *
+            "Critical orbit at this p has e = 0."))
+    end
     if meta.family == "Critical" && meta.shape == "Circular"
-        meta.energy_regime == "Elliptic" && return meta
         throw(ArgumentError("kerr_geo_orbit: (a, p, e, x) = $((a, p, e, x)) is an unstable " *
             "constant-radius orbit with E ≥ 1 ($(meta.energy_regime)), outside the range of " *
             "the APEX frequency formulas. Build it with kerr_geodesic(a, p, e, x): Critical " *
@@ -21,6 +25,55 @@ function _apex_orbit_gate(a, p, e, x)
         "orbit ($(join(meta.labels, ", "))). kerr_geo_orbit builds Stable orbits and " *
         "constant-radius Critical orbits with E < 1; use " *
         "kerr_geodesic(a, p, e, x) for the members of this one."))
+end
+
+# kerr_geo_orbit builds the Stable orbits and the constant-radius Critical orbits with E < 1.
+# Within the tolerance of e = 0 an orbit at or inside the ISSO is classified circular, but only
+# e = 0 itself is a constant-radius orbit: with e ≠ 0 the roots p/(1 ± e) enclose no motion.
+_apex_orbit_buildable(meta, e) = meta.family == "Stable" ||
+    (meta.family == "Critical" && meta.shape == "Circular" && meta.energy_regime == "Elliptic" &&
+     iszero(e))
+
+"""
+    kerr_geo_orbit_supported(a, p, e, x) -> Bool
+
+Whether [`kerr_geo_orbit`](@ref) builds the orbit `(a, p, e, x)`, that is, returns instead of
+throwing: a stable orbit, or a constant-radius Critical orbit with E < 1 (the ISCO or ISSO,
+an unstable circular or spherical orbit), with |a| ≤ 1, p > 0, 0 ≤ e ≤ 1 and |x| ≤ 1. Every
+x is taken as it is, x = −1 included. The decision is that of `kerr_geo_orbit`, made by
+[`kerr_geo_orbit_type_metadata`](@ref), in the floating-point type of `(a, p, e, x)`.
+"""
+function kerr_geo_orbit_supported(a::Real, p::Real, e::Real, x::Real)
+    T = _float_type(a, p, e, x)
+    a, p, e, x = T(a), T(p), T(e), T(x)
+    (abs(a) <= 1 && p > 0 && 0 <= e <= 1 && abs(x) <= 1) || return false
+    return _with_precision(T, _input_precision(a, p, e, x)) do
+        _apex_orbit_buildable(kerr_geo_orbit_type_metadata(a, p, e, x), e)
+    end
+end
+
+# e = 0 and |x| = 1 within the tolerance of kerr_geo_orbit and kerr_geo_orbit_type_metadata
+function _apex_shape(::Type{T}, e, x) where {T}
+    tol = _tol(T, 1e-12)
+    return isapprox(e, 0; atol=tol), isapprox(abs(x), 1; atol=tol)
+end
+
+"""
+    kerr_geo_orbit_shape(e, x) -> Symbol
+
+The shape of the orbit with eccentricity `e` and inclination `x` as [`kerr_geo_orbit`](@ref)
+takes it: `:circular` (e = 0, |x| = 1), `:eccentric` (e ≠ 0, |x| = 1), `:inclined` (e = 0,
+|x| ≠ 1, a spherical orbit) or `:generic` (e ≠ 0, |x| ≠ 1). e = 0 and |x| = 1 hold within the
+tolerance of `kerr_geo_orbit` and [`kerr_geo_orbit_type_metadata`](@ref), 1e-12 in `Float64`
+and the same place between rounding and 1 in other precisions, in the floating-point type of
+`(e, x)`. No separatrix, ISSO or photon orbit is computed.
+"""
+function kerr_geo_orbit_shape(e::Real, x::Real)
+    T = _float_type(e, x)
+    circular, equatorial = _with_precision(T, _input_precision(e, x)) do
+        _apex_shape(T, T(e), T(x))
+    end
+    return circular ? (equatorial ? :circular : :inclined) : (equatorial ? :eccentric : :generic)
 end
 
 # A constant-radius Critical orbit: ϒr = 0 (the radial phase does not advance), with its
@@ -311,7 +364,7 @@ function kerr_geo_orbit(a::Real, p::Real, e::Real, x::Real; initPhases = (0.0, 0
         "formulas hold for e ≤ 1. Use kerr_geodesic(a, p, e, x).Scatter."))
     prec = _input_precision(a, p, e, x)
     orbit = _with_precision(T, prec) do
-        if isapprox(e, 0; atol = _tol(T, 1e-12)) && isapprox(abs(x), 1; atol = _tol(T, 1e-12))
+        if _apex_shape(T, e, x) == (true, true)
             kerr_geo_orbit_circular(a, p, e, x; initPhases = initPhases)
         else
             kerr_geo_orbit_generic(a, p, e, x; initPhases = initPhases)

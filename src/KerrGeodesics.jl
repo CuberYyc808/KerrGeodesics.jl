@@ -71,6 +71,7 @@ include("interfaces/apex/ConstantsOfMotion.jl")
 include("interfaces/apex/OrbitalFrequencies.jl")
 include("interfaces/apex/FourVelocity.jl")
 include("interfaces/apex/KerrGeoOrbit.jl")
+include("interfaces/apex/OrbitPhases.jl")
 include("interfaces/apex/KerrGeoStable.jl")
 include("interfaces/plunge/OrbitClass.jl")
 include("interfaces/plunge/OrbitalDuration.jl")
@@ -132,6 +133,7 @@ export kerr_geo_constants_of_motion,
         kerr_geo_sample,
         kerr_geo_four_velocity,
         kerr_geo_frequencies,
+        kerr_geo_mino_averages,
         kerr_geo_radial_roots,
         kerr_geo_polar_roots,
         kerr_geo_orbit_type,
@@ -141,6 +143,14 @@ export kerr_geo_constants_of_motion,
         kerr_geo_ibso,
         kerr_geo_isso,
         kerr_geo_orbit,
+        kerr_geo_orbit_supported,
+        kerr_geo_orbit_shape,
+        KerrGeoOrbitPhases,
+        kerr_geo_orbit_phases,
+        kerr_geo_radial_motion,
+        kerr_geo_radial_motion!,
+        kerr_geo_polar_motion,
+        kerr_geo_polar_motion!,
         kerr_geo_stable,
         KerrGeoStable,
         KerrGeoStableComponent,

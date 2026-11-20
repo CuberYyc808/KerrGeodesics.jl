@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.5.2
+
+### New
+- **Mino-time averages.** `kerr_geo_mino_averages(a, p, e, x)` returns the averages behind the
+  Mino frequencies as a `NamedTuple`: `z2_theta` = ⟨cos²θ⟩, `lz_over_sin2_theta` =
+  ⟨Lz/sin²θ⟩ (at `x = ±0.0` the limit `x → 0±`, `±ϒθ`), `phi_r`, `t_r`, `t_theta` and `r2` = ⟨r²⟩,
+  with `ϒφ = lz_over_sin2_theta + phi_r − aE` and `ϒt = t_r + t_theta + aLz`. They are the
+  closed forms of `kerr_geo_frequencies`, with its accuracy and cost.
+- **The orbit by its phases.** `kerr_geo_orbit_phases(a, p, e, x)` returns the orbit of
+  `kerr_geo_orbit` as a concretely typed `KerrGeoOrbitPhases` record (constants, Mino
+  frequencies, roots). `kerr_geo_radial_motion(orbit, qr)` gives `r`, `dr/dλ` and the radial parts
+  of t and φ with their phase derivatives, `kerr_geo_polar_motion(orbit, qθ)` the same for
+  `z = cos θ` and θ, with methods for vectors of phases and in-place `!` methods. The scalar
+  `Float64` call does not allocate. The values are finite at `x = 0`, the limits `e = 0` and
+  `|x| = 1` are exact, and on a pass over the axis (`Lz = 0`) the polar parts take the mean of
+  their two sides.
+- **Predicates.** `kerr_geo_orbit_supported(a, p, e, x)` tells whether `kerr_geo_orbit` builds the
+  orbit, without throwing; `kerr_geo_orbit_shape(e, x)` returns `:circular`, `:eccentric`,
+  `:inclined` or `:generic` with the tolerance of `kerr_geo_orbit`, without computing landmarks.
+
+### Changed
+- `kerr_geo_orbit` at or inside the ISSO with `0 < e ≤ 1e-12` (circular within the tolerance,
+  but not a constant-radius orbit) now throws an `ArgumentError` that says so, instead of a
+  `DomainError` from an elliptic integral. Every value the existing functions return is the
+  same bit for bit.
+
 ## 0.5.1
 
 ### New

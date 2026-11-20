@@ -15,17 +15,42 @@ function _horizon_divdiff(F, rp, rm)
     ρ0 = (rp + rm) / 2
     g(δ) = (F(ρ0 + δ) - F(ρ0 - δ)) / (2δ)
     δ = T(1e-3)
+    k, c, D = _richardson_weights(T)
+    value = c[k + 1] * g(δ / 2^k)
+    for j in k-1:-1:0
+        value += c[j + 1] * g(δ / 2^j)
+    end
+    return value / D
+end
+
+# The weights of g(δ/2^j), j = 0…k, extrapolated to δ = 0 in δ², as integer numerators c over
+# one denominator D (k = 2: (64g(δ/4) − 20g(δ/2) + g(δ))/45)
+function _richardson_weights(::Type{T}) where {T}
     k = cld(floor(Int, -log10(eps(T))), 6) - 1
-    # weights of g(δ/2^j) extrapolated to δ = 0 in δ²: integer numerators over one denominator
-    # (k = 2: (64g(δ/4) − 20g(δ/2) + g(δ))/45)
     w = [prod(big(4)^j // (big(4)^j - big(4)^i) for i in 0:k if i != j; init=big(1) // 1)
         for j in 0:k]
     D = lcm(denominator.(w))
-    value = T(numerator(w[k + 1] * D)) * g(δ / 2^k)
-    for j in k-1:-1:0
-        value += T(numerator(w[j + 1] * D)) * g(δ / 2^j)
+    return k, [T(numerator(w[j + 1] * D)) for j in 0:k], T(D)
+end
+
+# _horizon_divdiff as a fixed rule Σᵢ wᵢ F(ρᵢ): the nodes ρᵢ and weights wᵢ
+function _horizon_divdiff_rule(rp, rm)
+    T = _float_type(rp, rm)
+    if rp - rm > _tol(T, 1e-6)
+        w = 1 / (rp - rm)
+        return T[rp, rm], T[w, -w]
     end
-    return value / T(D)
+    ρ0 = (rp + rm) / 2
+    δ = T(1e-3)
+    k, c, D = _richardson_weights(T)
+    nodes, weights = T[], T[]
+    for j in 0:k
+        δj = δ / 2^j
+        w = c[j + 1] / (2δj * D)
+        push!(nodes, ρ0 + δj, ρ0 - δj)
+        push!(weights, w, -w)
+    end
+    return nodes, weights
 end
 
 # -------------------------------------------------------------------
@@ -400,4 +425,66 @@ function _kerr_geo_frequencies(a, p, e, x, Time)
     else
         error("Unknown Time option: $Time. Use \"Mino\", \"BoyerLindquist\", or \"Proper\".")
     end
+end
+
+"""
+    kerr_geo_mino_averages(a, p, e, x; precision=nothing)
+
+Averages over Mino time of the bound orbit `(a, p, e, x)`, 0 ≤ e < 1, as a `NamedTuple` in the
+floating-point type of the input. With ``\\Delta = r^2 - 2r + a^2``, ``z = \\cos\\theta``,
+``\\langle\\cdot\\rangle_r`` the average over a radial cycle and ``\\langle\\cdot\\rangle_\\theta``
+over a polar cycle:
+
+- `z2_theta` = ``\\langle z^2\\rangle_\\theta = z_m^2 D(k_\\theta)/K(k_\\theta)``;
+- `lz_over_sin2_theta` = ``\\langle L_z/(1 - z^2)\\rangle_\\theta``;
+- `phi_r` = ``\\langle a(E(r^2 + a^2) - aL_z)/\\Delta\\rangle_r``;
+- `t_r` = ``\\langle (r^2 + a^2)(E(r^2 + a^2) - aL_z)/\\Delta\\rangle_r``;
+- `t_theta` = ``\\langle -a^2 E (1 - z^2)\\rangle_\\theta``;
+- `r2` = ``\\langle r^2\\rangle_r``.
+
+They split the Mino frequencies of [`kerr_geo_frequencies`](@ref) as
+``\\Upsilon_\\phi = `` `lz_over_sin2_theta + phi_r` ``- aE`` and
+``\\Upsilon_t = `` `t_r + t_theta` ``+ aL_z``, and ``\\langle\\Sigma\\rangle = `` `r2 + a^2 z2_theta`.
+At `x = 0` (``L_z = 0``) `lz_over_sin2_theta` is the limit ``x \\to 0^+``, ``\\Upsilon_\\theta``:
+the orbit passes over the axis, where ``L_z/(1 - z^2)`` concentrates (`x = -0.0` gives
+``x \\to 0^-``, ``-\\Upsilon_\\theta``). The averages are the closed forms in complete elliptic
+integrals behind `kerr_geo_frequencies`, with its accuracy and cost; `precision = p` computes
+them in `BigFloat` of `p` bits.
+"""
+function kerr_geo_mino_averages(a::Real, p::Real, e::Real, x::Real; precision=nothing)
+    precision === nothing || return setprecision(BigFloat, precision) do
+        kerr_geo_mino_averages(BigFloat(a), BigFloat(p), BigFloat(e), BigFloat(x))
+    end
+    T = _float_type(a, p, e, x)
+    return _with_precision(T, _input_precision(a, p, e, x)) do
+        _kerr_geo_mino_averages(T(a), T(p), T(e), T(x))
+    end
+end
+
+function _kerr_geo_mino_averages(a, p, e, x)
+    0 <= e < 1 || throw(DomainError(e,
+        "Mino-time averages are defined for bound orbits, 0 ≤ e < 1."))
+    c = _apex_constants(a, p, e, x)
+    EnLQ = (c.E, c.Lz, c.Q)
+    roots = kerr_geo_radial_roots(a, p, e, x; En=c.E, Lz=c.Lz, Q=c.Q)
+    ρ1, ρ2, ρ3, ρ4 = roots
+    # (z₊, z₋) of kerr_geo_polar_roots from the same constants
+    zpzm = (sqrt(a^2 * c.ν + c.L^2), sqrt(1 - x^2))
+    zp, zm = zpzm
+    kθ = a^2 * c.ν * (zm / zp)^2
+    kr = (ρ1 - ρ2) / (ρ1 - ρ3) * (ρ3 - ρ4) / (ρ2 - ρ4)
+    hr = (ρ1 - ρ2) / (ρ1 - ρ3)
+    Kr = _K(kr)
+    # ⟨r²⟩ as in kerr_geo_proper_frequency_factor
+    r2 = (ρ3 * (ρ1 + ρ2 + ρ3) - ρ1 * ρ2 +
+          (ρ1 + ρ2 + ρ3 + ρ4) * (ρ2 - ρ3) * _complete_pi(hr, (ρ2 - ρ3) / (ρ1 - ρ3), kr) / Kr +
+          (ρ1 - ρ3) * (ρ2 - ρ4) * _E(kr) / Kr) / 2
+    # the radial parts of ϒϕ and ϒt carry −aE and +aLz: ϒϕ = ⟨Φr⟩ − aE + ⟨Lz/(1 − z²)⟩ and
+    # ϒt = ⟨Tr⟩ + aLz + ⟨−a²E(1 − z²)⟩
+    return (z2_theta = zm^2 * _D(kθ) / _K(kθ),
+        lz_over_sin2_theta = kerr_geo_mino_frequency_ϕ_θ(a, p, e, x, EnLQ, zpzm),
+        phi_r = kerr_geo_mino_frequency_ϕ_r(a, p, e, x, EnLQ, roots) + a * c.E,
+        t_r = kerr_geo_mino_frequency_t_r(a, p, e, x, EnLQ, roots) - a * c.Lz,
+        t_theta = kerr_geo_mino_frequency_t_θ(a, p, e, x, EnLQ, zpzm),
+        r2 = r2)
 end

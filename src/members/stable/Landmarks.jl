@@ -199,8 +199,8 @@ For `p ≤ 0` the orbit is not classified: `family = "NotClassified"`, `outcome 
 function kerr_geo_orbit_type_metadata(a::Real, p::Real, e::Real, x::Real)
     T = _float_type(a, p, e, x)
     iszero_tol(v) = isapprox(v, 0; atol=_tol(T, 1e-12))
-    circular = iszero_tol(e)
-    inclination = iszero_tol(abs(x) - 1) ? "Equatorial" : "Inclined"
+    circular, equatorial = _apex_shape(T, e, x)
+    inclination = equatorial ? "Equatorial" : "Inclined"
     shape = circular ? "Circular" : e < 1 ? "Eccentric" : iszero_tol(e - 1) ? "Parabolic" : "Hyperbolic"
     # e ≥ 1 without a separatrix (no timelike orbit of this eccentricity has a double root at
     # its pericentre): every orbit scatters
