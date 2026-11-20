@@ -6,8 +6,8 @@
     engine_coordinates(member) -> EngineCoordinates or nothing
 
 The [`EngineCoordinates`](@ref) behind the trajectory closures of `member` (a component such
-as [`KerrGeoPlungeComponent`](@ref)), or `nothing` for a member whose coordinates are not
-given by a coordinate engine.
+as the one [`kerr_geo_plunge_component`](@ref) returns), or `nothing` for a member whose
+coordinates are not given by a coordinate engine.
 
 ```julia
 m = kerr_geo_plunge_component(0.9, 0.95, 2.0, 3.0)
