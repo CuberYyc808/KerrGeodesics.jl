@@ -15,6 +15,11 @@
 - `kerr_geo_orbit` at `x = −0.0`: the polar part of `φ(λ)` now follows the limit `x → 0⁻`, as
   `ϒφ` already did (`φ` jumps by `−π` at every pass over the axis). Before, `ϒφ` took `x → 0⁻`
   and the polar part `x → 0⁺`, which matched neither limit. `x = +0.0` is unchanged.
+- Members with `Lz = −0.0` (for example from `kerr_geodesic(a, p, e, -0.0)` or from constants
+  with `Lz = -0.0`) now take the limit `Lz → 0⁻` (`φ` jumps by `−π` at every pass over the
+  axis, `ϒφ` includes `−ϒθ`), as `kerr_geo_frequencies` and `kerr_geo_orbit` do at `x = −0.0`,
+  so every interface gives the same orbit for the same input. Before, they took `Lz → 0⁺`.
+  `Lz = +0.0` is unchanged.
 
 ## 0.5.0
 

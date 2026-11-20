@@ -81,35 +81,61 @@ function axis_passes(m, lo, hi; n=2000)
     return passes
 end
 
-@testset "Lz = 0: φ is continuous over the axis in every member class" begin
-    # each case: member, Mino window (inside the domain of the member); φ jumps by +π at every
-    # pass and the Cartesian path is smooth
+@testset "Lz = ±0.0: φ is continuous over the axis in every member class" begin
+    # each case: member, Mino window (inside the domain of the member); φ jumps by ±π at every
+    # pass (+π for Lz = +0.0, the limit Lz → 0⁺; −π for Lz = −0.0, Lz → 0⁻) and the Cartesian
+    # path is smooth
     window(m) = (d = m.Domain.mino; lo = max(d[1], -1.0); hi = min(d[2], 3.0);
         (lo + 0.01 * (hi - lo), hi - 0.01 * (hi - lo)))
-    cases = (
-        ("Stable", kerr_geodesic(0.9, 8.0, 0.1, 0.0).Stable),
-        ("Stable a < 0", kerr_geodesic(-0.9, 8.0, 0.1, 0.0).Stable),
-        ("Plunge", kerr_geo_plunge_component(0.5, 0.97, 0.0, 12.0)),
-        ("Plunge", kerr_geo_plunge_component(0.9, 0.95, 0.0, 3.0)),
-        ("Scatter", kerr_geo_scatter_component(0.9, 1.1, 0.0, 40.0)),
-        # Q = 0: z = ±sech, one pass at u = 0, here inside the capture window
-        ("Capture Q = 0", kerr_geo_capture_component(0.9, 1.1, 0.0, 0.0;
-            polar_sector=:axis_crossing, polar_phase=0.3)),
-    )
-    for (label, m) in cases
-        lo, hi = window(m)
-        passes = axis_passes(m, lo, hi)
-        @test !isempty(passes)
-        for λc in passes
-            jump, kink = axis_pass(m, λc)
-            @test abs(jump - π) <= 1e-4
-            @test kink <= 1e-3                  # a missing π reverses the horizontal velocity: O(1)
+    for z in (0.0, -0.0)
+        cases = (
+            ("Stable", kerr_geodesic(0.9, 8.0, 0.1, z).Stable),
+            ("Stable a < 0", kerr_geodesic(-0.9, 8.0, 0.1, z).Stable),
+            ("Plunge", kerr_geo_plunge_component(0.5, 0.97, z, 12.0)),
+            ("Plunge", kerr_geo_plunge_component(0.9, 0.95, z, 3.0)),
+            ("Scatter", kerr_geo_scatter_component(0.9, 1.1, z, 40.0)),
+            # Q = 0: z = ±sech, one pass at u = 0, here inside the capture window
+            ("Capture Q = 0", kerr_geo_capture_component(0.9, 1.1, z, 0.0;
+                polar_sector=:axis_crossing, polar_phase=0.3)),
+        )
+        for (label, m) in cases
+            @test signbit(m.ConstantsOfMotion.Lz) == signbit(z)
+            lo, hi = window(m)
+            passes = axis_passes(m, lo, hi)
+            @test !isempty(passes)
+            for λc in passes
+                jump, kink = axis_pass(m, λc)
+                @test abs(jump - copysign(π, z)) <= 1e-4
+                @test kink <= 1e-3              # a missing π reverses the horizontal velocity
+            end
+            # away from the passes φ changes by much less than π between neighbouring samples
+            λs = range(lo, hi; length=4000)
+            φ = [m.Trajectory.phi(λ) for λ in λs]
+            @test count(>(1.0), abs.(diff(φ))) == length(passes)
         end
-        # away from the passes φ changes by much less than π between neighbouring samples
-        λs = range(lo, hi; length=4000)
-        φ = [m.Trajectory.phi(λ) for λ in λs]
-        steps = abs.(diff(φ))
-        @test count(>(1.0), steps) == length(passes)
+    end
+end
+
+@testset "Lz = ±0.0: the members and the APEX functions give the same orbit" begin
+    for a in (0.9, -0.9, 0.0), z in (0.0, -0.0)
+        f = kerr_geo_frequencies(a, 8.0, 0.1, z)
+        o = kerr_geo_orbit(a, 8.0, 0.1, z)
+        m = kerr_geodesic(a, 8.0, 0.1, z).Stable
+        @test m.Status.frequencies.ϒϕ ≈ f["ϒϕ"] rtol = 1e-13
+        @test m.Status.frequencies.ϒθ ≈ f["ϒθ"] rtol = 1e-13
+        @test all(λ -> abs(o["Trajectory"][4](λ) - m.Trajectory.phi(λ)) <= 1e-12, (0.3, 1.0, 2.3))
+        # the side of zero: the limit of x → 0^± from the nearby inclined orbits
+        s = kerr_geodesic(a, 8.0, 0.1, copysign(1e-12, z)).Stable
+        @test m.Status.frequencies.ϒϕ ≈ s.Status.frequencies.ϒϕ rtol = 1e-10
+        @test all(λ -> abs(m.Trajectory.phi(λ) - s.Trajectory.phi(λ)) <= 1e-9, (0.3, 1.0, 2.3))
+    end
+    # members from the constants: Lz = −0.0 is the mirror image of Lz = +0.0 in φ's polar part
+    for (a, E, Q) in ((0.9, 0.95, 3.0), (0.5, 0.97, 12.0))
+        mp = kerr_geo_plunge_component(a, E, 0.0, Q)
+        mm = kerr_geo_plunge_component(a, E, -0.0, Q)
+        @test mp.Trajectory.r(0.5) === mm.Trajectory.r(0.5)
+        @test mp.Trajectory.theta(0.5) === mm.Trajectory.theta(0.5)
+        @test mp.Trajectory.t(0.5) === mm.Trajectory.t(0.5)
     end
 end
 
