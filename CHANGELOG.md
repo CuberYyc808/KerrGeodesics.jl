@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.1
+
+### New
+- **Coordinate engine interface.** `EngineCoordinates`, the coordinate engine behind a member's
+  trajectory closures, is exported and documented, with `engine_coordinates(member)` to obtain
+  it. `horizon_relative_state(r_of, λ)` (or `horizon_relative_state(c::EngineCoordinates, λ)`)
+  gives the radial state `(gap, velocity, chart)` of a member that crosses the future horizon,
+  with `gap = r − r₊` formed without cancellation, and `horizon_relative_rstar(state)` the
+  tortoise coordinate from it. They are the functions the members use, so the values are the
+  same bit for bit.
+
+### Fixed
+- `kerr_geo_orbit` at `x = −0.0`: the polar part of `φ(λ)` now follows the limit `x → 0⁻`, as
+  `ϒφ` already did (`φ` jumps by `−π` at every pass over the axis). Before, `ϒφ` took `x → 0⁻`
+  and the polar part `x → 0⁺`, which matched neither limit. `x = +0.0` is unchanged.
+
 ## 0.5.0
 
 ### New
